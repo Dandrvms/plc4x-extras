@@ -7,3 +7,8 @@ target
 
 # Source bundle from PLC4C
 /plc4c/plc4c/
+
+# Auto commit script
+*.ps1
+ 
+ 
