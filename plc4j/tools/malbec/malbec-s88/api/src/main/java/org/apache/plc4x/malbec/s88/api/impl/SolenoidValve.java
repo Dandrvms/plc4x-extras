@@ -25,6 +25,7 @@ public class SolenoidValve extends S88ControlModule {
 
     @Override
     protected void initPropertyTable() {
+        super.initPropertyTable();
         propertyTable.put(MODE, 1);
         propertyTable.put(ERRORCODE, 0);
         propertyTable.put(STATUS, 0);

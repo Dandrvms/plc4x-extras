@@ -1,6 +1,5 @@
 package org.apache.plc4x.malbec.s88.plant.panels;
 
-import org.apache.commons.compress.utils.OsgiUtils;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.core.UpdatePropertyUseCase;

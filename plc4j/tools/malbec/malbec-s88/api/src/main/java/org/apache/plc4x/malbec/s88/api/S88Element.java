@@ -20,12 +20,9 @@ public class S88Element {
     private S88ElementClass elementClass;
     private final List<S88ElementClass> elementClasses = new ArrayList<>();
 
-
-    public S88Element(){
-
-    }
-    public void setClass(S88ElementClass elementClass){
+    public S88Element setClass(S88ElementClass elementClass){
         this.elementClass = elementClass;
+        return this;
     }
 
     public S88ElementClass getElementClass(){
@@ -40,16 +37,19 @@ public class S88Element {
         return this.elementClasses;
     }
 
-    public void setId(String id) {
+    public S88Element setId(String id) {
         this.id = id;
+        return this;
     }
 
-    public void setLevel(S88Level level) {
+    public S88Element setLevel(S88Level level) {
         this.level = level;
+        return this;
     }
 
-    public void setParent(S88Element parent) {
+    public S88Element setParent(S88Element parent) {
         this.parent = parent;
+        return this;
     }
 
     public void setProperty(String k, Object v){
@@ -117,5 +117,6 @@ public class S88Element {
     public Map<String, Object> getStructuredProperty(String k){
         return this.getStructuredProperties(null).get(k);
     }
+
 
 }

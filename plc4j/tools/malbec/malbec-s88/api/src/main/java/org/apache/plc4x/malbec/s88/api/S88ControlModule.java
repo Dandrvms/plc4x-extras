@@ -14,7 +14,7 @@ public abstract class S88ControlModule extends S88Element {
 
     protected final Map<String, Object> propertyTable = new LinkedHashMap<>();
 
-    public S88ControlModule() {
+    protected S88ControlModule() {
         super();
         super.setLevel(S88Level.CONTROLMODULE);
         initPropertyTable();
@@ -26,8 +26,8 @@ public abstract class S88ControlModule extends S88Element {
     }
 
     @Override
-    public void setLevel(S88Level level) {
-        // Control modules always stay at CONTROLMODULE level.
+    public S88Element setLevel(S88Level level) {
+        throw  new UnsupportedOperationException("Control Modules stay at CONTROLMODULE level.");
     }
 
     @Override
@@ -51,7 +51,7 @@ public abstract class S88ControlModule extends S88Element {
     }
 
     @Override
-    public void setClass(S88ElementClass elementClass) {
+    public S88Element setClass(S88ElementClass elementClass) {
         throw new UnsupportedOperationException("Control modules do not have element classes.");
     }
 
