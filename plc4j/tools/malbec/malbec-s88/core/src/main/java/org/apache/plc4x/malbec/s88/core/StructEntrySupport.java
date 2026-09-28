@@ -27,7 +27,7 @@ import java.util.Map;
  * Internal helpers to read and write entries of a structured property.
  * <p>
  * A {@code containerKey} of {@code null} addresses the element root (a top level property),
- * while a non null {@code containerKey} addresses a nested map stored under that key
+ * while a non-null {@code containerKey} addresses a nested map stored under that key
  * (e.g. "Parameters" or "Reports").
  * <p>
  * Writes are copy-on-write: the container is cloned before being modified so the maps
@@ -47,7 +47,7 @@ final class StructEntrySupport {
         Object raw = element.getProperties().get(containerKey);
         if (raw instanceof Map<?, ?> nested) {
             for (Map.Entry<?, ?> entry : nested.entrySet()) {
-                copy.put(String.valueOf(entry.getKey()), entry.getValue());
+                copy.put(String.valueOf(entry.getKey()), PropertyValues.deepCopy(entry.getValue()));
             }
         }
         return copy;
@@ -80,11 +80,11 @@ final class StructEntrySupport {
 
     static void writeEntry(S88Element element, String containerKey, String entryKey, Object entryValue) {
         if (containerKey == null) {
-            element.setProperty(entryKey, entryValue);
+            element.setProperty(entryKey, PropertyValues.deepCopy(entryValue));
             return;
         }
         Map<String, Object> container = copyContainer(element, containerKey);
-        container.put(entryKey, entryValue);
+        container.put(entryKey, PropertyValues.deepCopy(entryValue));
         element.setProperty(containerKey, container);
     }
 

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="comms" />
+        <module name="css" />
+        <module name="udt" />
+        <module name="data" />
+        <module name="hmi" />
+        <module name="branding" />
+        <module name="project" />
+        <module name="type" />
+        <module name="eip" />
+        <module name="securities" />
+        <module name="htc" />
+        <module name="tgl" />
+        <module name="api" />
+        <module name="scripts" />
+        <module name="pics" />
+        <module name="events" />
+        <module name="malbec" />
+        <module name="recipes" />
+        <module name="s7" />
+        <module name="ctx" />
+        <module name="batch" />
+        <module name="services" />
+        <module name="core (2) (org.apache.plc4x.malbec.s88)" />
+        <module name="modbus" />
+        <module name="plant" />
+        <module name="information" />
+        <module name="libs" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>

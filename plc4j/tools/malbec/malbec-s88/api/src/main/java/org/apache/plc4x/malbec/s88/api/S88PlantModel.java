@@ -28,8 +28,9 @@ public class S88PlantModel {
 
     private final S88Element root;
     private final List<S88ChangeListener> listeners = new CopyOnWriteArrayList<>();
-    private final Map<String, S88Element> idMap = new HashMap<>();
+    private final Map<String, S88Element> idMap = new LinkedHashMap<>();
     private final Map<String, S88ElementClass> classes = new LinkedHashMap<>();
+    private final Set<String> duplicateIds = new LinkedHashSet<>();
 
     public S88PlantModel(S88Element root) {
         this.root = root;
@@ -38,18 +39,41 @@ public class S88PlantModel {
 
     private void rebuildIndex() {
         idMap.clear();
+        duplicateIds.clear();
         if (root != null) {
             addToIndex(root);
         }
     }
 
     private void addToIndex(S88Element element) {
-        if (element.getId() != null) {
-            idMap.put(element.getId(), element);
+        String id = element.getId();
+        if (id != null) {
+            if (idMap.containsKey(id)) {
+                // Keep the first occurrence addressable so that the element the user reached
+                // first stays reachable, and record the clash instead of failing the load:
+                // a plant written by other tools may legitimately arrive already broken.
+                duplicateIds.add(id);
+            } else {
+                idMap.put(id, element);
+            }
         }
         for (S88Element child : element.getChildren()) {
             addToIndex(child);
         }
+    }
+
+    /**
+     * Ids shared by more than one element of the plant.
+     * <p>
+     * Such an id makes the second element unreachable through {@link #findById(String)}, which
+     * in turn defeats the uniqueness check the use cases rely on. The clash is reported instead
+     * of thrown so that a plant already stored with duplicated ids can still be opened and
+     * repaired.
+     *
+     * @return the duplicated ids, in the order they were found, empty when the plant is sound
+     */
+    public Set<String> getDuplicateIds() {
+        return Collections.unmodifiableSet(duplicateIds);
     }
 
 
@@ -60,10 +84,10 @@ public class S88PlantModel {
     public void registerClass(S88ElementClass ec) {
         String name = ec != null ? ec.getName() : null;
         if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("Template ID cannot be empty");
+            throw new IllegalArgumentException("Class ID cannot be empty");
         }
         if (classes.containsKey(name)) {
-            throw new IllegalStateException("Template with ID '" + name + "' already exists.");
+            throw new IllegalStateException("Class with ID '" + name + "' already exists.");
         }
         classes.put(name, ec);
     }
@@ -72,6 +96,65 @@ public class S88PlantModel {
 
     public Map<String, S88ElementClass> getClasses(){
         return classes;
+    }
+
+    /**
+     * Classes that may be used for the children of an element at {@code childLevel}.
+     * <p>
+     * Element classes are global to the plant: a class defined while building one branch is offered
+     * to every element that creates children of the same level, whatever branch it sits in.
+     *
+     * @param childLevel level the elements to create will have, {@code null} when unknown
+     * @return the usable classes, never {@code null}
+     */
+    public List<S88ElementClass> getClassesForChildLevel(S88Level childLevel) {
+        Map<String, S88ElementClass> byName = new LinkedHashMap<>();
+        if (childLevel == null) {
+            return List.of();
+        }
+        for (S88ElementClass ec : classes.values()) {
+            if (usableFor(ec, childLevel)) {
+                byName.putIfAbsent(ec.getName(), ec);
+            }
+        }
+        for (S88ElementClass ec : classesAttachedInTree(childLevel)) {
+            byName.putIfAbsent(ec.getName(), ec);
+        }
+        return List.copyOf(byName.values());
+    }
+
+    /**
+     * Picks the classes already attached to the elements, in tree order, keeping only those meant
+     * for {@code childLevel}.
+     */
+    private List<S88ElementClass> classesAttachedInTree(S88Level childLevel) {
+        List<S88ElementClass> found = new ArrayList<>();
+        collectAttachedClasses(root, childLevel, found);
+        return found;
+    }
+
+    private void collectAttachedClasses(S88Element element, S88Level childLevel, List<S88ElementClass> found) {
+        if (element == null) {
+            return;
+        }
+        S88Level level = element.getLevel();
+        if (level != null && level.getChildLevel() == childLevel && element.getElementClasses() != null) {
+            for (S88ElementClass ec : element.getElementClasses()) {
+                if (usableFor(ec, childLevel)) {
+                    found.add(ec);
+                }
+            }
+        }
+        for (S88Element child : element.getChildren()) {
+            collectAttachedClasses(child, childLevel, found);
+        }
+    }
+
+    private static boolean usableFor(S88ElementClass ec, S88Level childLevel) {
+        return ec != null
+                && !isEnumerationClass(ec)
+                && ec.getTargetLevel() == childLevel
+                && ec.getName() != null;
     }
 
     public static final String ENUM_CLASS_PREFIX = "ENUM_";
@@ -124,7 +207,7 @@ public class S88PlantModel {
 
         String key = ENUM_CLASS_PREFIX + enumeration.getName();
         if (classes.containsKey(key)) {
-            throw new IllegalStateException("Template with ID '" + key + "' already exists.");
+            throw new IllegalStateException("Class with ID '" + key + "' already exists.");
         }
         classes.put(key, fromEnumeration(enumeration));
     }
@@ -201,7 +284,11 @@ public class S88PlantModel {
     }
 
     private void removeFromIndex(S88Element element) {
-        idMap.remove(element.getId());
+        // Only drop the id when the indexed element really is the one being removed: while a plant
+        // holds duplicated ids, removing one of them must not evict the other from the index.
+        if (element.getId() != null && idMap.get(element.getId()) == element) {
+            idMap.remove(element.getId());
+        }
         for (S88Element child : element.getChildren()) {
             removeFromIndex(child);
         }

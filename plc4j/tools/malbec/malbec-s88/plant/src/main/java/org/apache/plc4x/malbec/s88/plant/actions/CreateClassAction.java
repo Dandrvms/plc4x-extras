@@ -21,7 +21,7 @@ package org.apache.plc4x.malbec.s88.plant.actions;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
-import org.apache.plc4x.malbec.s88.plant.panels.TemplateFactory;
+import org.apache.plc4x.malbec.s88.plant.panels.ClassFactory;
 import org.netbeans.api.project.Project;
 import org.openide.util.ContextAwareAction;
 import org.openide.util.Lookup;
@@ -30,25 +30,25 @@ import org.openide.util.NbBundle;
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 
-public class CreateTemplateAction extends AbstractAction implements ContextAwareAction {
+public class CreateClassAction extends AbstractAction implements ContextAwareAction {
     private final Lookup context;
 
-    public CreateTemplateAction() {
+    public CreateClassAction() {
         this(Lookup.EMPTY);
     }
 
-    private CreateTemplateAction(Lookup context) {
-        super(Bundle.BTN_Template());
+    private CreateClassAction(Lookup context) {
+        super(Bundle.BTN_Class());
         this.context = context;
     }
 
     @Override
     public Action createContextAwareInstance(Lookup actionContext) {
-        return new CreateTemplateAction(actionContext);
+        return new CreateClassAction(actionContext);
     }
 
     @NbBundle.Messages({
-            "BTN_Template=New Template"
+            "BTN_Class=New Class"
     })
     @Override
     public void actionPerformed(ActionEvent e) {
@@ -59,6 +59,6 @@ public class CreateTemplateAction extends AbstractAction implements ContextAware
         Plc4xPlantModel plantModel = project.getLookup().lookup(Plc4xPlantModel.class);
         if (plantModel == null || plantModel.getModel() == null) return;
 
-       TemplateFactory.createDialog(parent, plantModel);
+       ClassFactory.createDialog(parent, plantModel);
     }
 }

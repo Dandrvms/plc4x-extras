@@ -20,10 +20,7 @@ package org.apache.plc4x.malbec.s88.plant.nodes;
 
 import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.api.S88Element;
-import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantElementAction;
-import org.apache.plc4x.malbec.s88.plant.actions.CreateTemplateAction;
 import org.apache.plc4x.malbec.s88.plant.actions.PropertiesAction;
-import org.apache.plc4x.malbec.s88.plant.actions.ViewTemplatesAction;
 import org.netbeans.api.project.Project;
 import org.openide.nodes.Children;
 import org.openide.util.Utilities;

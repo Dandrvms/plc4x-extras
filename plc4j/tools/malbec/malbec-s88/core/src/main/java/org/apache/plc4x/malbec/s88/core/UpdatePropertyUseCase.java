@@ -35,6 +35,7 @@ public class UpdatePropertyUseCase {
 
     public static void execute(S88PlantModel model, S88Element element, String key, Object value) {
         if (element == null || key == null || key.isEmpty()) return;
+        NameValidator.validateProperty(key);
 
         Object oldValue = element.getProperties().get(key);
         if (Objects.equals(value, oldValue)) {

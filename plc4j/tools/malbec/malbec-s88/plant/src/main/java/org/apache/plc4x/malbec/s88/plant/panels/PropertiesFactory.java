@@ -137,7 +137,7 @@ public class PropertiesFactory {
         builder.beginTab("General")
                 .addPropertyRow("Name", nameField)
                 .addPropertyRow("Level", levelField)
-                .addPropertyRow("Template/Class", classField)
+                .addPropertyRow("Class", classField)
                 .addPropertyRow("Enable display creation", AddCheck(element))
                 .endTab();
 

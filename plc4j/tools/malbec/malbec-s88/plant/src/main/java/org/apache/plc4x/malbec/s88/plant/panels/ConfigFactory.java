@@ -95,6 +95,7 @@ public class ConfigFactory {
         btnAdd.addActionListener(e -> new AttributeDialogBuilder("Create Unit Attribute")
                 .withEnumerations(enumerations(model))
                 .withEditable(true)
+                .withVariableKeyPreview(currentElement(model, element), model)
                 .onSave((updatedName, updatedProps) -> {
                     try {
                         S88Element current = currentElement(model, element);
@@ -167,6 +168,7 @@ public class ConfigFactory {
                             .withEnumerations(enumerations(model))
                             .withInitialData(name, bag)
                             .withEditableFields(false)
+                            .withVariableKeyPreview(currentElement(model, element), model)
                             .onSave((updatedName, updatedProps) -> {
                                 S88Element current = currentElement(model, element);
                                 try {
@@ -201,6 +203,7 @@ public class ConfigFactory {
                             .reportsMode()
                             .withInitialData(name, bag)
                             .withEditableFields(false)
+                            .withVariableKeyPreview(currentElement(model, element), model)
                             .onSave((updatedName, updatedProps) -> {
                                 S88Element current = currentElement(model, element);
                                 try {
@@ -221,6 +224,7 @@ public class ConfigFactory {
         JButton btnAddParameter = new JButton("Add parameter");
         btnAddParameter.addActionListener(e -> new ParameterDialogBuilder("Add Parameter")
                 .withEnumerations(enumerations(model))
+                .withVariableKeyPreview(currentElement(model, element), model)
                 .onSave((updatedName, updatedProps) -> {
                     S88Element current = currentElement(model, element);
                     try {
@@ -240,6 +244,7 @@ public class ConfigFactory {
         btnAddReport.addActionListener(e -> new ParameterDialogBuilder("Add Report")
                 .withEnumerations(enumerations(model))
                 .reportsMode()
+                .withVariableKeyPreview(currentElement(model, element), model)
                 .onSave((updatedName, updatedProps) -> {
                     S88Element current = currentElement(model, element);
                     try {

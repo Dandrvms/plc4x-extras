@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-public class TemplateFactory {
+public class ClassFactory {
 
     public static void createDialog(S88Element parent, Plc4xPlantModel model) {
         createDialog(parent, model, null);
@@ -52,16 +52,16 @@ public class TemplateFactory {
         S88Level childLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
         if (childLevel == null) {
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
-                    "Cannot create a template under an Equipment Module (leaf level).",
+                    "Cannot create a class under an Equipment Module (leaf level).",
                     NotifyDescriptor.INFORMATION_MESSAGE));
             return;
         }
 
         JDialog dialog = switch (parent.getLevel()) {
-            case AREA -> createSimpleTemplateDialog(parent, model, owner);
-            case PROCESSCELL -> createUnitTemplateDialog(parent, model, owner);
-            case UNIT -> createEMTemplateDialog(parent, model, owner);
-            case EQUIPMENTMODULE -> createSimpleTemplateDialog(parent, model, owner);
+            case AREA -> createSimpleClassDialog(parent, model, owner);
+            case PROCESSCELL -> createUnitClassDialog(parent, model, owner);
+            case UNIT -> createEMClassDialog(parent, model, owner);
+            case EQUIPMENTMODULE -> createSimpleClassDialog(parent, model, owner);
             default -> throw new IllegalArgumentException("No dialog implemented for level: " + parent.getLevel().name());
         };
 
@@ -73,11 +73,11 @@ public class TemplateFactory {
 
     }
 
-    public static JDialog createSimpleTemplateDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
-        TemplateDialogBuilder builder = new TemplateDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Template", owner);
+    public static JDialog createSimpleClassDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
 
         Runnable okLogic = () -> {
-            CreateClassUseCase.execute(model.getModel(), parent, builder.getTemplateName(), null);
+            CreateClassUseCase.execute(model.getModel(), parent, builder.getClassName(), null);
             try {
                 model.save();
             } catch (IOException e) {
@@ -91,7 +91,7 @@ public class TemplateFactory {
                 .build();
     }
 
-    public static JDialog createUnitTemplateDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
+    public static JDialog createUnitClassDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
         String[] columns = {"Name", "Eng_Units/Enum", "Type"};
         DefaultTableModel tableModel = createReadOnlyTableModel(columns);
 
@@ -99,14 +99,14 @@ public class TemplateFactory {
                 ? model.getModel().getEnumerations()
                 : List.of();
 
-        TemplateDialogBuilder builder = new TemplateDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Template", owner);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
 
         JPanel attributePanel = createAttributeTabPanel(tableModel, enumerations, builder::getDialog);
 
         Runnable okLogic = () -> {
             Map<String, Object> propertyMap = buildPropertiesFromTable(tableModel);
             assert model != null;
-            CreateClassUseCase.execute(model.getModel(), parent, builder.getTemplateName(), propertyMap);
+            CreateClassUseCase.execute(model.getModel(), parent, builder.getClassName(), propertyMap);
             try {
                 model.save();
             } catch (IOException e) {
@@ -121,7 +121,7 @@ public class TemplateFactory {
                 .build();
     }
 
-    public static JDialog createEMTemplateDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
+    public static JDialog createEMClassDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
         DefaultTableModel paramsTableModel = createReadOnlyTableModel(new String[]{"Name", "Eng_Units/Enum", "Type", "Max", "Min", "Default"});
         DefaultTableModel reportsTableModel = createReadOnlyTableModel(new String[]{"Name", "Eng_Units/Enum", "Type"});
 
@@ -129,7 +129,7 @@ public class TemplateFactory {
                 ? model.getModel().getEnumerations()
                 : List.of();
 
-        TemplateDialogBuilder builder = new TemplateDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Template", owner);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
 
         Supplier<Window> ownerSupplier = builder::getDialog;
 
@@ -143,7 +143,7 @@ public class TemplateFactory {
             propertyBag.put("Reports", buildPropertiesFromTable(reportsTableModel));
 
             assert model != null;
-            CreateClassUseCase.execute(model.getModel(), parent, builder.getTemplateName(), propertyBag);
+            CreateClassUseCase.execute(model.getModel(), parent, builder.getClassName(), propertyBag);
             try {
                 model.save();
             } catch (IOException e) {
@@ -287,10 +287,10 @@ public class TemplateFactory {
         return propertyMap;
     }
 
-    public static void showTemplate(S88ElementClass ec) {
+    public static void showClass(S88ElementClass ec) {
         JDialog dialog = switch (ec.getTargetLevel()) {
-            case UNIT -> showUnitTemplate(ec);
-            case EQUIPMENTMODULE -> showEMTemplate(ec);
+            case UNIT -> showUnitClass(ec);
+            case EQUIPMENTMODULE -> showEMClass(ec);
             default -> null;
         };
 
@@ -301,7 +301,7 @@ public class TemplateFactory {
         }
     }
 
-    public static JDialog showUnitTemplate(S88ElementClass ec) {
+    public static JDialog showUnitClass(S88ElementClass ec) {
         String[] columns = {"Name", "Eng_Units/Enum", "Type"};
         DefaultTableModel tableModel = createReadOnlyTableModel(columns);
 
@@ -309,14 +309,14 @@ public class TemplateFactory {
 
         JPanel attributePanel = createReadOnlyAttributePanel(tableModel);
 
-        TemplateDialogBuilder builder = new TemplateDialogBuilder(ec.getName() != null ? ec.getName() : "Template")
+        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Class")
                 .withReadOnlyNameField(ec.getName())
                 .addComponentRow(attributePanel)
                 .onAccept(() -> { });
         return builder.build();
     }
 
-    public static JDialog showEMTemplate(S88ElementClass ec) {
+    public static JDialog showEMClass(S88ElementClass ec) {
         DefaultTableModel paramsTableModel = createReadOnlyTableModel(new String[]{"Name", "Eng_Units/Enum", "Type", "Max", "Min", "Default"});
         DefaultTableModel reportsTableModel = createReadOnlyTableModel(new String[]{"Name", "Eng_Units/Enum", "Type"});
 
@@ -333,7 +333,7 @@ public class TemplateFactory {
         tabbedPane.addTab("Parameters", createReadOnlyTabPanel(paramsTableModel));
         tabbedPane.addTab("Reports", createReadOnlyTabPanel(reportsTableModel));
 
-        TemplateDialogBuilder builder = new TemplateDialogBuilder(ec.getName() != null ? ec.getName() : "Template")
+        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Class")
                 .withReadOnlyNameField(ec.getName())
                 .addComponentRow(tabbedPane)
                 .onAccept(() -> { });

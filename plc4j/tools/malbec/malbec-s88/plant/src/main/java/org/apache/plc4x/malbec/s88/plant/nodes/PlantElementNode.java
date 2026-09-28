@@ -26,16 +26,14 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88Level;
-import org.apache.plc4x.malbec.s88.core.RenameElementUseCase;
 import org.apache.plc4x.malbec.s88.core.UpdatePropertyUseCase;
 import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantElementAction;
-import org.apache.plc4x.malbec.s88.plant.actions.CreateTemplateAction;
+import org.apache.plc4x.malbec.s88.plant.actions.CreateClassAction;
 import org.apache.plc4x.malbec.s88.plant.actions.PropertiesAction;
-import org.apache.plc4x.malbec.s88.plant.actions.ViewTemplatesAction;
+import org.apache.plc4x.malbec.s88.plant.actions.ViewClassesAction;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
+import org.apache.plc4x.malbec.s88.plant.panels.RenameElementDialog;
 import org.netbeans.api.project.Project;
-import org.openide.DialogDisplayer;
-import org.openide.NotifyDescriptor;
 import org.openide.nodes.AbstractNode;
 import org.openide.nodes.ChildFactory;
 import org.openide.nodes.Children;
@@ -142,10 +140,10 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
     public Action[] getActions(boolean context) {
         List<Action> actions = new ArrayList<>();
         actions.add(org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class));
-        actions.add(new ViewTemplatesAction().createContextAwareInstance(getLookup()));
+        actions.add(new ViewClassesAction().createContextAwareInstance(getLookup()));
         actions.add(null);
         actions.add(new CreatePlantElementAction().createContextAwareInstance(getLookup()));
-        actions.add(new CreateTemplateAction().createContextAwareInstance(getLookup()));
+        actions.add(new CreateClassAction().createContextAwareInstance(getLookup()));
         actions.add(null);
         actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-plant-element/Actions"));
         actions.add(new PropertiesAction().createContextAwareInstance(getLookup()));
@@ -168,19 +166,20 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
         }
     }
 
-    private void updateEquipmentID(String newID) {
-        if (model != null) {
-            try {
-                RenameElementUseCase.execute(model.getModel(), currentElement, newID);
-                model.save();
-                this.equipmentID = currentElement.getId();
-                updateElement(currentElement);
-            } catch (IllegalArgumentException | IllegalStateException ex) {
-                DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(ex.getMessage(), NotifyDescriptor.ERROR_MESSAGE));
-            } catch (Exception ex) {
-                Exceptions.printStackTrace(ex);
-            }
+    private boolean updateEquipmentID(String newID) {
+        if (model == null) {
+            return false;
         }
+        // The Explorer has already closed its own rename editor by the time it calls us, so the
+        // exchange is handed to a dialog of our own: a name the use cases reject has to be fixed
+        // there, with the window still open, instead of leaving a label that no longer matches the
+        // model.
+        if (!RenameElementDialog.rename(null, model, currentElement, newID)) {
+            return false;
+        }
+        this.equipmentID = currentElement.getId();
+        updateElement(currentElement);
+        return true;
     }
 
     private static class PlantElementChildrenFactory extends ChildFactory<String> implements ChangeListener {
@@ -239,7 +238,12 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
 
     @Override
     public void setName(String newName) {
-        updateEquipmentID(newName);
-        super.setName(newName);
+        // Only let the Explorer keep the new label when the model really took the new id, so a
+        // rejected name cannot leave the tree showing something the plant does not contain.
+        if (updateEquipmentID(newName)) {
+            super.setName(newName);
+        } else {
+            super.setName(currentElement != null ? currentElement.getId() : getName());
+        }
     }
 }

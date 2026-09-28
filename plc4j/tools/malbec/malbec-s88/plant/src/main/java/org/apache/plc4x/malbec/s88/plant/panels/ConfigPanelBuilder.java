@@ -53,15 +53,15 @@ public class ConfigPanelBuilder {
         JTextField name = new JTextField(element.getId());
         name.setEditable(false);
 
-        JTextField template = new JTextField(element.getElementClass() != null ? element.getElementClass().getName() : "");
-        template.setEditable(false);
+        JTextField elementClass = new JTextField(element.getElementClass() != null ? element.getElementClass().getName() : "");
+        elementClass.setEditable(false);
 
         JTextField parent = new JTextField(element.getParent() != null ? element.getParent().getId() : "");
         parent.setEditable(false);
 
         int row = 0;
         addFormField(optionsPanel, gbc, row++, "Name:", name);
-        addFormField(optionsPanel, gbc, row++, "Template:", template);
+        addFormField(optionsPanel, gbc, row++, "Class:", elementClass);
         addFormField(optionsPanel, gbc, row++, "Parent:", parent);
 
         mainPanel.add(optionsPanel, BorderLayout.NORTH);

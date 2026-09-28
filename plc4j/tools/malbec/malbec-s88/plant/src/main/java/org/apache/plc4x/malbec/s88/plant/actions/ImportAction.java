@@ -24,7 +24,9 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88Repository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
+import org.apache.plc4x.malbec.s88.core.NamingAdvisor;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
+import org.apache.plc4x.malbec.s88.plant.panels.ModelDefectsDialog;
 import org.apache.plc4x.malbec.s88.plant.services.S88ProjectServices;
 import org.netbeans.api.project.Project;
 import org.openide.awt.ActionID;
@@ -98,6 +100,11 @@ public class ImportAction extends AbstractAction implements ContextAwareAction {
                         "The selected file could not be loaded as a plant model.",
                         "Import Error",
                         JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            NamingAdvisor.ModelReport report = NamingAdvisor.describeModel(model);
+            if (report.hasProblems() && !ModelDefectsDialog.showConfirm(null, report)) {
                 return;
             }
 

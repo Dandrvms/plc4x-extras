@@ -21,13 +21,14 @@ package org.apache.plc4x.malbec.s88.plant.panels;
 
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.EngineeringUnits;
+import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
+import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DocumentFilter;
 import javax.swing.text.PlainDocument;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.KeyAdapter;
@@ -41,6 +42,9 @@ import java.util.function.BiConsumer;
 
 public class ParameterDialogBuilder {
 
+    private static final Color HINT_COLOUR = new Color(0x777777);
+    private static final Color REJECTED_COLOUR = new Color(0xb00000);
+
     private final String title;
     private boolean isEditMode = false;
     private String initialName = "";
@@ -50,6 +54,10 @@ public class ParameterDialogBuilder {
     private Window owner;
     private boolean isEditable = true;
     private BiConsumer<String, Map<String, Object>> onSaveAction;
+    private S88Element previewElement;
+    private Plc4xPlantModel previewModel;
+    private VariableKeyPreviewPanel variableKeyPreview;
+    private JLabel nameHintLabel;
     protected JTextField txtName;
     protected JComboBox<String> comboType;
     protected JComboBox<String> comboEnumeration;
@@ -64,7 +72,7 @@ public class ParameterDialogBuilder {
     protected JButton btnOk;
     protected JButton btnCancel;
 
-    private final ValueDocumentFilter valueFilter = new ValueDocumentFilter();
+    private final RestrictedDocumentFilter valueFilter = RestrictedDocumentFilter.forValue(null);
 
     public ParameterDialogBuilder(String title) {
         this.title = title;
@@ -99,6 +107,18 @@ public class ParameterDialogBuilder {
 
     public ParameterDialogBuilder withEditableFields(boolean editable){
         this.isEditable = editable;
+        return this;
+    }
+
+    /**
+     * Shows the key a property of {@code element} will be addressed by, next to the name field.
+     *
+     * @param element element the property will belong to
+     * @param model   plant used to spot keys already in use
+     */
+    public ParameterDialogBuilder withVariableKeyPreview(S88Element element, Plc4xPlantModel model) {
+        this.previewElement = element;
+        this.previewModel = model;
         return this;
     }
 
@@ -147,6 +167,27 @@ public class ParameterDialogBuilder {
 
     protected void createWidgets() {
         txtName = new JTextField();
+        nameHintLabel = new JLabel("Only A-Z, 0-9 and _ can be used.");
+        nameHintLabel.setForeground(HINT_COLOUR);
+        nameHintLabel.setFont(nameHintLabel.getFont().deriveFont(Font.PLAIN, 10f));
+        ((PlainDocument) txtName.getDocument()).setDocumentFilter(
+                RestrictedDocumentFilter.forIdentifier(this::showRejectedInput));
+        txtName.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                refreshVariableKeyPreview();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                refreshVariableKeyPreview();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                refreshVariableKeyPreview();
+            }
+        });
         comboType = new JComboBox<>(DataType.displayNames());
         comboEnumeration = new JComboBox<>();
         comboEngineeringUnits = new JComboBox<>();
@@ -216,6 +257,18 @@ public class ParameterDialogBuilder {
         JPanel formPanel = new JPanel(new GridBagLayout());
         int row = 0;
         addFormField(formPanel, gbc, row++, "Name", txtName);
+        addFullWidthRow(formPanel, gbc, row++, nameHintLabel);
+        variableKeyPreview = new VariableKeyPreviewPanel();
+        variableKeyPreview.bind(previewElement, previewModel != null ? previewModel.getModel() : null);
+        // The convention is offered, never imposed: pressing the button puts the conventional name
+        // in the field, and whatever is in the field is what gets stored.
+        variableKeyPreview.setApplyName(txtName::setText);
+        // On an edit the property is already in the model publishing the very key being previewed,
+        // so it has to be named as the one under edit or it reads as a collision with itself.
+        if (isEditMode) {
+            variableKeyPreview.setEditingProperty(initialName);
+        }
+        addFullWidthRow(formPanel, gbc, row++, variableKeyPreview);
         addFormField(formPanel, gbc, row++, "Type", comboType);
         addFormField(formPanel, gbc, row++, "Enumeration", comboEnumeration);
         addFormField(formPanel, gbc, row++, "Engineering Unit", comboEngineeringUnits);
@@ -230,6 +283,38 @@ public class ParameterDialogBuilder {
         }
 
         return formPanel;
+    }
+
+    private void addFullWidthRow(JPanel parent, GridBagConstraints gbc, int row, JComponent field) {
+        gbc.gridy = row;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        gbc.anchor = GridBagConstraints.WEST;
+        parent.add(field, gbc);
+        gbc.gridwidth = 1;
+    }
+
+    /**
+     * Says why a keystroke was refused, so an id the use cases would reject is never a mystery.
+     */
+    private void showRejectedInput(String message) {
+        if (nameHintLabel == null) {
+            return;
+        }
+        nameHintLabel.setForeground(REJECTED_COLOUR);
+        nameHintLabel.setText(message);
+    }
+
+    private void refreshVariableKeyPreview() {
+        if (variableKeyPreview == null || nameHintLabel == null) {
+            return;
+        }
+        if (nameHintLabel.getForeground().equals(REJECTED_COLOUR)) {
+            nameHintLabel.setForeground(HINT_COLOUR);
+            nameHintLabel.setText("Only A-Z, 0-9 and _ can be used.");
+        }
+        variableKeyPreview.update(txtName.getText());
     }
 
     protected ParameterDialogBuilder withReference(boolean val){
@@ -409,47 +494,5 @@ public class ParameterDialogBuilder {
 
     protected void applyValueInputFilter() {
         valueFilter.setType(DataType.fromString(Objects.toString(comboType.getSelectedItem(), "")));
-    }
-
-    private static class ValueDocumentFilter extends DocumentFilter {
-        private DataType type = DataType.STRING;
-
-        void setType(DataType type) {
-            this.type = type;
-        }
-
-        @Override
-        public void insertString(FilterBypass fb, int offset, String text, AttributeSet attrs)
-                throws BadLocationException {
-            if (matches(fb, offset, 0, text)) {
-                super.insertString(fb, offset, text, attrs);
-            }
-        }
-
-        @Override
-        public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs)
-                throws BadLocationException {
-            if (matches(fb, offset, length, text)) {
-                super.replace(fb, offset, length, text, attrs);
-            }
-        }
-
-        private boolean matches(FilterBypass fb, int offset, int length, String text) {
-            if (type != DataType.INTEGER && type != DataType.REAL) {
-                return true;
-            }
-            if (text == null) {
-                return true;
-            }
-            try {
-                String current = fb.getDocument().getText(0, fb.getDocument().getLength());
-                String proposed = new StringBuilder(current).replace(offset, offset + length, text).toString();
-                return type == DataType.REAL
-                        ? proposed.matches("-?\\d*\\.?\\d*")
-                        : proposed.matches("-?\\d*");
-            } catch (BadLocationException ex) {
-                return false;
-            }
-        }
     }
 }

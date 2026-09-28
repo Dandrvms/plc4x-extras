@@ -31,10 +31,8 @@ import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 public class CreateElementUseCase {
 
     public static void execute(S88PlantModel model, S88Element parent, String id, S88ElementClass s88ElementClass) {
-        if (id == null || id.trim().isEmpty()) {
-            throw new IllegalArgumentException("ID cannot be empty");
-        }
-        
+        NameValidator.validate(id, "Element ID");
+
         if (model.findById(id).isPresent()) {
             throw new IllegalStateException("Element with ID '" + id + "' already exists.");
         }
@@ -53,13 +51,13 @@ public class CreateElementUseCase {
                 .setLevel(childLevel)
                 .setClass(s88ElementClass);
 
-
-        if(s88ElementClass!=null) {
+        // The class properties are copied as they are: the names a class holds are the names the
+        // element gets, so a variable keeps the single name it was given in the class.
+        if (s88ElementClass != null) {
             for (var entry : s88ElementClass.getProperties().entrySet()) {
-                child.setProperty(entry.getKey(), entry.getValue());
+                child.setProperty(entry.getKey(), PropertyValues.deepCopy(entry.getValue()));
             }
         }
-
 
         targetParent.addChild(child);
         model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.ADDED, child));

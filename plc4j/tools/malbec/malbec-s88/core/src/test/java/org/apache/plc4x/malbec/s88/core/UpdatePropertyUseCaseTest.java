@@ -66,7 +66,7 @@ class UpdatePropertyUseCaseTest {
 
     @Test
     void testDoesNotFireEventWhenMissingAndNull() {
-        UpdatePropertyUseCase.execute(model, element, "missing", null);
+        UpdatePropertyUseCase.execute(model, element, "MISSING", null);
 
         verify(model, never()).fireChangeEvent(any());
     }

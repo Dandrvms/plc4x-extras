@@ -28,6 +28,8 @@ import org.apache.plc4x.malbec.s88.api.S88PlantModel;
  * A {@code containerKey} of {@code null} adds a top level property (e.g. a Unit attribute),
  * otherwise the entry is added to the nested map stored under {@code containerKey}
  * (e.g. a parameter inside "Parameters").
+ * <p>
+ * {@code entryKey} is stored exactly as given: it is the one name the variable is published under.
  */
 public class AddStructEntryUseCase {
     private AddStructEntryUseCase() {
@@ -36,9 +38,10 @@ public class AddStructEntryUseCase {
 
     public static void execute(S88PlantModel model, S88Element element, String containerKey,
                                String entryKey, Object entryValue) {
-        if (element == null || entryKey == null || entryKey.trim().isEmpty()) {
-            throw new IllegalArgumentException("Entry name cannot be empty");
+        if (element == null) {
+            throw new IllegalArgumentException("Element cannot be null");
         }
+        NameValidator.validateEntry(containerKey, entryKey);
         if (entryValue == null) {
             throw new IllegalArgumentException("Entry value cannot be null");
         }

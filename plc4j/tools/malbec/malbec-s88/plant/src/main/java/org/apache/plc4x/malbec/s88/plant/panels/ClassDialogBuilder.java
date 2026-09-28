@@ -24,45 +24,55 @@ import org.openide.NotifyDescriptor;
 import org.openide.util.Exceptions;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.text.PlainDocument;
 import java.awt.*;
 
-public class TemplateDialogBuilder {
+public class ClassDialogBuilder {
     private final JDialog dialog;
     private final JPanel formPanel;
-    private JTextField txtTemplateName;
+    private JTextField txtClassName;
     private int currentRow = 0;
     private final Boolean showButtons;
 
     private Runnable onOkAction;
 
-    public TemplateDialogBuilder(String title) {
+    public ClassDialogBuilder(String title) {
         this(title, true, null);
     }
 
-    public TemplateDialogBuilder(String title, Window owner) {
+    public ClassDialogBuilder(String title, Window owner) {
         this(title, true, owner);
     }
 
-    public TemplateDialogBuilder(String title, boolean showButtons) {
+    public ClassDialogBuilder(String title, boolean showButtons) {
         this(title, showButtons, null);
     }
 
-    public TemplateDialogBuilder(String title, boolean showButtons, Window owner) {
+    public ClassDialogBuilder(String title, boolean showButtons, Window owner) {
         dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
         formPanel = new JPanel(new GridBagLayout());
         this.showButtons = showButtons;
     }
 
-    public TemplateDialogBuilder withNameField() {
-        txtTemplateName = new JTextField(20);
-        addRow("Template Name:", txtTemplateName);
+    public ClassDialogBuilder withNameField() {
+        txtClassName = new JTextField(20);
+        JLabel hint = new JLabel("Only A-Z, 0-9 and _ can be used.");
+        hint.setForeground(new Color(0x777777));
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 10f));
+        ((PlainDocument) txtClassName.getDocument()).setDocumentFilter(
+                RestrictedDocumentFilter.forIdentifier(message -> {
+                    hint.setForeground(new Color(0xb00000));
+                    hint.setText(message);
+                }));
+        addRow("Class Name:", txtClassName);
+        addRow("", hint);
         return this;
     }
 
-    public TemplateDialogBuilder withReadOnlyNameField(String value) {
+    public ClassDialogBuilder withReadOnlyNameField(String value) {
         JTextField field = new JTextField(value != null ? value : "");
         field.setEditable(false);
-        addRow("Template Name:", field);
+        addRow("Class Name:", field);
         return this;
     }
 
@@ -79,7 +89,7 @@ public class TemplateDialogBuilder {
         currentRow++;
     }
 
-    public TemplateDialogBuilder addComponentRow(JComponent component) {
+    public ClassDialogBuilder addComponentRow(JComponent component) {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.gridwidth = 2; gbc.gridx = 0; gbc.gridy = currentRow;
@@ -90,13 +100,13 @@ public class TemplateDialogBuilder {
         return this;
     }
 
-    public TemplateDialogBuilder onAccept(Runnable action) {
+    public ClassDialogBuilder onAccept(Runnable action) {
         this.onOkAction = action;
         return this;
     }
 
-    public String getTemplateName() {
-        return txtTemplateName != null ? txtTemplateName.getText() : "";
+    public String getClassName() {
+        return txtClassName != null ? txtClassName.getText() : "";
     }
 
     public JDialog getDialog() {

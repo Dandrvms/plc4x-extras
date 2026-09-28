@@ -37,9 +37,10 @@ public class UpdateStructEntryUseCase {
 
     public static void execute(S88PlantModel model, S88Element element, String containerKey,
                                String entryKey, Object entryValue) {
-        if (element == null || entryKey == null || entryKey.trim().isEmpty()) {
-            throw new IllegalArgumentException("Entry name cannot be empty");
+        if (element == null) {
+            throw new IllegalArgumentException("Element cannot be null");
         }
+        NameValidator.validateEntry(containerKey, entryKey);
         if (entryValue == null) {
             throw new IllegalArgumentException("Entry value cannot be null");
         }

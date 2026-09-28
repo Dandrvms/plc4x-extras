@@ -77,6 +77,18 @@ class UpdateStructEntryUseCaseTest {
     }
 
     @Test
+    void testEditingAValueNeverTouchesTheName() {
+        // The name is the one the user typed, so editing a value cannot change it.
+        AddStructEntryUseCase.execute(model, element, "Parameters", "P1", "v1");
+
+        UpdateStructEntryUseCase.execute(model, element, "Parameters", "P1", "v2");
+
+        Map<String, Object> parameters = element.getStructuredProperty("Parameters");
+        assertEquals("v2", parameters.get("P1"));
+        assertEquals(1, parameters.size(), "the variable must keep exactly one name");
+    }
+
+    @Test
     void testNestedUpdateIsCopyOnWrite() {
         Map<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("P1", "v1");
@@ -115,7 +127,7 @@ class UpdateStructEntryUseCaseTest {
     @Test
     void testThrowsWhenRootEntryMissing() {
         assertThrows(IllegalStateException.class,
-                () -> UpdateStructEntryUseCase.execute(model, element, null, "missing", "v"));
+                () -> UpdateStructEntryUseCase.execute(model, element, null, "MISSING", "v"));
         verify(model, never()).fireChangeEvent(any());
     }
 

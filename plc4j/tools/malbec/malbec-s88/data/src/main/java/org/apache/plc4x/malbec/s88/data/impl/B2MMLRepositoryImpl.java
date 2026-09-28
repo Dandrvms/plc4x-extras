@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Implementation of S88Repository for B2MML XML format.
@@ -100,6 +101,13 @@ public class B2MMLRepositoryImpl implements S88Repository {
 
     @Override
     public void savePlant(S88PlantModel model) {
+        // Diagnostics only: a plant that already holds a clashing id must stay loadable so it can be
+        // repaired, so this never blocks the write. Duplicated ids are the root cause behind the
+        // derived variable keys that end up duplicated as well, which is why they are worth reporting
+        // here. The derived key check itself lives in the core module, closer to the future catalog
+        // consumer, so it is not run from this persistence layer.
+        reportDuplicatedIds(model);
+
         try (OutputStream output = storage.openOutput()){
 
             EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.newInstance();
@@ -131,6 +139,18 @@ public class B2MMLRepositoryImpl implements S88Repository {
             java.util.logging.Logger.getLogger(B2MMLRepositoryImpl.class.getName())
                     .log(java.util.logging.Level.WARNING, "Failed to save plant model", e);
         }
+    }
+
+    private void reportDuplicatedIds(S88PlantModel model) {
+        Set<String> duplicated = model.getDuplicateIds();
+        if (duplicated.isEmpty()) {
+            return;
+        }
+        java.util.logging.Logger.getLogger(B2MMLRepositoryImpl.class.getName())
+                .log(java.util.logging.Level.WARNING,
+                        "Plant contains {0} id(s) used by more than one element, so the extra elements "
+                                + "cannot be reached by name and their variables collapse onto the same key: {1}",
+                        new Object[]{duplicated.size(), duplicated});
     }
 
     private S88Element mapToApi(EquipmentType xml, Map<String, S88ElementClass> classMap,

@@ -19,11 +19,13 @@
 package org.apache.plc4x.malbec.s88.plant.actions;
 
 import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.List;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
+import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
 import org.apache.plc4x.malbec.s88.plant.panels.NewElementDialog;
 import org.netbeans.api.project.Project;
@@ -80,7 +82,12 @@ public class CreatePlantElementAction extends AbstractAction implements ContextA
         }
 
 
-        List<S88ElementClass> definedClasses = parentEq.getElementClasses();
+        // Classes are global to the plant, so ask the registry for the ones targeting the level
+        // being created instead of the parent's list, which only holds what the loader attached.
+        S88Level childLevel = parentEq.getLevel() != null ? parentEq.getLevel().getChildLevel() : null;
+        List<S88ElementClass> definedClasses = plantModel.getModel() != null
+                ? plantModel.getModel().getClassesForChildLevel(childLevel)
+                : new ArrayList<>();
 
         if (parentEq.getLevel() == null || parentEq.getLevel().getChildLevel() == null) {
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(

@@ -47,9 +47,9 @@ class RenameElementUseCaseTest {
 
     @Test
     void testRenamesElementAndFiresReloadedEvent() {
-        RenameElementUseCase.execute(model, element, "NewName");
+        RenameElementUseCase.execute(model, element, "NEW_NAME");
 
-        assertEquals("NewName", element.getId());
+        assertEquals("NEW_NAME", element.getId());
 
         ArgumentCaptor<S88ChangeEvent> captor = ArgumentCaptor.forClass(S88ChangeEvent.class);
         verify(model).fireChangeEvent(captor.capture());
@@ -72,10 +72,43 @@ class RenameElementUseCaseTest {
 
     @Test
     void testThrowsOnDuplicateId() {
-        when(model.findById("Taken")).thenReturn(Optional.of(mock(S88Element.class)));
+        when(model.findById("TAKEN")).thenReturn(Optional.of(mock(S88Element.class)));
 
         assertThrows(IllegalStateException.class,
-                () -> RenameElementUseCase.execute(model, element, "Taken"));
+                () -> RenameElementUseCase.execute(model, element, "TAKEN"));
+        verify(model, never()).fireChangeEvent(any());
+    }
+
+    @Test
+    void testImpactIsReportedForAnElementPublishingVariables() {
+        element.setProperty("NIVEL", 1);
+
+        NamingAdvisor.Advice advice = RenameElementUseCase.impactOf(element);
+
+        assertNotNull(advice);
+        assertTrue(advice.message().contains("1 variable"), advice.message());
+    }
+
+    @Test
+    void testImpactOfALeafIsWorthAWarning() {
+        element.setProperty("NIVEL", 1);
+
+        assertNotNull(RenameElementUseCase.impactOf(element),
+                "an element with variables must always warn, even a leaf");
+    }
+
+    @Test
+    void testNoImpactWhenNothingIsPublished() {
+        assertNull(RenameElementUseCase.impactOf(element));
+    }
+
+    @Test
+    void testAskingForTheImpactDoesNotRenameAnything() {
+        element.setProperty("NIVEL", 1);
+
+        RenameElementUseCase.impactOf(element);
+
+        assertEquals("OldName", element.getId());
         verify(model, never()).fireChangeEvent(any());
     }
 }

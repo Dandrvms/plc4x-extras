@@ -30,11 +30,22 @@ public class RenameElementUseCase {
         /* This utility class should not be instantiated */
     }
 
+    /**
+     * Reports what a rename would do to the derived variable keys, without performing it.
+     * <p>
+     * Keys are derived from the element names, so renaming a Unit silently changes the key of
+     * every EquipmentModule below it, while renaming an EquipmentModule changes its own. The
+     * caller is expected to show this to the user and let them confirm. See {@link NamingAdvisor#describeRenameImpact}.
+     *
+     * @param element element about to be renamed
+     * @return the advice, {@code null} when the element publishes no variable
+     */
+    public static NamingAdvisor.Advice impactOf(S88Element element) {
+        return NamingAdvisor.describeRenameImpact(element);
+    }
 
     public static void execute(S88PlantModel model, S88Element element, String newId) {
-        if (newId == null || newId.trim().isEmpty()) {
-            throw new IllegalArgumentException("ID cannot be empty");
-        }
+        NameValidator.validate(newId, "Element ID");
 
         if (model.findById(newId).isPresent()) {
             throw new IllegalStateException("Element with ID '" + newId + "' already exists.");

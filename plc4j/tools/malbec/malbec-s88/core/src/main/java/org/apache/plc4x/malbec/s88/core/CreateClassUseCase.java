@@ -32,9 +32,7 @@ public class CreateClassUseCase {
     }
 
     public static void execute(S88PlantModel model, S88Element parent, String name, Map<String, Object> properties) {
-        if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("Name cannot be empty");
-        }
+        NameValidator.validate(name, "Class name");
 
         if (name.startsWith(S88PlantModel.ENUM_CLASS_PREFIX)) {
             throw new IllegalArgumentException("'" + S88PlantModel.ENUM_CLASS_PREFIX
@@ -42,22 +40,31 @@ public class CreateClassUseCase {
         }
 
         if (model.getClasses().containsKey(name)) {
-            throw new IllegalStateException("Template with ID '" + name + "' already exists.");
+            throw new IllegalStateException("Class with ID '" + name + "' already exists.");
         }
 
         S88Element targetParent = parent != null ? parent : model.getRoot();
 
         S88ElementClass elementClass = new S88ElementClass();
         elementClass.setName(name);
+
+        // The target level is what makes the class offerable to every element creating children of
+        // that level, so it has to be set on every path. With no parent the class lands on the root,
+        // which means it is a class of the root's children. Leaving it unset would file a class that
+        // no element could ever pick, invisible in every list and unusable forever.
+        S88Level targetLevel;
         if (parent != null) {
-            S88Level childLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
-            if (childLevel == null) {
-                throw new IllegalStateException("Cannot create a template under '"
-                        + (parent.getLevel() != null ? parent.getLevel() : "unknown")
-                        + "' (leaf level).");
-            }
-            elementClass.setTargetLevel(childLevel);
+            targetLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
+        } else {
+            S88Element root = model.getRoot();
+            targetLevel = root != null && root.getLevel() != null ? root.getLevel().getChildLevel() : null;
         }
+        if (targetLevel == null) {
+            throw new IllegalStateException("Cannot create a class under '"
+                    + (parent != null ? parent.getLevel() : model.getRoot() != null ? model.getRoot().getLevel() : "unknown")
+                    + "' (leaf level).");
+        }
+        elementClass.setTargetLevel(targetLevel);
 
 
         if (properties != null) {

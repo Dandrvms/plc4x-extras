@@ -21,8 +21,8 @@ package org.apache.plc4x.malbec.s88.plant.actions;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
-import org.apache.plc4x.malbec.s88.plant.panels.TemplateDialogBuilder;
-import org.apache.plc4x.malbec.s88.plant.panels.TemplateFactory;
+import org.apache.plc4x.malbec.s88.plant.panels.ClassDialogBuilder;
+import org.apache.plc4x.malbec.s88.plant.panels.ClassFactory;
 import org.openide.util.ContextAwareAction;
 import org.openide.util.Lookup;
 import org.openide.util.NbBundle;
@@ -34,24 +34,24 @@ import java.awt.event.MouseEvent;
 
 
 @NbBundle.Messages({
-        "CTL_ViewTemplatesAction=View templates",
+        "CTL_ViewClassesAction=View classes",
 })
-public class ViewTemplatesAction extends AbstractAction implements ContextAwareAction {
+public class ViewClassesAction extends AbstractAction implements ContextAwareAction {
 
     private final Lookup context;
 
-    public ViewTemplatesAction() {
+    public ViewClassesAction() {
         this(Lookup.EMPTY);
     }
 
-    private ViewTemplatesAction(Lookup context) {
-        super(Bundle.CTL_ViewTemplatesAction());
+    private ViewClassesAction(Lookup context) {
+        super(Bundle.CTL_ViewClassesAction());
         this.context = context;
     }
 
     @Override
     public Action createContextAwareInstance(Lookup actionContext) {
-        return new ViewTemplatesAction(actionContext);
+        return new ViewClassesAction(actionContext);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class ViewTemplatesAction extends AbstractAction implements ContextAwareA
 
         JList<S88ElementClass> list = new JList<>(classListModel);
 
-        TemplateDialogBuilder builder = new TemplateDialogBuilder("Select Template", false);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Select Class", false);
 
         builder.withReadOnlyNameField(equipment.getId());
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -89,7 +89,7 @@ public class ViewTemplatesAction extends AbstractAction implements ContextAwareA
                     int index = list.locationToIndex(e.getPoint());
                     if (index >= 0 && list.getCellBounds(index, index).contains(e.getPoint())) {
                         S88ElementClass ec = list.getModel().getElementAt(index);
-                        TemplateFactory.showTemplate(ec);
+                        ClassFactory.showClass(ec);
                     }
                 }
             }

@@ -55,30 +55,33 @@ class CreateClassUseCaseTest {
     @Test
     void testCreatesClassAttachesToParentAndRegisters() {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("Speed", "REAL");
+        properties.put("SPEED", "REAL");
 
-        CreateClassUseCase.execute(model, parent, "MotorClass", properties);
+        CreateClassUseCase.execute(model, parent, "MOTOR_CLASS", properties);
 
         ArgumentCaptor<S88ElementClass> captor = ArgumentCaptor.forClass(S88ElementClass.class);
         verify(model).registerClass(captor.capture());
 
         S88ElementClass created = captor.getValue();
-        assertEquals("MotorClass", created.getName());
+        assertEquals("MOTOR_CLASS", created.getName());
         assertEquals(S88Level.EQUIPMENTMODULE, created.getTargetLevel());
-        assertEquals("REAL", created.getProperty("Speed"));
+        assertEquals("REAL", created.getProperty("SPEED"));
         assertTrue(parent.getElementClasses().contains(created));
     }
 
     @Test
-    void testUsesRootAndNoTargetLevelWhenParentIsNull() {
-        CreateClassUseCase.execute(model, null, "RootClass", null);
+    void testLandsOnTheRootAndTargetsTheRootChildLevelWhenParentIsNull() {
+        // Without a parent the class lands on the root, so it is a class of the root's children.
+        // Leaving the target level unset would file a class no element could ever pick: it would
+        // appear in no list and be unusable forever, which is how a class went missing.
+        CreateClassUseCase.execute(model, null, "ROOT_CLASS", null);
 
         ArgumentCaptor<S88ElementClass> captor = ArgumentCaptor.forClass(S88ElementClass.class);
         verify(model).registerClass(captor.capture());
 
         S88ElementClass created = captor.getValue();
-        assertEquals("RootClass", created.getName());
-        assertNull(created.getTargetLevel());
+        assertEquals("ROOT_CLASS", created.getName());
+        assertEquals(S88Level.PROCESSCELL, created.getTargetLevel());
         assertTrue(root.getElementClasses().contains(created));
     }
 
@@ -91,17 +94,17 @@ class CreateClassUseCaseTest {
     @Test
     void testThrowsOnReservedPrefix() {
         assertThrows(IllegalArgumentException.class,
-                () -> CreateClassUseCase.execute(model, parent, S88PlantModel.ENUM_CLASS_PREFIX + "Color", null));
+                () -> CreateClassUseCase.execute(model, parent, S88PlantModel.ENUM_CLASS_PREFIX + "COLOR", null));
     }
 
     @Test
     void testThrowsOnDuplicateName() {
         Map<String, S88ElementClass> classes = new LinkedHashMap<>();
-        classes.put("Duplicate", new S88ElementClass());
+        classes.put("DUPLICATE", new S88ElementClass());
         when(model.getClasses()).thenReturn(classes);
 
         assertThrows(IllegalStateException.class,
-                () -> CreateClassUseCase.execute(model, parent, "Duplicate", null));
+                () -> CreateClassUseCase.execute(model, parent, "DUPLICATE", null));
         verify(model, never()).registerClass(any());
     }
 
@@ -112,7 +115,7 @@ class CreateClassUseCaseTest {
                 .setLevel(S88Level.EQUIPMENTMODULE);
 
         assertThrows(IllegalStateException.class,
-                () -> CreateClassUseCase.execute(model, em, "LeafClass", null));
+                () -> CreateClassUseCase.execute(model, em, "LEAF_CLASS", null));
         verify(model, never()).registerClass(any());
     }
 }
