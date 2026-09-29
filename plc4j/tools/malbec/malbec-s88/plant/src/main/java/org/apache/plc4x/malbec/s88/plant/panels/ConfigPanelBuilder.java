@@ -20,6 +20,7 @@
 package org.apache.plc4x.malbec.s88.plant.panels;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.core.ClassConformance;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -84,6 +85,107 @@ public class ConfigPanelBuilder {
     public ConfigPanelBuilder addBottomButton(JButton button) {
         bottomPanel.add(button);
         return this;
+    }
+
+    /**
+     * Says, above the editing area, how far the element has drifted from the class it belongs to,
+     * and offers the two ways of closing the gap. Both are additive: adding to the class changes
+     * what every sibling of the type is expected to publish, so the impact is spelled out before it
+     * is applied, and aligning the element touches no sibling at all.
+     *
+     * @param addToClass     the action that pushes the element's own base names into the class
+     * @param alignWithClass the action that publishes on the element what the class already declares
+     */
+    public ConfigPanelBuilder withConformancePanel(JButton addToClass, JButton alignWithClass) {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Color.LIGHT_GRAY),
+                "Equipment type conformance", TitledBorder.LEFT, TitledBorder.TOP));
+
+        JLabel summary = new JLabel(" ");
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        buttons.add(addToClass);
+        buttons.add(alignWithClass);
+
+        panel.add(summary, BorderLayout.NORTH);
+        panel.add(buttons, BorderLayout.CENTER);
+        mainPanel.add(panel, BorderLayout.SOUTH);
+
+        addToClass.setName(CONFORMANCE_ADD);
+        alignWithClass.setName(CONFORMANCE_ALIGN);
+        summary.setName(CONFORMANCE_SUMMARY);
+        return this;
+    }
+
+    /** Name of the label summarizing how far the element is from its class. */
+    public static final String CONFORMANCE_SUMMARY = "conformance.summary";
+
+    /** Name of the button that adds the element's own base names to its class. */
+    public static final String CONFORMANCE_ADD = "conformance.addToClass";
+
+    /** Name of the button that makes the element publish what its class declares. */
+    public static final String CONFORMANCE_ALIGN = "conformance.alignWithClass";
+
+    /**
+     * Sets the text of the conformance summary. The wording names the direction of each gap, so a
+     * label is never read as if it meant the other one.
+     */
+    public static void setConformanceSummary(JPanel built, ClassConformance conformance) {
+        if (built == null) {
+            return;
+        }
+        JLabel summary = (JLabel) findByName(built, CONFORMANCE_SUMMARY);
+        JButton addToClass = (JButton) findByName(built, CONFORMANCE_ADD);
+        JButton alignWithClass = (JButton) findByName(built, CONFORMANCE_ALIGN);
+        if (summary == null || addToClass == null || alignWithClass == null) {
+            return;
+        }
+        summary.setText(describe(conformance));
+        addToClass.setEnabled(!conformance.excess().isEmpty());
+        alignWithClass.setEnabled(!conformance.deficit().isEmpty());
+        addToClass.setToolTipText("The class declares what every instance of this type publishes, so "
+                + "adding to it also tells the other instances what they are expected to publish.");
+        alignWithClass.setToolTipText("Publishes on this element what the class already declares, "
+                + "seeded with the class's definition. No sibling is affected.");
+    }
+
+    private static String describe(ClassConformance conformance) {
+        if (conformance == null || conformance.isConforming()) {
+            return "This element publishes exactly what its class declares.";
+        }
+        StringBuilder text = new StringBuilder("<html><body style='width: 420px;'>");
+        if (!conformance.excess().isEmpty()) {
+            text.append("Not in class ").append(conformance.excess().size()).append(": ")
+                    .append(escape(String.join(", ", conformance.excess())));
+            text.append("<br>Declared by the class, not published here: ")
+                    .append(conformance.deficit().size());
+        } else {
+            text.append("Declared by the class, not published here: ")
+                    .append(conformance.deficit().size());
+        }
+        if (!conformance.deficit().isEmpty()) {
+            text.append(" (").append(escape(String.join(", ", conformance.deficit()))).append(")");
+        }
+        return text.append("</body></html>").toString();
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static java.awt.Component findByName(java.awt.Container container, String name) {
+        for (java.awt.Component child : container.getComponents()) {
+            if (name.equals(child.getName())) {
+                return child;
+            }
+            if (child instanceof java.awt.Container nested) {
+                java.awt.Component found = findByName(nested, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     public JPanel build() {

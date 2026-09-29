@@ -45,13 +45,24 @@ public class CreateClassUseCase {
 
         S88Element targetParent = parent != null ? parent : model.getRoot();
 
+        S88ElementClass elementClass = getS88ElementClass(model, parent, name);
+
+
+        if (properties != null) {
+            for (String key : properties.keySet()) {
+                elementClass.setProperty(key, properties.get(key));
+            }
+        }
+
+        targetParent.addElementClass(elementClass);
+        model.registerClass(elementClass);
+    }
+
+    private static S88ElementClass getS88ElementClass(S88PlantModel model, S88Element parent, String name) {
         S88ElementClass elementClass = new S88ElementClass();
         elementClass.setName(name);
 
-        // The target level is what makes the class offerable to every element creating children of
-        // that level, so it has to be set on every path. With no parent the class lands on the root,
-        // which means it is a class of the root's children. Leaving it unset would file a class that
-        // no element could ever pick, invisible in every list and unusable forever.
+
         S88Level targetLevel;
         if (parent != null) {
             targetLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
@@ -65,16 +76,7 @@ public class CreateClassUseCase {
                     + "' (leaf level).");
         }
         elementClass.setTargetLevel(targetLevel);
-
-
-        if (properties != null) {
-            for (String key : properties.keySet()) {
-                elementClass.setProperty(key, properties.get(key));
-            }
-        }
-
-        targetParent.addElementClass(elementClass);
-        model.registerClass(elementClass);
+        return elementClass;
     }
-    
+
 }

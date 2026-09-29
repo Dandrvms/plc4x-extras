@@ -52,7 +52,7 @@ public class ClassFactory {
         S88Level childLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
         if (childLevel == null) {
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
-                    "Cannot create a class under an Equipment Module (leaf level).",
+                    "Cannot create an equipment type under an Equipment Module (leaf level).",
                     NotifyDescriptor.INFORMATION_MESSAGE));
             return;
         }
@@ -74,7 +74,7 @@ public class ClassFactory {
     }
 
     public static JDialog createSimpleClassDialog(S88Element parent, Plc4xPlantModel model, Window owner) {
-        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Equipment Type", owner);
 
         Runnable okLogic = () -> {
             CreateClassUseCase.execute(model.getModel(), parent, builder.getClassName(), null);
@@ -99,7 +99,7 @@ public class ClassFactory {
                 ? model.getModel().getEnumerations()
                 : List.of();
 
-        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Equipment Type", owner);
 
         JPanel attributePanel = createAttributeTabPanel(tableModel, enumerations, builder::getDialog);
 
@@ -129,7 +129,7 @@ public class ClassFactory {
                 ? model.getModel().getEnumerations()
                 : List.of();
 
-        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Class", owner);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Create " + parent.getLevel().getChildLevel() + " Equipment Type", owner);
 
         Supplier<Window> ownerSupplier = builder::getDialog;
 
@@ -309,7 +309,7 @@ public class ClassFactory {
 
         JPanel attributePanel = createReadOnlyAttributePanel(tableModel);
 
-        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Class")
+        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Equipment Type")
                 .withReadOnlyNameField(ec.getName())
                 .addComponentRow(attributePanel)
                 .onAccept(() -> { });
@@ -333,7 +333,7 @@ public class ClassFactory {
         tabbedPane.addTab("Parameters", createReadOnlyTabPanel(paramsTableModel));
         tabbedPane.addTab("Reports", createReadOnlyTabPanel(reportsTableModel));
 
-        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Class")
+        ClassDialogBuilder builder = new ClassDialogBuilder(ec.getName() != null ? ec.getName() : "Equipment Type")
                 .withReadOnlyNameField(ec.getName())
                 .addComponentRow(tabbedPane)
                 .onAccept(() -> { });

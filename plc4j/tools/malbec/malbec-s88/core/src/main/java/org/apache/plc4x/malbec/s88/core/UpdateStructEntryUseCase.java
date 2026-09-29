@@ -58,4 +58,45 @@ public class UpdateStructEntryUseCase {
         model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.UPDATED, element,
                 containerKey != null ? containerKey : entryKey));
     }
+
+    /**
+     * Updates an entry and renames it at the same time, moving the base name pointer from the old
+     * name to the new one so a recipe keeps addressing the variable. When both names are equal this
+     * is a plain value update.
+     *
+     * @param model        plant holding the element, may be {@code null}
+     * @param element      element owning the entry
+     * @param containerKey container holding the entry, {@code null} for a top level property
+     * @param oldKey       the name the entry is stored under
+     * @param newKey       the name it should be stored under after the update
+     * @param entryValue   the new value of the entry
+     */
+    public static void execute(S88PlantModel model, S88Element element, String containerKey,
+                               String oldKey, String newKey, Object entryValue) {
+        if (element == null) {
+            throw new IllegalArgumentException("Element cannot be null");
+        }
+        if (oldKey == null) {
+            throw new IllegalArgumentException("The name of the entry being edited cannot be null.");
+        }
+        if (oldKey.equals(newKey)) {
+            execute(model, element, containerKey, newKey, entryValue);
+            return;
+        }
+        NameValidator.validateEntry(containerKey, newKey);
+        if (entryValue == null) {
+            throw new IllegalArgumentException("Entry value cannot be null");
+        }
+        if (!StructEntrySupport.containsEntry(element, containerKey, oldKey)) {
+            throw new IllegalStateException("Entry '" + oldKey + "' does not exist for this element.");
+        }
+        if (StructEntrySupport.containsEntry(element, containerKey, newKey)) {
+            throw new IllegalStateException("Entry '" + newKey + "' already exists for this element.");
+        }
+
+        StructEntrySupport.renameEntry(element, containerKey, oldKey, newKey, entryValue);
+
+        model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.UPDATED, element,
+                containerKey != null ? containerKey : newKey));
+    }
 }

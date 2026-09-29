@@ -35,6 +35,7 @@ public class S88Element {
     private S88Element parent;
     private final List<S88Element> children = new ArrayList<>();
     private final Map<String, Object> properties = new LinkedHashMap<>();
+    private final Map<String, Map<String, String>> baseNames = new LinkedHashMap<>();
     private S88ElementClass elementClass;
     private final List<S88ElementClass> elementClasses = new ArrayList<>();
     private static final String CHECK = "Check";
@@ -116,6 +117,18 @@ public class S88Element {
         element.setParent(this);
     }
 
+    /**
+     * Inserts the element at the given position and claims it as a child, so a copy placed next to
+     * its source still knows the branch it belongs to.
+     *
+     * @param index position the element takes in the list of children
+     * @param element element being attached, cannot be {@code null}
+     */
+    public void addChild(int index, S88Element element){
+        this.children.add(index, element);
+        element.setParent(this);
+    }
+
     public void removeChild(S88Element element){
         this.children.remove(element);
         element.setParent(null);
@@ -167,6 +180,58 @@ public class S88Element {
 
     public Map<String, Object> getStructuredProperty(String k){
         return this.getStructuredProperties(null).get(k);
+    }
+
+
+    /**
+     * Records the base name a variable of this element was derived from.
+     * <p>
+     * The base name is the identifier a recipe uses within the element, so that the batch engine
+     * can find the variable even when its concrete name has been given something else, for instance
+     * {@code TEMPERATURA_SP_OLLA_2} pointing back at {@code Parameters/TEMPERATURA_SP}. It is
+     * invisible to the editor: only the copy operation fills it in.
+     *
+     * @param containerKey the container holding the variable ("Parameters" or "Reports"), may be {@code null}
+     * @param variableName the concrete name the variable is stored under
+     * @param baseName     the base name, {@code null} to forget it
+     */
+    public void setBaseName(String containerKey, String variableName, String baseName) {
+        if (variableName == null) {
+            return;
+        }
+        String key = containerKey != null ? containerKey : "";
+        Map<String, String> entries = baseNames.computeIfAbsent(key, k -> new LinkedHashMap<>());
+        if (baseName == null) {
+            entries.remove(variableName);
+            if (entries.isEmpty()) {
+                baseNames.remove(key);
+            }
+        } else {
+            entries.put(variableName, baseName);
+        }
+    }
+
+    /**
+     * The base name a variable was derived from, {@code null} when it was created by hand, which
+     * means the variable's own name is to be used as the base name.
+     *
+     * @param containerKey the container holding the variable, may be {@code null}
+     * @param variableName the concrete name the variable is stored under
+     * @return the recorded base name, or {@code null} when there is none
+     */
+    public String getBaseName(String containerKey, String variableName) {
+        if (variableName == null) {
+            return null;
+        }
+        Map<String, String> entries = baseNames.get(containerKey != null ? containerKey : "");
+        return entries != null ? entries.get(variableName) : null;
+    }
+
+    /**
+     * The recorded base names, keyed by container and then by variable name. Never {@code null}.
+     */
+    public Map<String, Map<String, String>> getBaseNames() {
+        return baseNames;
     }
 
 

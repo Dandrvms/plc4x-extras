@@ -22,6 +22,7 @@ package org.apache.plc4x.malbec.s88.plant.panels;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
+import org.apache.plc4x.malbec.s88.core.BaseNameSupport;
 import org.apache.plc4x.malbec.s88.core.CreateElementUseCase;
 import org.apache.plc4x.malbec.s88.core.NameValidator;
 import org.apache.plc4x.malbec.s88.core.NamingAdvisor;
@@ -60,6 +61,8 @@ public class NewElementDialog extends JDialog{
     private JLabel variableKeyPreviewLabel;
     private JLabel variableKeyAdviceLabel;
     private JButton btnApplySuggestion;
+    private JCheckBox chkCreateNewType;
+    private JButton btnNewClass;
     private String pendingSuggestion;
 
     public NewElementDialog(Plc4xPlantModel model, S88Element parent, List<S88ElementClass> definedClasses) {
@@ -76,8 +79,6 @@ public class NewElementDialog extends JDialog{
 
         setTitle("Create New Element");
         setModal(true);
-        setSize(1000, 300);
-        setLocationRelativeTo(null);
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
@@ -85,13 +86,13 @@ public class NewElementDialog extends JDialog{
 
 
 
-        mainPanel.add(createTopPanel(), BorderLayout.NORTH);
+        mainPanel.add(createTopPanel(), BorderLayout.CENTER);
         mainPanel.add(createBottomPanel(), BorderLayout.SOUTH);
 
         add(mainPanel);
 
 
-        if (!definedClasses.isEmpty()) {
+        if (!definedClasses.isEmpty() && !chkCreateNewType.isSelected()) {
             classList.setSelectedIndex(0);
         }
 
@@ -114,6 +115,8 @@ public class NewElementDialog extends JDialog{
             }
         });
         updateVariableKeyPreview();
+        pack();
+        setLocationRelativeTo(null);
     }
 
     private JPanel createTopPanel() {
@@ -122,11 +125,13 @@ public class NewElementDialog extends JDialog{
         JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
 
         JPanel headerClassesPanel = new JPanel(new BorderLayout());
-        headerClassesPanel.add(new JLabel("Classes"), BorderLayout.WEST);
+        headerClassesPanel.add(new JLabel("Equipment types"), BorderLayout.WEST);
 
-        JButton btnNewClass = new JButton("New Class");
+        chkCreateNewType = new JCheckBox("Create a new equipment type", true);
+        chkCreateNewType.addActionListener(e -> applyClassMode());
 
-        if(parent.getLevel() == S88Level.EQUIPMENTMODULE) btnNewClass.setEnabled(false);
+        btnNewClass = new JButton("New Equipment Type");
+        btnNewClass.setEnabled(false);
 
         btnNewClass.addActionListener(e -> {
             S88Level childLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
@@ -193,13 +198,37 @@ public class NewElementDialog extends JDialog{
         JScrollPane listScrollPane = new JScrollPane(classList);
         listScrollPane.setPreferredSize(new Dimension(250, 0));
         leftPanel.add(listScrollPane, BorderLayout.CENTER);
+        leftPanel.add(chkCreateNewType, BorderLayout.SOUTH);
         middlePanel.add(leftPanel, BorderLayout.WEST);
 
         JTabbedPane tabbedPane = new JTabbedPane();
         tabbedPane.addTab("General", createDetailsTab());
         middlePanel.add(tabbedPane, BorderLayout.CENTER);
 
+        applyClassMode();
+
         return middlePanel;
+    }
+
+    /**
+     * Switches the dialog between creating a brand new equipment type (derived from the element id,
+     * the default, so the class list never silently captures a first-class selection) and reusing
+     * an existing one.
+     */
+    private void applyClassMode() {
+        if (chkCreateNewType == null || btnNewClass == null) {
+            return;
+        }
+        boolean createNew = chkCreateNewType.isSelected();
+        boolean leaf = parent.getLevel() == null || parent.getLevel().getChildLevel() == null;
+        classList.setEnabled(!createNew && !leaf);
+        btnNewClass.setEnabled(!createNew && !leaf);
+        if (createNew) {
+            classList.clearSelection();
+        } else if (classList.getSelectedValue() == null && classListModel.size() > 0) {
+            classList.setSelectedIndex(0);
+        }
+        updateVariableKeyPreview();
     }
 
     private boolean containsClass(S88ElementClass candidate) {
@@ -211,7 +240,7 @@ public class NewElementDialog extends JDialog{
         return false;
     }
 
-    private JScrollPane createDetailsTab() {
+    private JPanel createDetailsTab() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         GridBagConstraints gbc = new GridBagConstraints();
@@ -233,7 +262,7 @@ public class NewElementDialog extends JDialog{
 
 
         txtClass = createField("", false);
-        addFormRow(panel, gbc, row++, "Class", txtClass);
+        addFormRow(panel, gbc, row++, "Equipment type", txtClass);
 
         variableKeyPreviewLabel = new JLabel();
         variableKeyPreviewLabel.setBorder(new EmptyBorder(4, 0, 0, 0));
@@ -269,9 +298,8 @@ public class NewElementDialog extends JDialog{
 
         updateVariableKeyPreview();
 
-        JScrollPane scrollPane = new JScrollPane(panel);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        return scrollPane;
+
+        return panel;
     }
 
     private void addFormRow(JPanel panel, GridBagConstraints gbc, int row, String labelText, JComponent field) {        gbc.gridy = row;
@@ -322,6 +350,12 @@ public class NewElementDialog extends JDialog{
         }
 
         S88ElementClass selected = classList.getSelectedValue();
+        if (selected == null) {
+            txtClass.setText(BaseNameSupport.baseIdOf(id) != null
+                    ? BaseNameSupport.baseIdOf(id).toUpperCase() : "");
+            txtClass.setToolTipText("No equipment type chosen: this type will be created from the"
+                    + " element id.");
+        }
         S88Element probe = new S88Element().setId(id.trim().toUpperCase());
         S88Level childLevel = parent.getLevel() != null ? parent.getLevel().getChildLevel() : null;
         probe.setLevel(childLevel);
@@ -329,12 +363,14 @@ public class NewElementDialog extends JDialog{
         probe.setParent(parent);
 
         String id2 = id;
-        List<String> names = variableNamesOf(selected);
+        List<String> names = variableNamesOf(selected, id);
         if (names.isEmpty()) {
-            variableKeyPreviewLabel.setText("this class brings no variable names");
+            variableKeyPreviewLabel.setText(selected == null
+                    ? "no equipment type selected: the type derived from the id is created empty"
+                    : "this equipment type brings no variable names");
         } else {
             String first = names.get(0);
-            variableKeyPreviewLabel.setText("<html>" + escape(first)
+            variableKeyPreviewLabel.setText("<html><body style='width: 320px;'>" + escape(first)
                     + (names.size() > 1 ? " &nbsp;<font color=gray>(and " + (names.size() - 1)
                             + " more)</font>" : "") + "</html>");
             variableKeyPreviewLabel.setToolTipText(
@@ -360,10 +396,11 @@ public class NewElementDialog extends JDialog{
     }
 
     /**
-     * The names the variables of a class will be published under once it is instantiated: they are
-     * stored as the class holds them, and published under those very names.
+     * The names the variables of a class will be published under once it is instantiated: an
+     * instance names its variables after itself, so each base name of the class is re-suffixed
+     * with the element id ({@code TEMPERATURA_SP} becoming {@code TEMPERATURA_SP_OLLA_1}).
      */
-    private static List<String> variableNamesOf(S88ElementClass elementClass) {
+    private static List<String> variableNamesOf(S88ElementClass elementClass, String id) {
         List<String> names = new ArrayList<>();
         if (elementClass == null) {
             return names;
@@ -371,7 +408,7 @@ public class NewElementDialog extends JDialog{
         for (String container : List.of(VariableKeySupport.PARAMETERS, VariableKeySupport.REPORTS)) {
             if (elementClass.getProperty(container) instanceof Map<?, ?> map) {
                 for (Object key : map.keySet()) {
-                    names.add(String.valueOf(key));
+                    names.add(BaseNameSupport.rePrefixed(String.valueOf(key), null, id));
                 }
             }
         }
@@ -391,20 +428,22 @@ public class NewElementDialog extends JDialog{
 
         if (advice.isEmpty()) {
             variableKeyAdviceLabel.setText("");
-            return;
-        }
-        StringBuilder html = new StringBuilder("<html>");
-        for (NamingAdvisor.Advice item : advice) {
-            String colour = item.severity() == NamingAdvisor.Severity.WARNING ? "#b05000" : "#666666";
-            html.append("<font color=").append(colour).append(">&bull; ")
+        } else {
+            StringBuilder html = new StringBuilder("<html><body style='width: 320px;'>");
+            for (NamingAdvisor.Advice item : advice) {
+                String colour = item.severity() == NamingAdvisor.Severity.WARNING ? "#b05000" : "#666666";
+                html.append("<font color=").append(colour).append(">&bull; ")
                     .append(escape(item.message()));
-            if (item.suggestion() != null) {
-                html.append(" Suggested: <b>").append(escape(item.suggestion())).append("</b>");
+                if (item.suggestion() != null) {
+                    html.append(" Suggested: <b>").append(escape(item.suggestion())).append("</b>");
+                }
+                html.append("</font><br>");
             }
-            html.append("</font><br>");
+            html.append("</html>");
+            variableKeyAdviceLabel.setText(html.toString());
         }
-        html.append("</html>");
-        variableKeyAdviceLabel.setText(html.toString());
+        revalidate();
+        pack();
     }
 
     private static String escape(String text) {
@@ -436,11 +475,7 @@ public class NewElementDialog extends JDialog{
     }
 
     private void actionPerformed(ActionEvent e) {
-        S88ElementClass selected = classList.getSelectedValue();        if (selected == null) {
-            JOptionPane.showMessageDialog(this, "Please select a class for the new Element.", "Warning", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
+        S88ElementClass selected = classList.getSelectedValue();
 
             try {
                 S88Element currentParent = model.getModel().findById(parent.getId()).orElse(parent);

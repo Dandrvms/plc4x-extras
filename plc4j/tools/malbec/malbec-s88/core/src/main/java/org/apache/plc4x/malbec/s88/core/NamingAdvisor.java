@@ -19,7 +19,6 @@
 package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
-import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 
@@ -172,9 +171,9 @@ public final class NamingAdvisor {
     /**
      * Suggests the conventional name for a variable, without ever applying it.
      * <p>
-     * The convention qualifies a variable with what identifies it: an EquipmentModule variable with
-     * its class and its unit, {@code TEMPERATURA_CALENTAMIENTO_TANQUE_1}, and a variable of any other
-     * level with its element, {@code NIVEL_TANQUE_1}. The suggestion is offered and the user decides,
+     * The convention qualifies a variable with the id of the element that owns it:
+     * {@code TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1} for a variable of an EquipmentModule and
+     * {@code NIVEL_TANQUE_1} for a variable of a Unit. The suggestion is offered and the user decides,
      * because the name is theirs.
      * <p>
      * Nothing is suggested when the name already ends with the qualifying part, or when appending it
@@ -211,28 +210,13 @@ public final class NamingAdvisor {
     }
 
     /**
-     * The part that identifies the variable beyond its own name: the class and the unit for an
-     * EquipmentModule, the element id for any other level.
+     * The part that identifies the variable beyond its own name: the id of the element that owns
+     * it, which an EquipmentModule carries already fully qualified ({@code CALENTAMIENTO_TANQUE_1})
+     * and a Unit carries as itself ({@code TANQUE_1}). Appending anything else would repeat the
+     * element's own name, so nothing but the element id is ever suggested.
      */
     private static String qualificationOf(S88Element element) {
-        if (element.getLevel() == S88Level.EQUIPMENTMODULE) {
-            S88ElementClass elementClass = element.getElementClass();
-            S88Element unit = findAncestor(element, S88Level.UNIT);
-            if (elementClass != null && isFilled(elementClass.getName()) && unit != null) {
-                return elementClass.getName().trim().toUpperCase(Locale.ROOT)
-                        + "_" + unit.getId().trim().toUpperCase(Locale.ROOT);
-            }
-        }
         return element.getId().trim().toUpperCase(Locale.ROOT);
-    }
-
-    private static S88Element findAncestor(S88Element element, S88Level level) {
-        for (S88Element current = element.getParent(); current != null; current = current.getParent()) {
-            if (current.getLevel() == level) {
-                return current;
-            }
-        }
-        return null;
     }
 
     /**
@@ -288,27 +272,39 @@ public final class NamingAdvisor {
     }
 
     /**
-     * Describes the variables a rename leaves alone, so the user is not left guessing.
+     * Describes what a rename does to the variables of the element, so the user knows before
+     * confirming.
      * <p>
-     * Variable names are stored, not derived, so renaming an element does not touch them: the
-     * element label and the variable names are independent. The count is reported so the user knows
-     * how many variables live under the element, and the point is made that none of them move.
+     * Every variable of the subtree that follows the naming convention is re-suffixed: a variable
+     * called {@code TEMPERATURA_SP_OLLA_1} of element {@code OLLA_1} is re-suffixed to
+     * {@code TEMPERATURA_SP_OLLA_2} wherever the subtree publishes it, and the descendants whose
+     * own id carries the element's id are renamed along. Hand-typed names never move.
      *
      * @param element element being renamed, may be {@code null}
-     * @return the advice, {@code null} when the element publishes no variable and nothing below
-     *         it does either
+     * @return the advice, {@code null} when the rename would not touch any variable
      */
     public static Advice describeRenameImpact(S88Element element) {
-        if (element == null) {
+        if (element == null || element.getId() == null || element.getId().isBlank()) {
             return null;
         }
-        List<VariableKeySupport.VariableKey> affected = VariableKeySupport.listSubtree(element);
+        String discriminator = "_" + element.getId().trim().toUpperCase(Locale.ROOT);
+        List<VariableKeySupport.VariableKey> affected = new ArrayList<>();
+        for (VariableKeySupport.VariableKey key : VariableKeySupport.listSubtree(element)) {
+            if (key.key().endsWith(discriminator)) {
+                affected.add(key);
+            }
+        }
         if (affected.isEmpty()) {
             return null;
         }
-        return Advice.info("'" + element.getId() + "' publishes " + affected.size() + " variable"
-                + (affected.size() == 1 ? "" : "s")
-                + ". Their names are stored, so renaming the element leaves them untouched.");
+        String example = affected.getFirst().key();
+        String base = example.endsWith(discriminator)
+                ? example.substring(0, example.length() - discriminator.length()) : example;
+        return Advice.info("'" + element.getId() + "' names " + affected.size() + " variable"
+                + (affected.size() == 1 ? "" : "s") + " of its own and of its children after it,"
+                + " such as '" + example + "'. Renaming the element re-suffixes those names with the"
+                + " new id, e.g. '" + base + "_NEW_ID', and renames the elements below it that carry"
+                + " the id too.");
     }
 
     /**

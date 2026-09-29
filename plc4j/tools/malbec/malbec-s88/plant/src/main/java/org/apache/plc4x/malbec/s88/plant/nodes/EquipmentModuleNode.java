@@ -18,15 +18,9 @@
  */
 package org.apache.plc4x.malbec.s88.plant.nodes;
 
-import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.api.S88Element;
-import org.apache.plc4x.malbec.s88.plant.actions.PropertiesAction;
 import org.netbeans.api.project.Project;
 import org.openide.nodes.Children;
-import org.openide.util.Utilities;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Specialized node for ISA-88 Equipment Module.
@@ -43,13 +37,11 @@ public class EquipmentModuleNode extends PlantElementNode {
         return "org/apache/plc4x/malbec/s88/plant/nodes/EquipmentModule.png";
     }
 
+    // A module takes no children, so it keeps the actions every element has - including Duplicate,
+    // which fits a module into a unit - and none of the ones that would create something under it.
+    // hasChildren() is what draws that line now that the level filter lives in the parent.
     @Override
-    public Action[] getActions(boolean context) {
-        List<Action> actions = new ArrayList<>();
-        actions.add(org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class));
-        actions.add(null);
-        actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-plant-element/Actions"));
-        actions.add(new PropertiesAction().createContextAwareInstance(getLookup()));
-        return actions.toArray(Action[]::new);
+    protected boolean hasChildren() {
+        return false;
     }
 }

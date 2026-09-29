@@ -34,7 +34,7 @@ import java.awt.event.MouseEvent;
 
 
 @NbBundle.Messages({
-        "CTL_ViewClassesAction=View classes",
+        "CTL_ViewClassesAction=View equipment types",
 })
 public class ViewClassesAction extends AbstractAction implements ContextAwareAction {
 
@@ -66,7 +66,7 @@ public class ViewClassesAction extends AbstractAction implements ContextAwareAct
 
         JList<S88ElementClass> list = new JList<>(classListModel);
 
-        ClassDialogBuilder builder = new ClassDialogBuilder("Select Class", false);
+        ClassDialogBuilder builder = new ClassDialogBuilder("Select Equipment Type", false);
 
         builder.withReadOnlyNameField(equipment.getId());
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);

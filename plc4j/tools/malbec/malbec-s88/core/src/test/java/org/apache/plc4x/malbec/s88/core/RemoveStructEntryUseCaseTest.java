@@ -108,6 +108,19 @@ class RemoveStructEntryUseCaseTest {
     }
 
     @Test
+    void testRemovingAnEntryClearsItsBaseNamePointer() {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("NIVEL_UNIT1", "v1");
+        element.setProperty("Parameters", parameters);
+        element.setBaseName("Parameters", "NIVEL_UNIT1", "Parameters/NIVEL");
+
+        RemoveStructEntryUseCase.execute(model, element, "Parameters", "NIVEL_UNIT1");
+
+        assertNull(element.getBaseName("Parameters", "NIVEL_UNIT1"),
+                "removing the variable removes the pointer that addressed its base name");
+    }
+
+    @Test
     void testThrowsOnEmptyEntryKey() {
         assertThrows(IllegalArgumentException.class,
                 () -> RemoveStructEntryUseCase.execute(model, element, null, "  "));

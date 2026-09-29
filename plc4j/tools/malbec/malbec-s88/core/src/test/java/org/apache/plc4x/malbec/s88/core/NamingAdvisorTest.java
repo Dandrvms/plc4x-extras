@@ -140,11 +140,28 @@ class NamingAdvisorTest {
     // ===== the naming convention for a variable, offered and never applied =====
 
     @Test
-    void testAnEquipmentModuleVariableIsOfferedTheClassAndUnitAsASuffix() {
+    void testAnEquipmentModuleVariableIsOfferedItsOwnIdAsASuffix() {
         NamingAdvisor.Advice advice = NamingAdvisor.suggestConventionalVariableName(heating, "TEMPERATURA_SP");
 
         assertNotNull(advice);
         assertEquals(NamingAdvisor.Severity.INFO, advice.severity());
+        assertEquals("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1", advice.suggestion());
+    }
+
+    @Test
+    void testTheEquipmentModuleSuffixIsTheElementIdNotClassAndUnitTwice() {
+        // A type-driven module carries a class derived from its own id (CALENTAMIENTO_TANQUE). A
+        // suggestion made of class plus unit would append the id twice over, producing the
+        // TEMPERATURA_SP_CALENTAMIENTO_TANQUE_TANQUE_1 the fix removes: the element id alone is the
+        // whole qualification.
+        S88ElementClass derivedClass = new S88ElementClass();
+        derivedClass.setName("CALENTAMIENTO_TANQUE");
+        S88Element heater = element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE, derivedClass);
+        unit.addChild(heater);
+
+        NamingAdvisor.Advice advice = NamingAdvisor.suggestConventionalVariableName(heater, "TEMPERATURA_SP");
+
+        assertNotNull(advice);
         assertEquals("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1", advice.suggestion());
     }
 
@@ -265,22 +282,33 @@ class NamingAdvisorTest {
     // ===== rename impact =====
 
     @Test
-    void testRenamingALeafLeavesItsVariableNamesAlone() {
+    void testRenamingAConformingLeafReSuffixesItsOwnVariables() {
         NamingAdvisor.Advice advice = NamingAdvisor.describeRenameImpact(heating);
 
         assertNotNull(advice);
         assertTrue(advice.message().contains("1 variable"), advice.message());
-        assertTrue(advice.message().contains("untouched"), advice.message());
+        assertTrue(advice.message().contains("re-suffixes"), advice.message());
+        assertTrue(advice.message().contains("TEMPERATURA_SP"), advice.message());
     }
 
     @Test
-    void testRenamingAUnitLeavesEveryVariableBelowItAlone() {
+    void testRenamingAUnitCountsEverySubtreeVariableNamedAfterIt() {
         NamingAdvisor.Advice advice = NamingAdvisor.describeRenameImpact(unit);
 
         assertNotNull(advice);
-        // the unit publishes NIVEL_TANQUE_1, and the module below it publishes its temperature
-        assertTrue(advice.message().contains("2 variables"), advice.message());
-        assertTrue(advice.message().contains("untouched"), advice.message());
+        // the unit publishes NIVEL_TANQUE_1 itself and the module below it publishes a variable
+        // that also carries the unit id, so the rename re-suffixes both
+        assertTrue(advice.message().contains("2 variable"), advice.message());
+        assertTrue(advice.message().contains("NIVEL"), advice.message());
+        assertTrue(advice.message().contains("children"), advice.message());
+    }
+
+    @Test
+    void testRenamingAnElementWhoseVariablesDoNotCarryItsIdIsNotWorthAWarning() {
+        S88Element free = element("TANQUE_1", S88Level.UNIT, null);
+        free.setProperty("NIVEL", 3.2f);
+
+        assertNull(NamingAdvisor.describeRenameImpact(free));
     }
 
     @Test

@@ -97,7 +97,7 @@ public class CreatePlantElementAction extends AbstractAction implements ContextA
         }
 
         NewElementDialog newElementDialog = new NewElementDialog(plantModel, parentEq, definedClasses);
-            newElementDialog.setVisible(true);
+        newElementDialog.setVisible(true);
 
 
 

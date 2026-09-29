@@ -379,9 +379,14 @@ public class AttributeDialogBuilder {
     }
 
     protected void applyInitialData() {
-        if (isEditMode && initialProps != null) {
-            txtName.setText(initialName);
+        if (isEditMode) {
+            // The name is the one field the user cannot type into, so it is filled in even when
+            // the property bag did not come along: an edit dialog opening blank reads as a broken
+            // dialog, and the name is what the property is stored under.
+            txtName.setText(Objects.toString(initialName, ""));
             txtName.setEnabled(false);
+        }
+        if (isEditMode && initialProps != null) {
             if (initialProps.get("Type") != null) {
                 comboType.setSelectedItem(initialProps.get("Type").toString().trim().toUpperCase());
             }

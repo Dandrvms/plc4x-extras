@@ -86,6 +86,41 @@ final class StructEntrySupport {
         Map<String, Object> container = copyContainer(element, containerKey);
         container.put(entryKey, PropertyValues.deepCopy(entryValue));
         element.setProperty(containerKey, container);
+        if (element.getBaseName(containerKey, entryKey) == null) {
+            String base = conformingBase(element, entryKey);
+            if (base != null) {
+                element.setBaseName(containerKey, entryKey, containerKey + "/" + base);
+            }
+        }
+    }
+
+    /**
+     * Renames an existing entry, moving the base name pointer along: the base name a recipe
+     * addresses does not change when only the concrete name does, and a conforming name derives a
+     * fresh pointer from the element id when there was none to move.
+     */
+    static void renameEntry(S88Element element, String containerKey, String oldKey,
+                            String newKey, Object entryValue) {
+        if (containerKey == null) {
+            element.setProperty(oldKey, null);
+            element.setProperty(newKey, PropertyValues.deepCopy(entryValue));
+            return;
+        }
+        Map<String, Object> container = copyContainer(element, containerKey);
+        container.remove(oldKey);
+        container.put(newKey, PropertyValues.deepCopy(entryValue));
+        element.setProperty(containerKey, container);
+
+        String pointer = element.getBaseName(containerKey, oldKey);
+        element.setBaseName(containerKey, oldKey, null);
+        if (pointer != null) {
+            element.setBaseName(containerKey, newKey, pointer);
+        } else {
+            String base = conformingBase(element, newKey);
+            if (base != null) {
+                element.setBaseName(containerKey, newKey, containerKey + "/" + base);
+            }
+        }
     }
 
     static void removeEntry(S88Element element, String containerKey, String entryKey) {
@@ -96,5 +131,22 @@ final class StructEntrySupport {
         Map<String, Object> container = copyContainer(element, containerKey);
         container.remove(entryKey);
         element.setProperty(containerKey, container);
+        element.setBaseName(containerKey, entryKey, null);
+    }
+
+    /**
+     * The base name a variable derives from its element id: a variable called
+     * {@code NIVEL_OLLA_1} of element {@code OLLA_1} has base name {@code NIVEL}. Names that do
+     * not follow the convention carry no base name, exactly as if they had been typed by hand.
+     */
+    private static String conformingBase(S88Element element, String entryKey) {
+        if (element == null || entryKey == null || element.getId() == null || element.getId().isBlank()) {
+            return null;
+        }
+        String discriminator = "_" + element.getId().trim().toUpperCase(java.util.Locale.ROOT);
+        if (entryKey.endsWith(discriminator)) {
+            return entryKey.substring(0, entryKey.length() - discriminator.length());
+        }
+        return null;
     }
 }

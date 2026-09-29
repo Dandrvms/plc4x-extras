@@ -48,18 +48,42 @@ public class S88PlantModel {
     private void addToIndex(S88Element element) {
         String id = element.getId();
         if (id != null) {
-            if (idMap.containsKey(id)) {
+            S88Element indexed = idMap.get(id);
+            if (indexed == null) {
+                idMap.put(id, element);
+            } else if (indexed != element) {
                 // Keep the first occurrence addressable so that the element the user reached
                 // first stays reachable, and record the clash instead of failing the load:
                 // a plant written by other tools may legitimately arrive already broken.
                 duplicateIds.add(id);
-            } else {
-                idMap.put(id, element);
             }
         }
         for (S88Element child : element.getChildren()) {
             addToIndex(child);
         }
+    }
+
+    /**
+     * Attaches {@code child} under {@code parent} and indexes it, so a newly added element is
+     * reachable by id without waiting for the next reload.
+     * <p>
+     * Indexing is safe to repeat: re-adding an element that is already indexed (for instance by a
+     * subsequent {@link #fireChangeEvent(S88ChangeEvent)} of type {@code ADDED}) changes nothing.
+     *
+     * @param parent element the child is attached to, {@code null} to attach under the root
+     * @param child  element being added, cannot be {@code null}
+     * @throws IllegalArgumentException when there is no parent to attach the child to
+     */
+    public void addChild(S88Element parent, S88Element child) {
+        if (child == null) {
+            throw new IllegalArgumentException("Child cannot be null");
+        }
+        S88Element target = parent != null ? parent : root;
+        if (target == null) {
+            throw new IllegalArgumentException("There is no parent to attach the element to.");
+        }
+        target.addChild(child);
+        addToIndex(child);
     }
 
     /**
@@ -158,6 +182,32 @@ public class S88PlantModel {
     }
 
     public static final String ENUM_CLASS_PREFIX = "ENUM_";
+
+    /** Property holding the setpoints and commands of an element. */
+    public static final String PARAMETERS = "Parameters";
+
+    /** Property holding the values read back from an element. */
+    public static final String REPORTS = "Reports";
+
+    /**
+     * The properties whose value is a map of named entries, each entry being a variable, as
+     * opposed to the unit attributes published at the top level of an element.
+     * <p>
+     * The distinction decides how a property is stored: a variable is re-suffixed with the id of
+     * the instance that owns it and keeps a base name keyed by its container, while an attribute is
+     * called what it is and keeps its base name at the top level of the element.
+     */
+    public static final Set<String> CONTAINER_KEYS = Set.of(PARAMETERS, REPORTS);
+
+    /**
+     * Whether the property is one of the containers holding variables.
+     *
+     * @param property property name, may be {@code null}
+     * @return {@code true} when the property holds variables rather than an attribute
+     */
+    public static boolean isContainerKey(String property) {
+        return property != null && CONTAINER_KEYS.contains(property);
+    }
 
     public static boolean isEnumerationClass(S88ElementClass ec) {
         return ec != null && ec.getName() != null && ec.getName().startsWith(ENUM_CLASS_PREFIX);

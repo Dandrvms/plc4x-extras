@@ -19,9 +19,13 @@
 
 package org.apache.plc4x.malbec.s88.plant.panels;
 
+import org.apache.plc4x.malbec.s88.api.S88ChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.core.AddStructEntryUseCase;
+import org.apache.plc4x.malbec.s88.core.BaseNameSupport;
+import org.apache.plc4x.malbec.s88.core.ClassConformance;
 import org.apache.plc4x.malbec.s88.core.UpdateStructEntryUseCase;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
 import org.openide.DialogDisplayer;
@@ -29,10 +33,12 @@ import org.openide.NotifyDescriptor;
 import org.openide.util.Exceptions;
 
 import javax.swing.*;
+import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -53,11 +59,13 @@ public class ConfigFactory {
     }
 
     private static JPanel buildUnitPanel(Plc4xPlantModel model, S88Element element) {
-        String[] columns = {"Name", "Type", "Eng_Units/Enum", "Reference", "StaticValue"};
+        // The unit attributes carry the base name a recipe addresses alongside the concrete
+        // attribute name, exactly as the variables of an equipment module do.
+        String[] columns = {"Name", "Base Name", "Type", "Eng_Units/Enum", "Reference", "StaticValue"};
         DefaultTableModel tableModel = createReadOnlyTableModel(columns);
         JTable table = createStandardConfigTable(tableModel);
 
-        updateUnitTableData(element, tableModel);
+        updateUnitTableData(currentElement(model, element), tableModel);
 
         table.addMouseListener(new MouseAdapter() {
             @Override
@@ -68,7 +76,15 @@ public class ConfigFactory {
                         return;
                     }
                     String name = String.valueOf(table.getValueAt(row, 0));
-                    Map<String, Object> prop = element.getStructuredProperty(name);
+                    S88Element live = currentElement(model, element);
+                    Map<String, Object> prop = live.getStructuredProperty(name);
+                    if (prop == null) {
+                        // The row is a leftover of an earlier state of the plant. Editing it would
+                        // open a dialog for an attribute that no longer exists.
+                        updateUnitTableData(live, tableModel);
+                        showError("'" + name + "' is no longer an attribute of " + live.getId() + ".");
+                        return;
+                    }
 
                     new AttributeDialogBuilder("Edit Attribute")
                             .withEnumerations(enumerations(model))
@@ -77,7 +93,7 @@ public class ConfigFactory {
                             .onSave((updatedName, updatedProps) -> {
                                 try {
                                     S88Element current = currentElement(model, element);
-                                    UpdateStructEntryUseCase.execute(model.getModel(), current, null, updatedName, updatedProps);
+                                    UpdateStructEntryUseCase.execute(model.getModel(), current, null, name, updatedName, updatedProps);
                                     model.save();
                                 } catch (IllegalArgumentException | IllegalStateException ex) {
                                     showError(ex);
@@ -110,11 +126,153 @@ public class ConfigFactory {
                 .onUpdate(() -> updateUnitTableData(currentElement(model, element), tableModel))
                 .show());
 
-        return new ConfigPanelBuilder(element)
+        // The built panel is handed to the refresher through a holder the panel closes over, so the
+        // summary follows the plant the same way the table does.
+        JPanel[] built = new JPanel[1];
+        Runnable refresh = () -> {
+            S88Element current = currentElement(model, element);
+            updateUnitTableData(current, tableModel);
+            ConfigPanelBuilder.setConformanceSummary(built[0], ClassConformance.of(current));
+        };
+        built[0] = refreshOnModelChange(model, conformancePanel(model, element)
                 .withInfoPanel()
                 .withCenterComponent("Unit attributes", new JScrollPane(table))
                 .addBottomButton(btnAdd)
-                .build();
+                .build(), refresh);
+        return built[0];
+    }
+
+    /**
+     * Starts the panel with the two ways of closing a gap with the class already in place, so the
+     * builder only has to describe them.
+     */
+    private static ConfigPanelBuilder conformancePanel(Plc4xPlantModel model, S88Element element) {
+        JButton btnAddToClass = new JButton("Add to class");
+        btnAddToClass.addActionListener(e -> addToClass(model, element));
+
+        JButton btnAlign = new JButton("Align with class");
+        btnAlign.addActionListener(e -> alignWithClass(model, element));
+
+        return new ConfigPanelBuilder(element)
+                .withConformancePanel(btnAddToClass, btnAlign);
+    }
+
+    /**
+     * Pushes the element's own base names into the class. The class is shared, so the siblings are
+     * left short of what it now declares; the user is told how many before it happens, because
+     * repairing them behind their back would decide for them what a recipe of the type now needs.
+     */
+    private static void addToClass(Plc4xPlantModel model, S88Element element) {
+        S88Element current = currentElement(model, element);
+        S88ElementClass elementClass = current != null ? current.getElementClass() : null;
+        if (elementClass == null) {
+            showError("This element has no equipment type, so there is nothing to add to.");
+            return;
+        }
+        ClassConformance conformance = ClassConformance.of(current);
+        if (conformance.excess().isEmpty()) {
+            return;
+        }
+        int siblings = deficientSiblings(model, current, elementClass, conformance.excess());
+        String message = "Add " + conformance.excess().size() + " base name(s) to class '"
+                + elementClass.getName() + "':\n\n  " + String.join("\n  ", conformance.excess())
+                + "\n\nThe class states what every instance of this type is expected to publish."
+                + (siblings > 0
+                ? "\n\n" + siblings + " other element(s) of this class will be left without them."
+                        + "\nThey can be aligned one by one with 'Align with class'."
+                : "\n\nNo other element of this class is affected.");
+        if (DialogDisplayer.getDefault().notify(new NotifyDescriptor.Confirmation(
+                message, NotifyDescriptor.YES_NO_OPTION, NotifyDescriptor.QUESTION_MESSAGE))
+                != NotifyDescriptor.YES_OPTION) {
+            return;
+        }
+        try {
+            ClassConformance.addToClass(current, elementClass);
+            announce(model, current);
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            showError(ex);
+        } catch (Exception ex) {
+            Exceptions.printStackTrace(ex);
+        }
+    }
+
+    /**
+     * Publishes on the element what the class already declares. The class is untouched, so nothing
+     * outside this element changes.
+     */
+    private static void alignWithClass(Plc4xPlantModel model, S88Element element) {
+        S88Element current = currentElement(model, element);
+        S88ElementClass elementClass = current != null ? current.getElementClass() : null;
+        if (elementClass == null) {
+            showError("This element has no equipment type, so there is nothing to align with.");
+            return;
+        }
+        ClassConformance conformance = ClassConformance.of(current);
+        if (conformance.deficit().isEmpty()) {
+            return;
+        }
+        try {
+            ClassConformance.alignWithClass(current, elementClass);
+            announce(model, current);
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            showError(ex);
+        } catch (Exception ex) {
+            Exceptions.printStackTrace(ex);
+        }
+    }
+
+    /**
+     * Writes the plant and tells the panels that are listening. Saving on its own only puts the
+     * change on disk: the tables and the conformance summary are refreshed by the change
+     * announcement, so without it the panel would keep describing the gap the user just closed.
+     */
+    private static void announce(Plc4xPlantModel model, S88Element element) throws IOException {
+        if (model == null) {
+            return;
+        }
+        model.save();
+        if (model.getModel() != null) {
+            model.getModel().fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.UPDATED, element));
+        }
+    }
+
+    /**
+     * How many other elements of the same class would be left short of the base names just added,
+     * so the impact of a change to the shared contract can be stated rather than discovered later.
+     */
+    private static int deficientSiblings(Plc4xPlantModel model, S88Element element,
+                                         S88ElementClass elementClass, List<String> excess) {
+        if (model == null || model.getModel() == null) {
+            return 0;
+        }
+        int count = 0;
+        for (S88Element candidate : allElements(model.getModel().getRoot())) {
+            if (candidate == null || candidate == element) {
+                continue;
+            }
+            if (candidate.getElementClass() != elementClass) {
+                continue;
+            }
+            // Only the names that are about to be added decide this: an element that already
+            // publishes them is not left short of anything by the change, however far it is from
+            // the class in other respects.
+            if (!ClassConformance.publishesAll(candidate, excess)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static List<S88Element> allElements(S88Element element) {
+        List<S88Element> all = new java.util.ArrayList<>();
+        if (element == null) {
+            return all;
+        }
+        all.add(element);
+        for (S88Element child : element.getChildren()) {
+            all.addAll(allElements(child));
+        }
+        return all;
     }
 
     private static List<S88Enumeration> enumerations(Plc4xPlantModel model) {
@@ -139,9 +297,58 @@ public class ConfigFactory {
         DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(ex.getMessage(), NotifyDescriptor.ERROR_MESSAGE));
     }
 
+    private static void showError(String message) {
+        DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(message, NotifyDescriptor.ERROR_MESSAGE));
+    }
+
+    /**
+     * Keeps a table in step with the plant. The table is filled once when the panel is built, so
+     * without this it goes on showing the names it was built with: a unit attribute added, renamed
+     * or removed elsewhere leaves rows behind that address nothing. The table is read back
+     * whenever the model announces a change, and the element is looked up again by id, because the
+     * element the panel was built for is a copy the model replaces on every reload.
+     */
+    private static JPanel refreshOnModelChange(Plc4xPlantModel model, JPanel content, Runnable refresh) {
+        return new RefreshOnChangePanel(model, content, refresh);
+    }
+
+    private static final class RefreshOnChangePanel extends JPanel {
+        private final Plc4xPlantModel model;
+        private final Runnable refresh;
+        private final ChangeListener listener;
+
+        RefreshOnChangePanel(Plc4xPlantModel model, JPanel content, Runnable refresh) {
+            super(new BorderLayout());
+            this.model = model;
+            this.refresh = refresh;
+            this.listener = event -> refresh.run();
+            add(content, BorderLayout.CENTER);
+        }
+
+        @Override
+        public void addNotify() {
+            super.addNotify();
+            if (model != null) {
+                model.addChangeListener(listener);
+                refresh.run();
+            }
+        }
+
+        @Override
+        public void removeNotify() {
+            if (model != null) {
+                model.removeChangeListener(listener);
+            }
+            super.removeNotify();
+        }
+    }
+
     private static JPanel buildEMPanel(Plc4xPlantModel model, S88Element element) {
-        String[] paramColumns = {"Name", "Eng_Units/Enum", "Type", "Max", "Min", "Default", "Reference"};
-        String[] reportColumns = {"Name", "Eng_Units/Enum", "Type", "Reference"};
+        // The EM tables carry the base name a recipe addresses alongside the concrete variable
+        // name, so a variable is identifiable at a glance. The unit attributes are omitted: a unit
+        // attribute is called exactly what it is, so the base name column would just echo it.
+        String[] paramColumns = {"Name", "Base Name", "Eng_Units/Enum", "Type", "Max", "Min", "Default", "Reference"};
+        String[] reportColumns = {"Name", "Base Name", "Eng_Units/Enum", "Type", "Reference"};
 
         DefaultTableModel paramsTableModel = createReadOnlyTableModel(paramColumns);
         DefaultTableModel reportsTableModel = createReadOnlyTableModel(reportColumns);
@@ -149,8 +356,8 @@ public class ConfigFactory {
         JTable paramsTable = createStandardConfigTable(paramsTableModel);
         JTable reportsTable = createStandardConfigTable(reportsTableModel);
 
-        updateEMTableData(element, paramsTableModel, "Parameters");
-        updateEMTableData(element, reportsTableModel, "Reports");
+        updateEMTableData(currentElement(model, element), paramsTableModel, "Parameters");
+        updateEMTableData(currentElement(model, element), reportsTableModel, "Reports");
 
         paramsTable.addMouseListener(new MouseAdapter() {
             @Override
@@ -161,8 +368,14 @@ public class ConfigFactory {
                         return;
                     }
                     String name = String.valueOf(paramsTable.getValueAt(row, 0));
-                    Map<String, Object> params = element.getStructuredProperty("Parameters");
+                    S88Element live = currentElement(model, element);
+                    Map<String, Object> params = live.getStructuredProperty("Parameters");
                     Map<String, Object> bag = params != null ? (Map<String, Object>) params.get(name) : null;
+                    if (bag == null) {
+                        updateEMTableData(live, paramsTableModel, "Parameters");
+                        showError("'" + name + "' is no longer a parameter of " + live.getId() + ".");
+                        return;
+                    }
 
                     new ParameterDialogBuilder("Edit Parameter")
                             .withEnumerations(enumerations(model))
@@ -172,7 +385,7 @@ public class ConfigFactory {
                             .onSave((updatedName, updatedProps) -> {
                                 S88Element current = currentElement(model, element);
                                 try {
-                                    UpdateStructEntryUseCase.execute(model.getModel(), current, "Parameters", updatedName, updatedProps);
+                                    UpdateStructEntryUseCase.execute(model.getModel(), current, "Parameters", name, updatedName, updatedProps);
                                     model.save();
                                 } catch (IllegalArgumentException | IllegalStateException ex) {
                                     showError(ex);
@@ -195,8 +408,14 @@ public class ConfigFactory {
                         return;
                     }
                     String name = String.valueOf(reportsTable.getValueAt(row, 0));
-                    Map<String, Object> reports = element.getStructuredProperty("Reports");
+                    S88Element live = currentElement(model, element);
+                    Map<String, Object> reports = live.getStructuredProperty("Reports");
                     Map<String, Object> bag = reports != null ? (Map<String, Object>) reports.get(name) : null;
+                    if (bag == null) {
+                        updateEMTableData(live, reportsTableModel, "Reports");
+                        showError("'" + name + "' is no longer a report of " + live.getId() + ".");
+                        return;
+                    }
 
                     new ParameterDialogBuilder("Edit Report")
                             .withEnumerations(enumerations(model))
@@ -207,7 +426,7 @@ public class ConfigFactory {
                             .onSave((updatedName, updatedProps) -> {
                                 S88Element current = currentElement(model, element);
                                 try {
-                                    UpdateStructEntryUseCase.execute(model.getModel(), current, "Reports", updatedName, updatedProps);
+                                    UpdateStructEntryUseCase.execute(model.getModel(), current, "Reports", name, updatedName, updatedProps);
                                     model.save();
                                 } catch (IllegalArgumentException | IllegalStateException ex) {
                                     showError(ex);
@@ -265,12 +484,20 @@ public class ConfigFactory {
         tabbedPane.addTab("Reports", new JScrollPane(reportsTable));
 
 
-        return new ConfigPanelBuilder(element)
+        JPanel[] built = new JPanel[1];
+        Runnable refresh = () -> {
+            S88Element current = currentElement(model, element);
+            updateEMTableData(current, paramsTableModel, "Parameters");
+            updateEMTableData(current, reportsTableModel, "Reports");
+            ConfigPanelBuilder.setConformanceSummary(built[0], ClassConformance.of(current));
+        };
+        built[0] = refreshOnModelChange(model, conformancePanel(model, element)
                 .withInfoPanel()
                 .withCenterComponent(null, tabbedPane)
                 .addBottomButton(btnAddParameter)
                 .addBottomButton(btnAddReport)
-                .build();
+                .build(), refresh);
+        return built[0];
     }
 
 
@@ -297,7 +524,7 @@ public class ConfigFactory {
     private static void updateUnitTableData(S88Element element, DefaultTableModel tableModel) {
         tableModel.setRowCount(0);
         int columnCount = tableModel.getColumnCount();
-        iterate(element, tableModel, columnCount, null );
+        iterate(element, tableModel, columnCount, null, null);
     }
 
     private static void updateEMTableData(S88Element element, DefaultTableModel tableModel, String propertyName) {
@@ -307,10 +534,11 @@ public class ConfigFactory {
         Map<String, Object> params = element.getStructuredProperty(propertyName);
         if (params == null) params = Collections.emptyMap();
 
-        iterate(element, tableModel, columnCount, params);
+        iterate(element, tableModel, columnCount, params, propertyName);
     }
 
-    private static void iterate(S88Element element, DefaultTableModel tableModel, int columnCount, Map<String, Object> property) {
+    private static void iterate(S88Element element, DefaultTableModel tableModel, int columnCount,
+                                Map<String, Object> property, String containerKey) {
         for (var entry : element.getStructuredProperties(property).entrySet()) {
             String name = entry.getKey();
             Map<String, Object> propertyValues = entry.getValue();
@@ -323,8 +551,13 @@ public class ConfigFactory {
                 String columnName = tableModel.getColumnName(i);
 
                 Object value = propertyValues.get(columnName);
-
-                rowData[i] = value != null ? value : "";
+                if (value != null) {
+                    rowData[i] = value;
+                } else if ("Base Name".equals(columnName)) {
+                    rowData[i] = BaseNameSupport.resolveBaseName(element, containerKey, name);
+                } else {
+                    rowData[i] = "";
+                }
             }
             tableModel.addRow(rowData);
         }

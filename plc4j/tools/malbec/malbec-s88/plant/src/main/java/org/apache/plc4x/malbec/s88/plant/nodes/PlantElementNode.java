@@ -29,6 +29,7 @@ import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.core.UpdatePropertyUseCase;
 import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantElementAction;
 import org.apache.plc4x.malbec.s88.plant.actions.CreateClassAction;
+import org.apache.plc4x.malbec.s88.plant.actions.DuplicateElementAction;
 import org.apache.plc4x.malbec.s88.plant.actions.PropertiesAction;
 import org.apache.plc4x.malbec.s88.plant.actions.ViewClassesAction;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
@@ -142,14 +143,31 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
         actions.add(org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class));
         actions.add(new ViewClassesAction().createContextAwareInstance(getLookup()));
         actions.add(null);
-        actions.add(new CreatePlantElementAction().createContextAwareInstance(getLookup()));
-        actions.add(new CreateClassAction().createContextAwareInstance(getLookup()));
+        // A leaf level holds no children, so it can neither take an element nor define a class for
+        // one: offering both would only hand the user an action that fails or produces a class with
+        // no target level. The check is on the level the node would create under, not on the node's
+        // own level, so an element is offered exactly the actions its own children could use.
+        if (hasChildren()) {
+            actions.add(new CreatePlantElementAction().createContextAwareInstance(getLookup()));
+            actions.add(new CreateClassAction().createContextAwareInstance(getLookup()));
+        }
+        if (equipmentLevel == S88Level.UNIT || equipmentLevel == S88Level.EQUIPMENTMODULE) {
+            actions.add(new DuplicateElementAction().createContextAwareInstance(getLookup()));
+        }
         actions.add(null);
         actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-plant-element/Actions"));
         actions.add(new PropertiesAction().createContextAwareInstance(getLookup()));
         return actions.toArray(new Action[0]);
     }
     
+    /**
+     * Whether an element or a class can be created under this one: only a level that has a child
+     * level can hold either.
+     */
+    protected boolean hasChildren() {
+        return equipmentLevel != null && equipmentLevel.getChildLevel() != null;
+    }
+
     @Override
     public Action getPreferredAction(){
         return org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class);

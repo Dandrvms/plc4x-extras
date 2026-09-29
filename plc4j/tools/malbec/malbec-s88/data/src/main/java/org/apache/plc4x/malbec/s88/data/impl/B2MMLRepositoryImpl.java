@@ -200,7 +200,7 @@ public class B2MMLRepositoryImpl implements S88Repository {
         }
 
         for (var entry : element.getProperties().entrySet()) {
-            writeProperty(equipment.addNewEquipmentProperty(), entry.getKey(), entry.getValue());
+            writeProperty(equipment.addNewEquipmentProperty(), element, null, entry.getKey(), entry.getValue());
         }
 
 
@@ -210,17 +210,52 @@ public class B2MMLRepositoryImpl implements S88Repository {
     }
 
 
-    private void writeProperty(EquipmentPropertyType propXml, String key, Object value) {
+    /**
+     * Writes a property of an element. A variable (an entry of a container such as "Parameters")
+     * carries its base name as an {@code EquipmentClassPropertyID}, the standard B2MML field
+     * pointing back at the class schema the variable was derived from.
+     *
+     * @param propXml      the XML property being built
+     * @param element      element owning the property, used to look up the base names
+     * @param containerKey the container holding the entry being written, {@code null} at the top
+     *                     level of the element
+     * @param key          property name
+     * @param value        property value
+     */
+    private void writeProperty(EquipmentPropertyType propXml, S88Element element,
+                               String containerKey, String key, Object value) {
         propXml.addNewID().setStringValue(key);
+        if (containerKey == null && !S88PlantModel.isContainerKey(key)) {
+            // A unit attribute is published at the top level of the element, so it is this
+            // property - not one of its children - that carries the pointer to the schema entry
+            // the recipe addresses it by.
+            String baseName = element.getBaseName(null, key);
+            if (baseName != null) {
+                propXml.addNewEquipmentClassPropertyID().setStringValue(baseName);
+            }
+        }
         if (value instanceof Map<?, ?> nested) {
+            String childContainer = containerKey != null ? containerKey : key;
             for (var e : nested.entrySet()) {
-                writeProperty(propXml.addNewEquipmentPropertyChild(), String.valueOf(e.getKey()), e.getValue());
+                writePropertyChild(propXml, element, childContainer, String.valueOf(e.getKey()), e.getValue());
             }
         } else if (value != null) {
             ValueType v = propXml.addNewValue();
             v.addNewValueString().setStringValue(String.valueOf(value));
             v.addNewDataType().setStringValue(inferDataType(value));
         }
+    }
+
+    private void writePropertyChild(EquipmentPropertyType parentXml, S88Element element,
+                                    String containerKey, String key, Object value) {
+        EquipmentPropertyType propXml = parentXml.addNewEquipmentPropertyChild();
+        // The ID of the property is written once by writeProperty; writing it here again would
+        // leave every variable with two <b2m:ID> elements in the stored plant.
+        String baseName = element.getBaseName(containerKey, key);
+        if (baseName != null) {
+            propXml.addNewEquipmentClassPropertyID().setStringValue(baseName);
+        }
+        writeProperty(propXml, element, containerKey, key, value);
     }
 
     private void writeClassProperty(EquipmentClassPropertyType propXml, String key, Object value) {
@@ -289,27 +324,38 @@ public class B2MMLRepositoryImpl implements S88Repository {
     }
 
     private void buildProperties(EquipmentPropertyType[] properties, S88Element element) {
-        readPropertiesMap(properties).forEach(element::setProperty);
-    }
-
-    private Map<String, Object> readPropertiesMap(EquipmentPropertyType[] properties) {
-        Map<String, Object> result = new LinkedHashMap<>();
         for (EquipmentPropertyType prop : properties) {
             if (prop.getID() == null) continue;
-            result.put(prop.getID().getStringValue(), readPropertyValue(prop));
+            String name = prop.getID().getStringValue();
+            element.setProperty(name, readPropertyValue(prop, element));
+            if (!S88PlantModel.isContainerKey(name) && prop.isSetEquipmentClassPropertyID()) {
+                // A unit attribute is a top level property, so this is where its pointer to the
+                // schema entry a recipe addresses it by comes back in.
+                element.setBaseName(null, name, prop.getEquipmentClassPropertyID().getStringValue());
+            }
         }
-        return result;
     }
 
-    private Object readPropertyValue(EquipmentPropertyType prop) {
+    private Object readPropertyValue(EquipmentPropertyType prop, S88Element element) {
+        String containerKey = prop.getID() != null ? prop.getID().getStringValue() : null;
         if (prop.sizeOfEquipmentPropertyChildArray() > 0) {
             Map<String, Object> nested = new LinkedHashMap<>();
             for (EquipmentPropertyType child : prop.getEquipmentPropertyChildArray()) {
                 if (child.getID() == null) continue;
-                nested.put(child.getID().getStringValue(), readPropertyValue(child));
+                String name = child.getID().getStringValue();
+                // The standard B2MML field pointing a variable back at the class schema it was
+                // derived from; the batch engine uses it to resolve the variable by base name.
+                if (child.isSetEquipmentClassPropertyID()) {
+                    element.setBaseName(containerKey, name, child.getEquipmentClassPropertyID().getStringValue());
+                }
+                nested.put(name, readPropertyValue(child, element));
             }
             return nested;
         }
+        return readScalarValue(prop);
+    }
+
+    private Object readScalarValue(EquipmentPropertyType prop) {
         if (prop.sizeOfValueArray() > 0 && prop.getValueArray(0).getValueString() != null) {
             ValueType val = prop.getValueArray(0);
             String dataType = val.getDataType() != null ? val.getDataType().getStringValue() : null;

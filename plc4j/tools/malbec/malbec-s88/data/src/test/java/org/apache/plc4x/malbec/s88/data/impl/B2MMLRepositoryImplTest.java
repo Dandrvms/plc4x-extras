@@ -19,13 +19,16 @@
 package org.apache.plc4x.malbec.s88.data.impl;
 
 import org.apache.plc4x.malbec.s88.api.*;
+import org.apache.xmlbeans.XmlCursor;
 import org.apache.xmlbeans.XmlException;
 import org.junit.jupiter.api.Test;
 import org.mesa.xml.b2MML.EquipmentInformationDocument;
 import org.mesa.xml.b2MML.EquipmentInformationType;
+import org.mesa.xml.b2MML.EquipmentPropertyType;
 import org.mesa.xml.b2MML.EquipmentType;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -620,5 +623,287 @@ class B2MMLRepositoryImplTest {
         assertEquals("Temperature", temperatureXml.getID().getStringValue());
         assertEquals(1, temperatureXml.sizeOfEquipmentPropertyChildArray());
         assertEquals("Type", temperatureXml.getEquipmentPropertyChildArray(0).getID().getStringValue());
+    }
+
+    @Test
+    void savedXmlWritesExactlyOneIDPerProperty() throws XmlException, IOException {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("Unit1", S88Level.UNIT);
+
+        Map<String, Object> bag = new LinkedHashMap<>();
+        bag.put("Type", "REAL");
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("Temperature", bag);
+        root.setProperty("Parameters", parameters);
+
+        repo.savePlant(model(root));
+
+        EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
+        EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
+
+        assertEveryPropertyHasASingleID(xml.getEquipmentPropertyArray());
+    }
+
+    private static void assertEveryPropertyHasASingleID(EquipmentPropertyType[] properties) {
+        for (EquipmentPropertyType property : properties) {
+            assertEquals(1, countIdElements(property),
+                    "each property must carry exactly one <b2m:ID>, the reader would otherwise see it twice");
+            assertEveryPropertyHasASingleID(property.getEquipmentPropertyChildArray());
+        }
+    }
+
+    private static int countIdElements(EquipmentPropertyType property) {
+        int count = 0;
+        XmlCursor cursor = property.newCursor();
+        try {
+            if (cursor.toFirstChild()) {
+                do {
+                    if ("ID".equals(cursor.getName().getLocalPart())) {
+                        count++;
+                    }
+                } while (cursor.toNextSibling());
+            }
+        } finally {
+            cursor.dispose();
+        }
+        return count;
+    }
+
+    // ========== Round-trip: base names ==========
+
+    @Test
+    void roundTripBaseNamesOnVariables() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+
+        Map<String, Object> bag = new LinkedHashMap<>();
+        bag.put("Type", "REAL");
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("NIVEL_OLLA_1", bag);
+        root.setProperty("Parameters", parameters);
+        root.setBaseName("Parameters", "NIVEL_OLLA_1", "Parameters/NIVEL");
+
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+
+        assertEquals("Parameters/NIVEL", loaded.getRoot().getBaseName("Parameters", "NIVEL_OLLA_1"));
+    }
+
+    @Test
+    void roundTripKeepsVariablesWithoutABaseNameUnpointed() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+
+        Map<String, Object> bag = new LinkedHashMap<>();
+        bag.put("Type", "REAL");
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("TURBIDEZ", bag);
+        root.setProperty("Parameters", parameters);
+
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+
+        assertNull(loaded.getRoot().getBaseName("Parameters", "TURBIDEZ"));
+    }
+
+    @Test
+    void savedXmlCarriesTheEquipmentClassPropertyID() throws XmlException, IOException {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+
+        Map<String, Object> bag = new LinkedHashMap<>();
+        bag.put("Type", "REAL");
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("NIVEL_OLLA_1", bag);
+        root.setProperty("Parameters", parameters);
+        root.setBaseName("Parameters", "NIVEL_OLLA_1", "Parameters/NIVEL");
+
+        repo.savePlant(model(root));
+
+        EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
+        EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
+
+        var parametersXml = xml.getEquipmentPropertyArray(0);
+        assertEquals("Parameters", parametersXml.getID().getStringValue());
+        var variableXml = parametersXml.getEquipmentPropertyChildArray(0);
+        assertEquals("NIVEL_OLLA_1", variableXml.getID().getStringValue());
+        assertTrue(variableXml.isSetEquipmentClassPropertyID());
+        assertEquals("Parameters/NIVEL", variableXml.getEquipmentClassPropertyID().getStringValue());
+    }
+
+    @Test
+    void roundTripKeepsTheBaseNameOfAUnitAttribute() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+
+        Map<String, Object> attribute = new LinkedHashMap<>();
+        attribute.put("Type", "REAL");
+        attribute.put("StaticValue", "1.5");
+        root.setProperty("PRESION_OLLA_1", attribute);
+        root.setBaseName(null, "PRESION_OLLA_1", "PRESION");
+
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        assertEquals("PRESION", loaded.getRoot().getBaseName(null, "PRESION_OLLA_1"));
+        assertTrue(loaded.getRoot().getStructuredProperty("PRESION_OLLA_1").containsKey("StaticValue"),
+                "the attribute itself survives the trip as well");
+    }
+
+    @Test
+    void savedXmlCarriesTheUnitAttributeBaseNameOnThePropertyItself() throws XmlException, IOException {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+
+        Map<String, Object> attribute = new LinkedHashMap<>();
+        attribute.put("Type", "REAL");
+        root.setProperty("PRESION_OLLA_1", attribute);
+        root.setBaseName(null, "PRESION_OLLA_1", "PRESION");
+
+        repo.savePlant(model(root));
+
+        EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
+        EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
+
+        var attributeXml = xml.getEquipmentPropertyArray(0);
+        assertEquals("PRESION_OLLA_1", attributeXml.getID().getStringValue());
+        assertTrue(attributeXml.isSetEquipmentClassPropertyID());
+        // The bare base name: the class declares the attribute at the top level of its schema, so a
+        // container segment here would name a container the class does not have.
+        assertEquals("PRESION", attributeXml.getEquipmentClassPropertyID().getStringValue());
+        // The field of the attribute is not a variable of its own, so it is written once and
+        // carries no pointer of its own.
+        var typeXml = attributeXml.getEquipmentPropertyChildArray(0);
+        assertEquals("Type", typeXml.getID().getStringValue());
+        assertFalse(typeXml.isSetEquipmentClassPropertyID());
+    }
+
+    @Test
+    void aUnitAttributeWithoutABaseNameIsSavedWithoutAPointer() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("OLLA_1", S88Level.UNIT);
+        root.setProperty("PRESION_OLLA_1", new LinkedHashMap<>(Map.of("Type", "REAL")));
+
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        assertNull(loaded.getRoot().getBaseName(null, "PRESION_OLLA_1"));
+    }
+
+    @Test
+    void everyPointerSurvivesTheTripAndResolvesAgainstItsOwnClass() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88PlantModel model = new S88PlantModel(element("PLANT", S88Level.AREA));
+        S88Element cell = element("CELDA", S88Level.PROCESSCELL);
+        model.getRoot().addChild(cell);
+
+        S88ElementClass type = new S88ElementClass();
+        type.setName("TANQUE");
+        type.setTargetLevel(S88Level.UNIT);
+        type.setProperty("PRESION", new LinkedHashMap<>(Map.of("Type", "REAL")));
+        type.setProperty(S88PlantModel.PARAMETERS, new LinkedHashMap<>(
+                Map.of("TEMPERATURA_SP", new LinkedHashMap<>(Map.of("Type", "REAL")))));
+        model.registerClass(type);
+
+        // Two units of one type, so the pointers of both have to resolve against the same class.
+        cell.addChild(unit(type, "TANQUE_1"));
+        cell.addChild(unit(type, "TANQUE_2"));
+
+        repo.savePlant(model);
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+
+        // What a consumer of the file does with every pointer: look the base name up in the class
+        // the element names, in the container the pointer names, or at the top level for a unit
+        // attribute, which belongs to no container. A pointer the class does not hold is one the
+        // consumer cannot resolve, so this is what the file has to pass to be usable outside the
+        // tool.
+        List<String> unresolved = new ArrayList<>();
+        int resolved = 0;
+        for (S88Element each : loaded.getRoot().getChildren()) {
+            for (S88Element unit : each.getChildren()) {
+                resolved += resolves(unit, unresolved);
+            }
+        }
+        assertTrue(resolved > 0, "the fixture is expected to produce pointers to check");
+        assertTrue(unresolved.isEmpty(), "these pointers do not resolve against their class: " + unresolved);
+    }
+
+    private int resolves(S88Element element, List<String> unresolved) {
+        S88ElementClass elementClass = element.getElementClass();
+        assertNotNull(elementClass, element.getId() + " lost its class");
+        int resolved = 0;
+        for (Map.Entry<String, Object> property : element.getProperties().entrySet()) {
+            String container = property.getKey();
+            // A unit attribute also holds a map, the one describing the value, so a map on its own
+            // does not make a container: only the two the model reserves hold variables.
+            if (S88PlantModel.CONTAINER_KEYS.contains(container)
+                    && property.getValue() instanceof Map<?, ?> variables) {
+                Object declared = elementClass.getProperty(container);
+                for (Object childKey : variables.keySet()) {
+                    String variable = String.valueOf(childKey);
+                    String pointer = element.getBaseName(container, variable);
+                    assertNotNull(pointer, variable + " lost its pointer");
+                    String base = pointer.substring(pointer.lastIndexOf('/') + 1);
+                    if (declared instanceof Map<?, ?> declaredVariables
+                            && declaredVariables.containsKey(base)) {
+                        resolved++;
+                    } else {
+                        unresolved.add(element.getId() + " " + container + "." + variable
+                                + " -> " + pointer);
+                    }
+                }
+            } else {
+                String pointer = element.getBaseName(null, container);
+                if (pointer == null) {
+                    continue;
+                }
+                if (elementClass.getProperty(pointer) != null) {
+                    resolved++;
+                } else {
+                    unresolved.add(element.getId() + " " + container + " -> " + pointer);
+                }
+            }
+        }
+        return resolved;
+    }
+
+    /**
+     * A unit with the attributes and the variable the editor gives it, pointed at the class that
+     * declares the base names behind them.
+     */
+    private S88Element unit(S88ElementClass type, String id) {
+        S88Element unit = element(id, S88Level.UNIT);
+        unit.setClass(type);
+        unit.setProperty("PRESION_" + id, new LinkedHashMap<>(Map.of("Type", "REAL")));
+        unit.setBaseName(null, "PRESION_" + id, "PRESION");
+        unit.setProperty(S88PlantModel.PARAMETERS, new LinkedHashMap<>(
+                Map.of("TEMPERATURA_SP_" + id, new LinkedHashMap<>(Map.of("Type", "REAL")))));
+        unit.setBaseName(S88PlantModel.PARAMETERS, "TEMPERATURA_SP_" + id,
+                S88PlantModel.PARAMETERS + "/TEMPERATURA_SP");
+        return unit;
     }
 }

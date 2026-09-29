@@ -48,7 +48,7 @@ public class CreateClassAction extends AbstractAction implements ContextAwareAct
     }
 
     @NbBundle.Messages({
-            "BTN_Class=New Class"
+            "BTN_Class=New Equipment Type"
     })
     @Override
     public void actionPerformed(ActionEvent e) {

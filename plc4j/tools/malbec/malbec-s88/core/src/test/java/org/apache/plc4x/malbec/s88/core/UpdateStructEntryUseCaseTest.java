@@ -149,4 +149,45 @@ class UpdateStructEntryUseCaseTest {
         assertThrows(IllegalArgumentException.class,
                 () -> UpdateStructEntryUseCase.execute(model, element, null, "icon", null));
     }
+
+    @Test
+    void testRenamingAnEntryMovesItsBaseNamePointer() {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("NIVEL_UNIT1", "v1");
+        element.setProperty("Parameters", parameters);
+        element.setBaseName("Parameters", "NIVEL_UNIT1", "Parameters/NIVEL");
+
+        UpdateStructEntryUseCase.execute(model, element, "Parameters", "NIVEL_UNIT1", "NIVEL_UNIT1_NEW", "v2");
+
+        assertNull(element.getBaseName("Parameters", "NIVEL_UNIT1"));
+        assertEquals("Parameters/NIVEL", element.getBaseName("Parameters", "NIVEL_UNIT1_NEW"),
+                "the base name a recipe addresses follows the renamed variable");
+        Map<String, Object> stored = element.getStructuredProperty("Parameters");
+        assertFalse(stored.containsKey("NIVEL_UNIT1"));
+        assertEquals("v2", stored.get("NIVEL_UNIT1_NEW"));
+    }
+
+    @Test
+    void testRenamingACarryingNameDerivesThePointerItNeeds() {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("NIVEL_UNIT1", "v1");
+        element.setProperty("Parameters", parameters);
+
+        UpdateStructEntryUseCase.execute(model, element, "Parameters", "NIVEL_UNIT1", "TEMP_UNIT1", "v2");
+
+        assertEquals("Parameters/TEMP", element.getBaseName("Parameters", "TEMP_UNIT1"),
+                "a conforming new name is tied to the base name it derives from");
+    }
+
+    @Test
+    void testRenamingOntoAnExistingEntryThrows() {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("A_UNIT1", "v1");
+        parameters.put("B_UNIT1", "v2");
+        element.setProperty("Parameters", parameters);
+
+        assertThrows(IllegalStateException.class,
+                () -> UpdateStructEntryUseCase.execute(model, element, "Parameters", "A_UNIT1", "B_UNIT1", "v3"));
+        verify(model, never()).fireChangeEvent(any());
+    }
 }

@@ -39,13 +39,22 @@ import java.util.TreeMap;
 public final class VariableKeySupport {
 
     /** Property holding the setpoints and commands of an element. */
-    public static final String PARAMETERS = "Parameters";
+    public static final String PARAMETERS = S88PlantModel.PARAMETERS;
 
     /** Property holding the values read back from an element. */
-    public static final String REPORTS = "Reports";
+    public static final String REPORTS = S88PlantModel.REPORTS;
 
     /** Properties whose value is a map of named entries, each entry being a variable. */
-    private static final Set<String> CONTAINER_KEYS = Set.of(PARAMETERS, REPORTS);
+    private static final Set<String> CONTAINER_KEYS = S88PlantModel.CONTAINER_KEYS;
+
+    /**
+     * The properties that hold variables, for the callers that walk a schema of their own.
+     *
+     * @return the container property names, never {@code null}
+     */
+    public static Set<String> containerKeys() {
+        return CONTAINER_KEYS;
+    }
 
     private VariableKeySupport() {
         /* This utility class should not be instantiated */
@@ -252,10 +261,25 @@ public final class VariableKeySupport {
         return result;
     }
 
-    private static void collect(S88Element element, List<Entry> out) {
-        if (element == null) {
-            return;
+    /**
+     * Lists the variables published by an element itself, without looking below it.
+     *
+     * @param element element to inspect, may be {@code null}
+     * @return the variables of the element, in declaration order
+     */
+    public static List<VariableKey> listOwn(S88Element element) {
+        List<Entry> found = new ArrayList<>();
+        if (element != null) {
+            collectOwn(element, found);
         }
+        List<VariableKey> result = new ArrayList<>();
+        for (Entry entry : found) {
+            result.add(entry.toVariableKey());
+        }
+        return result;
+    }
+
+    private static void collectOwn(S88Element element, List<Entry> out) {
         for (Map.Entry<String, Object> entry : element.getProperties().entrySet()) {
             String name = entry.getKey();
             if (NameValidator.isReservedProperty(name)) {
@@ -269,6 +293,13 @@ public final class VariableKeySupport {
                 addVariable(element, name, name, out);
             }
         }
+    }
+
+    private static void collect(S88Element element, List<Entry> out) {
+        if (element == null) {
+            return;
+        }
+        collectOwn(element, out);
         for (S88Element child : element.getChildren()) {
             collect(child, out);
         }

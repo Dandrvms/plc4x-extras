@@ -153,7 +153,7 @@ class S88PlantModelTest {
         model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.ADDED, existing));
 
         assertThrows(IllegalStateException.class,
-                () -> new CreateElementUseCase().execute(model, root, "TANQUE_1", null));
+                () -> CreateElementUseCase.execute(model, root, "TANQUE_1", null));
     }
 
     // ===== classes are global to the plant, gated by their target level =====
@@ -271,6 +271,60 @@ class S88PlantModelTest {
         S88PlantModel model = new S88PlantModel(root);
 
         assertTrue(model.getClassesForChildLevel(S88Level.EQUIPMENTMODULE).isEmpty());
+    }
+
+    // ===== attaching a child through the model =====
+
+    @Test
+    void addChildAttachesTheChildUnderItsParentAndIndexesIt() {
+        S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
+        S88PlantModel model = new S88PlantModel(root);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+
+        model.addChild(root, child);
+
+        assertSame(child, root.getChildren().get(0));
+        assertSame(root, child.getParent());
+        assertSame(child, model.findById("TANQUE_1").orElseThrow(),
+                "a newly added element is reachable by id without waiting for a reload");
+    }
+
+    @Test
+    void addChildUnderANullParentAttachesToTheRoot() {
+        S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
+        S88PlantModel model = new S88PlantModel(root);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+
+        model.addChild(null, child);
+
+        assertSame(root, child.getParent());
+    }
+
+    @Test
+    void addChildCanBeRepeatedBecauseIndexingIsByIdentity() {
+        S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
+        S88PlantModel model = new S88PlantModel(root);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+
+        model.addChild(root, child);
+        // the ADDED event the use cases fire after attaching re-indexes the very same element
+        model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.ADDED, child));
+
+        assertTrue(model.getDuplicateIds().isEmpty(),
+                "re-indexing the same element must not count it as a duplicate");
+        assertSame(child, model.findById("TANQUE_1").orElseThrow());
+    }
+
+    @Test
+    void addChildThrowsWhenThereIsNothingToAttachTo() {
+        S88PlantModel model = new S88PlantModel(null);
+        S88Element child = new S88Element().setId("TANQUE_1");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> model.addChild(null, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> model.addChild(null, child),
+                "without a parent and without a root there is nowhere to attach the child");
     }
 
     private static S88ElementClass classFor(String name, S88Level targetLevel) {

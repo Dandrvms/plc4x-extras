@@ -120,4 +120,20 @@ class AddStructEntryUseCaseTest {
         assertThrows(IllegalArgumentException.class,
                 () -> AddStructEntryUseCase.execute(model, null, null, "key", "v"));
     }
+
+    @Test
+    void testAddingAVariableNamedAfterTheElementTiesItToItsBaseName() {
+        AddStructEntryUseCase.execute(model, element, "Parameters", "NIVEL_UNIT1", 3.0);
+
+        assertEquals("Parameters/NIVEL", element.getBaseName("Parameters", "NIVEL_UNIT1"),
+                "a variable following the convention is tied to the base name a recipe addresses");
+    }
+
+    @Test
+    void testAddingAFreeNameCarriesNoBaseName() {
+        AddStructEntryUseCase.execute(model, element, "Parameters", "NIVEL", 3.0);
+
+        assertNull(element.getBaseName("Parameters", "NIVEL"),
+                "a hand-typed name is its own base name and gets no pointer");
+    }
 }

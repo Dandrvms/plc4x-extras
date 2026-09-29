@@ -64,7 +64,7 @@ public class ClassDialogBuilder {
                     hint.setForeground(new Color(0xb00000));
                     hint.setText(message);
                 }));
-        addRow("Class Name:", txtClassName);
+        addRow("Equipment Type Name:", txtClassName);
         addRow("", hint);
         return this;
     }
