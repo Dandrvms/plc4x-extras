@@ -186,6 +186,54 @@ class B2MMLRepositoryImplTest {
     // ========== Round-trip: Properties ==========
 
     @Test
+    void roundTripKeepsTheUidOfEveryElement() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = new S88Element("uid-root").setId("AREA_1").setLevel(S88Level.AREA);
+        S88Element child = new S88Element("uid-child").setId("PC_1").setLevel(S88Level.PROCESSCELL);
+        root.addChild(child);
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        assertEquals("uid-root", loaded.getRoot().getUid());
+        assertEquals("uid-child", loaded.getRoot().getChildren().get(0).getUid(),
+                "a nested element keeps its own identity, not its parent's");
+    }
+
+    @Test
+    void theUidIsNotPublishedAsAPropertyOfTheElement() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("AREA_1", S88Level.AREA);
+        root.setProperty("author", "Jane");
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        assertFalse(loaded.getRoot().getProperties().containsKey(S88Element.UID_PROPERTY),
+                "the uid belongs to the element, not to the variables a recipe can address");
+        assertEquals("Jane", loaded.getRoot().getProperty("author"));
+    }
+
+    @Test
+    void aPlantWrittenBeforeTheUidExistedStillOpensWithOnePerElement() throws XmlException, IOException {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("AREA_1", S88Level.AREA);
+        repo.savePlant(model(root));
+        // A file written before the uid was introduced carries no reserved property at all.
+        storage.data = withoutUidProperty(storage.data);
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        assertNotNull(loaded.getRoot().getUid());
+    }
+
+    @Test
     void roundTripWithProperties() {
         var storage = new InMemoryStorage();
         var repo = newRepo(storage);
@@ -368,10 +416,10 @@ class B2MMLRepositoryImplTest {
         EquipmentInformationType info = doc.getEquipmentInformation();
         EquipmentType xml = info.getEquipmentArray(0);
 
-        assertEquals(2, xml.sizeOfEquipmentPropertyArray());
+        assertEquals(2, userProperties(xml).size());
 
-        String id0 = xml.getEquipmentPropertyArray(0).getID().getStringValue();
-        String id1 = xml.getEquipmentPropertyArray(1).getID().getStringValue();
+        String id0 = userProperties(xml).get(0).getID().getStringValue();
+        String id1 = userProperties(xml).get(1).getID().getStringValue();
         assertTrue((id0.equals("author") && id1.equals("icon"))
                  || (id0.equals("icon") && id1.equals("author")));
     }
@@ -615,7 +663,7 @@ class B2MMLRepositoryImplTest {
         EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
         EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
 
-        var parametersXml = xml.getEquipmentPropertyArray(0);
+        var parametersXml = userProperties(xml).get(0);
         assertEquals("Parameters", parametersXml.getID().getStringValue());
         assertEquals(1, parametersXml.sizeOfEquipmentPropertyChildArray());
 
@@ -644,6 +692,50 @@ class B2MMLRepositoryImplTest {
         EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
 
         assertEveryPropertyHasASingleID(xml.getEquipmentPropertyArray());
+    }
+
+    /**
+     * Removes the reserved uid property from a stored plant, imitating a file written before the
+     * uid was introduced.
+     */
+    private static byte[] withoutUidProperty(byte[] stored) throws XmlException, IOException {
+        EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(
+                new ByteArrayInputStream(stored));
+        EquipmentType[] equipment = doc.getEquipmentInformation().getEquipmentArray();
+        for (EquipmentType type : equipment) {
+            removeUidProperties(type);
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        doc.save(out);
+        return out.toByteArray();
+    }
+
+    private static void removeUidProperties(EquipmentType type) {
+        EquipmentPropertyType[] kept = java.util.Arrays.stream(type.getEquipmentPropertyArray())
+                .filter(p -> !S88Element.UID_PROPERTY.equals(p.getID().getStringValue()))
+                .toArray(EquipmentPropertyType[]::new);
+        while (type.sizeOfEquipmentPropertyArray() > 0) {
+            type.removeEquipmentProperty(0);
+        }
+        type.setEquipmentPropertyArray(kept);
+        for (EquipmentType child : type.getEquipmentChildArray()) {
+            removeUidProperties(child);
+        }
+    }
+
+    /**
+     * The properties of an element, without the one the tool reserves for the uid. The uid is an
+     * identity of the plant, not a property the user typed, so tests about the stored properties
+     * look past it.
+     */
+    private static List<EquipmentPropertyType> userProperties(EquipmentType xml) {
+        List<EquipmentPropertyType> properties = new ArrayList<>();
+        for (EquipmentPropertyType property : xml.getEquipmentPropertyArray()) {
+            if (!S88Element.UID_PROPERTY.equals(property.getID().getStringValue())) {
+                properties.add(property);
+            }
+        }
+        return properties;
     }
 
     private static void assertEveryPropertyHasASingleID(EquipmentPropertyType[] properties) {
@@ -735,7 +827,7 @@ class B2MMLRepositoryImplTest {
         EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
         EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
 
-        var parametersXml = xml.getEquipmentPropertyArray(0);
+        var parametersXml = userProperties(xml).get(0);
         assertEquals("Parameters", parametersXml.getID().getStringValue());
         var variableXml = parametersXml.getEquipmentPropertyChildArray(0);
         assertEquals("NIVEL_OLLA_1", variableXml.getID().getStringValue());
@@ -782,7 +874,7 @@ class B2MMLRepositoryImplTest {
         EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(new ByteArrayInputStream(storage.data));
         EquipmentType xml = doc.getEquipmentInformation().getEquipmentArray(0);
 
-        var attributeXml = xml.getEquipmentPropertyArray(0);
+        var attributeXml = userProperties(xml).get(0);
         assertEquals("PRESION_OLLA_1", attributeXml.getID().getStringValue());
         assertTrue(attributeXml.isSetEquipmentClassPropertyID());
         // The bare base name: the class declares the attribute at the top level of its schema, so a

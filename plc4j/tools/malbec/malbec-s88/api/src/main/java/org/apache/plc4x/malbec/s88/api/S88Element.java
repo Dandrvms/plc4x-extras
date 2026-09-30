@@ -31,14 +31,43 @@ public class S88Element {
 
 
     private String id;
+    private final String uid;
     private S88Level level;
     private S88Element parent;
     private final List<S88Element> children = new ArrayList<>();
     private final Map<String, Object> properties = new LinkedHashMap<>();
-    private final Map<String, Map<String, String>> baseNames = new LinkedHashMap<>();
+    private final BaseNameRegistry baseNames = new BaseNameRegistry();
     private S88ElementClass elementClass;
     private final List<S88ElementClass> elementClasses = new ArrayList<>();
     private static final String CHECK = "Check";
+
+    /**
+     * Name of the property the plant file carries the uid in.
+     * <p>
+     * The uid is an identity of the tool, not a property of the equipment, so it is never
+     * published as a variable and never reaches the recipe as a parameter.
+     */
+    public static final String UID_PROPERTY = "_malbecUID";
+
+    /**
+     * Creates an element with a newly generated uid.
+     */
+    public S88Element() {
+        this.uid = UUID.randomUUID().toString();
+    }
+
+    /**
+     * Creates an element restoring a stored uid.
+     *
+     * @param uid stable identity of the element, never {@code null} or blank
+     * @throws IllegalArgumentException when the uid is {@code null} or blank
+     */
+    public S88Element(String uid) {
+        if (uid == null || uid.isBlank()) {
+            throw new IllegalArgumentException("Element uid cannot be empty");
+        }
+        this.uid = uid;
+    }
 
 
     public S88Element setClass(S88ElementClass elementClass){
@@ -100,6 +129,18 @@ public class S88Element {
         return id;
     }
 
+    /**
+     * The stable identity of this element.
+     * <p>
+     * Unlike {@link #getId()}, the uid never changes, so a recipe can keep addressing this
+     * element after its name is changed.
+     *
+     * @return the immutable uid, never {@code null}
+     */
+    public String getUid() {
+        return uid;
+    }
+
     public S88Level getLevel() {
         return level;
     }
@@ -109,10 +150,13 @@ public class S88Element {
     }
 
     public List<S88Element> getChildren() {
-        return children;
+        return Collections.unmodifiableList(children);
     }
 
     public void addChild(S88Element element){
+        if (element == null) {
+            throw new IllegalArgumentException("Child cannot be null");
+        }
         this.children.add(element);
         element.setParent(this);
     }
@@ -139,7 +183,7 @@ public class S88Element {
     }
 
     public Map<String, Object> getProperties() {
-        return properties;
+        return Collections.unmodifiableMap(properties);
     }
 
     /**
@@ -196,19 +240,7 @@ public class S88Element {
      * @param baseName     the base name, {@code null} to forget it
      */
     public void setBaseName(String containerKey, String variableName, String baseName) {
-        if (variableName == null) {
-            return;
-        }
-        String key = containerKey != null ? containerKey : "";
-        Map<String, String> entries = baseNames.computeIfAbsent(key, k -> new LinkedHashMap<>());
-        if (baseName == null) {
-            entries.remove(variableName);
-            if (entries.isEmpty()) {
-                baseNames.remove(key);
-            }
-        } else {
-            entries.put(variableName, baseName);
-        }
+        baseNames.set(containerKey, variableName, baseName);
     }
 
     /**
@@ -220,17 +252,23 @@ public class S88Element {
      * @return the recorded base name, or {@code null} when there is none
      */
     public String getBaseName(String containerKey, String variableName) {
-        if (variableName == null) {
-            return null;
-        }
-        Map<String, String> entries = baseNames.get(containerKey != null ? containerKey : "");
-        return entries != null ? entries.get(variableName) : null;
+        return baseNames.get(containerKey, variableName);
     }
 
     /**
      * The recorded base names, keyed by container and then by variable name. Never {@code null}.
      */
     public Map<String, Map<String, String>> getBaseNames() {
+        return baseNames.all();
+    }
+
+    /**
+     * The base name registry of this element.
+     *
+     * @return the mutable registry, never {@code null}; callers that only read it should use
+     *         {@link #getBaseName(String, String)} instead
+     */
+    public BaseNameRegistry getBaseNameRegistry() {
         return baseNames;
     }
 

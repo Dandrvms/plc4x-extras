@@ -19,6 +19,7 @@
 
 package org.apache.plc4x.malbec.s88.api;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -49,8 +50,8 @@ public class S88ElementClass {
         return this.properties.get(key);
     }
 
-    public Map<String,Object> getProperties(){
-        return this.properties;
+    public Map<String, Object> getProperties() {
+        return Collections.unmodifiableMap(properties);
     }
 
     public void setTargetLevel(S88Level targetLevel) { this.targetLevel = targetLevel; }

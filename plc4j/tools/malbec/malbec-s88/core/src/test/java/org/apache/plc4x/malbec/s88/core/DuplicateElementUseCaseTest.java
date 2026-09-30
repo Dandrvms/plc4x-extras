@@ -31,6 +31,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -171,6 +172,59 @@ class DuplicateElementUseCaseTest {
                 .findFirst().orElseThrow();
         assertEquals("Parameters/TEMPERATURA_SP_SET",
                 copyEm.getBaseName("Parameters", "TEMPERATURA_SP_CALENTAMIENTO_OLLA_2"));
+    }
+
+    @Test
+    void aCopyKeepsTheBaseNameTheSourceRecorded() {
+        // A variable whose name does not tell where it came from: the recipe knows it as ALTURA,
+        // so the copy has to answer to ALTURA too even though its name now ends with the copy id.
+        Map<String, Object> sourceParameters = new LinkedHashMap<>();
+        sourceParameters.put("NIVEL_OLLA_1", bag("NIVEL_OLLA_1", 3.2f));
+        olla1.setProperty("Parameters", sourceParameters);
+        olla1.setBaseName("Parameters", "NIVEL_OLLA_1", "Parameters/ALTURA");
+
+        List<S88Element> copies = DuplicateElementUseCase.execute(model, olla1, 1, null, Map.of());
+
+        S88Element copy = copies.get(0);
+        assertEquals("Parameters/ALTURA", copy.getBaseName("Parameters", "NIVEL_OLLA_2"));
+    }
+
+    @Test
+    void aCopyWhoseVariablesShareABaseNameIsRefused() {
+        // Two variables of the same element answer ALTURA: a recipe addressing it could not tell
+        // which one it meant, so the copy is refused before it joins the plant.
+        Map<String, Object> sourceParameters = new LinkedHashMap<>();
+        sourceParameters.put("NIVEL_OLLA_1", bag("NIVEL_OLLA_1", 3.2f));
+        sourceParameters.put("ALTURA_OLLA_1", bag("ALTURA_OLLA_1", 1.5));
+        olla1.setProperty("Parameters", sourceParameters);
+        olla1.setBaseName("Parameters", "NIVEL_OLLA_1", "Parameters/ALTURA");
+        olla1.setBaseName("Parameters", "ALTURA_OLLA_1", "Parameters/ALTURA");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> DuplicateElementUseCase.execute(model, olla1, 1, null, Map.of()));
+
+        assertTrue(ex.getMessage().contains("ALTURA"), ex.getMessage());
+        assertTrue(model.findById("OLLA_2").isEmpty(),
+                "a refused copy leaves the plant as it was");
+    }
+
+    @Test
+    void everyCopyGetsItsOwnIdentity() {
+        List<S88Element> copies = DuplicateElementUseCase.execute(model, olla1, 2, null, Map.of());
+
+        for (S88Element copy : copies) {
+            assertNotEquals(olla1.getUid(), copy.getUid(),
+                    "a copy is another instance, so a recipe bound to the source must not reach it");
+        }
+        assertNotEquals(copies.get(0).getUid(), copies.get(1).getUid());
+    }
+
+    @Test
+    void anElementBelowTheCopiedRootAlsoGetsItsOwnIdentity() {
+        List<S88Element> copies = DuplicateElementUseCase.execute(model, olla1, 1, null, Map.of());
+
+        assertNotEquals(calentamiento.getUid(), copies.get(0).getChildren().get(0).getUid(),
+                "the module of the copy is an instance of its own, not the module of the source");
     }
 
     @Test

@@ -18,6 +18,8 @@
  */
 package org.apache.plc4x.malbec.s88.core;
 
+import org.apache.plc4x.malbec.s88.api.S88Element;
+
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -45,7 +47,7 @@ public final class NameValidator {
 
     /** Property names owned by the model rather than by the user. */
     public static final Set<String> RESERVED_PROPERTY_NAMES =
-            Set.of("xPos", "yPos", "Check", "icon", "description", "targetLevel");
+            Set.of("xPos", "yPos", "Check", "icon", "description", "targetLevel", S88Element.UID_PROPERTY);
 
     private static final Pattern ALLOWED = Pattern.compile("[A-Z0-9_]+");
 

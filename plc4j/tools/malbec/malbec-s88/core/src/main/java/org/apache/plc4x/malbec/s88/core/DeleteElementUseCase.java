@@ -32,8 +32,11 @@ public class DeleteElementUseCase {
 
 
     public static void execute(S88PlantModel model, S88Element element) {
-        if (element == null || element == model.getRoot()) {
-            return;
+        if (element == null) {
+            throw new IllegalArgumentException("Element cannot be null");
+        }
+        if (element == model.getRoot()) {
+            throw new IllegalArgumentException("The root of a plant cannot be deleted");
         }
 
         S88Element parent = element.getParent();

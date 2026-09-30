@@ -82,8 +82,27 @@ public class S88PlantModel {
         if (target == null) {
             throw new IllegalArgumentException("There is no parent to attach the element to.");
         }
+        validateChildLevel(target, child);
         target.addChild(child);
         addToIndex(child);
+    }
+
+    private void validateChildLevel(S88Element parent, S88Element child) {
+        if (parent.getLevel() == null) {
+            return;
+        }
+        S88Level expectedChildLevel = parent.getLevel().getChildLevel();
+        if (expectedChildLevel == null) {
+            throw new IllegalStateException("Cannot add a child to a leaf level");
+        }
+        if (child.getLevel() == null) {
+            throw new IllegalStateException("Child level cannot be null when parent expects "
+                    + expectedChildLevel);
+        }
+        if (child.getLevel() != expectedChildLevel) {
+            throw new IllegalStateException("Child level " + child.getLevel()
+                    + " does not match expected " + expectedChildLevel);
+        }
     }
 
     /**
@@ -305,6 +324,38 @@ public class S88PlantModel {
 
     public Optional<S88Element> findById(String id) {
         return Optional.ofNullable(idMap.get(id));
+    }
+
+    /**
+     * Finds an element by its stable identity.
+     * <p>
+     * Unlike {@link #findById(String)}, this lookup survives a rename: the uid never changes, so
+     * a recipe can keep addressing the element it was bound to.
+     *
+     * @param uid uid of the element, may be {@code null}
+     * @return the element, or {@link Optional#empty()} when no element carries that uid
+     */
+    public Optional<S88Element> findByUid(String uid) {
+        if (uid == null || uid.isBlank()) {
+            return Optional.empty();
+        }
+        return findByUid(root, uid);
+    }
+
+    private Optional<S88Element> findByUid(S88Element element, String uid) {
+        if (element == null) {
+            return Optional.empty();
+        }
+        if (uid.equals(element.getUid())) {
+            return Optional.of(element);
+        }
+        for (S88Element child : element.getChildren()) {
+            Optional<S88Element> found = findByUid(child, uid);
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+        return Optional.empty();
     }
 
 

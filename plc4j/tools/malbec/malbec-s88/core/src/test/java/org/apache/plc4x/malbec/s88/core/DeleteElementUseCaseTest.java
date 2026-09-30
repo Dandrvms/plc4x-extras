@@ -56,7 +56,7 @@ class DeleteElementUseCaseTest {
 
     @Test
     void testExecuteDoesNotDeleteRoot() {
-        DeleteElementUseCase.execute(model, root);
+        assertThrows(IllegalArgumentException.class, () -> DeleteElementUseCase.execute(model, root));
         verify(model, never()).fireChangeEvent(any(S88ChangeEvent.class));
     }
 }

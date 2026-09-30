@@ -103,8 +103,14 @@ public final class DuplicateElementUseCase {
         List<String> ids = BaseNameSupport.nextIds(model, source, copies);
         S88Element parent = source.getParent();
         int insertAt = parent.getChildren().indexOf(source) + 1;
-        for (int i = 0; i < ids.size(); i++) {
-            S88Element copy = cloneSubtree(source, ids.get(i), source.getId(), ids.get(i), baseNameOverrides);
+        List<S88Element> copiesToAttach = new ArrayList<>();
+        for (String id : ids) {
+            S88Element copy = cloneSubtree(source, id, source.getId(), id, baseNameOverrides);
+            rejectAmbiguousBaseNames(copy);
+            copiesToAttach.add(copy);
+        }
+        for (int i = 0; i < copiesToAttach.size(); i++) {
+            S88Element copy = copiesToAttach.get(i);
             parent.addChild(insertAt + i, copy);
             if (model != null) {
                 model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.ADDED, copy));
@@ -117,6 +123,32 @@ public final class DuplicateElementUseCase {
             model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.RELOADED, source));
         }
         return created;
+    }
+
+    /**
+     * Refuses a copy whose variables answer two of them to the same base name.
+     * <p>
+     * A class recipe addresses variables by base name, so a copy where one base name is answered
+     * by more than one variable cannot be bound to it: the recipe would not know which variable it
+     * meant. The copy is refused before it reaches the plant rather than left ambiguous.
+     *
+     * @param element element of the copy being built
+     * @throws IllegalStateException when any base name of the element is answered more than once
+     */
+    private static void rejectAmbiguousBaseNames(S88Element element) {
+        List<BaseNameResolver.Conflict> conflicts = BaseNameResolver.validate(element);
+        if (conflicts.isEmpty()) {
+            return;
+        }
+        StringBuilder message = new StringBuilder("Element '" + element.getId()
+                + "' cannot be added because a recipe could not tell its variables apart:");
+        for (BaseNameResolver.Conflict conflict : conflicts) {
+            message.append(System.lineSeparator()).append("  - ").append(conflict);
+        }
+        message.append(System.lineSeparator())
+                .append("Give the variables different base names, or remove the ones this element "
+                        + "does not need.");
+        throw new IllegalStateException(message.toString());
     }
 
     /**
@@ -470,18 +502,26 @@ public final class DuplicateElementUseCase {
     }
 
     /**
-     * The base name a variable of {@code source} is derived from: the override the user chose for
-     * this very container and variable when one exists, otherwise the suggested base name.
+     * The base name a variable of {@code source} is derived from.
+     * <p>
+     * The base name the user chose for this very variable in the dialog wins, because it is the
+     * decision taken last. Otherwise the one the source already recorded is kept: a recipe bound to
+     * that base name would otherwise stop answering on the copy, whose variable is published under
+     * another name. Only a variable that carries no recorded base name has one derived from its name.
      */
     private static String baseName(String container, S88Element source, String variable, String elementId,
                                    Map<String, String> baseNameOverrides) {
         if (baseNameOverrides != null) {
             String override = baseNameOverrides.get(container + "/" + variable);
             if (override != null && !override.isBlank()) {
-                String normalized = override.trim().toUpperCase(Locale.ROOT);
                 NameValidator.validate(override, "Base name");
-                return normalized;
+                return override.trim().toUpperCase(Locale.ROOT);
             }
+        }
+        String recorded = source.getBaseName(container, variable);
+        String fromRecord = BaseNameSupport.baseNameOf(recorded);
+        if (fromRecord != null && !fromRecord.isBlank()) {
+            return fromRecord;
         }
         return BaseNameSupport.suggestBaseName(variable, elementId);
     }

@@ -279,7 +279,7 @@ class S88PlantModelTest {
     void addChildAttachesTheChildUnderItsParentAndIndexesIt() {
         S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
         S88PlantModel model = new S88PlantModel(root);
-        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.PROCESSCELL);
 
         model.addChild(root, child);
 
@@ -293,7 +293,7 @@ class S88PlantModelTest {
     void addChildUnderANullParentAttachesToTheRoot() {
         S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
         S88PlantModel model = new S88PlantModel(root);
-        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.PROCESSCELL);
 
         model.addChild(null, child);
 
@@ -304,7 +304,7 @@ class S88PlantModelTest {
     void addChildCanBeRepeatedBecauseIndexingIsByIdentity() {
         S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
         S88PlantModel model = new S88PlantModel(root);
-        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
+        S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.PROCESSCELL);
 
         model.addChild(root, child);
         // the ADDED event the use cases fire after attaching re-indexes the very same element
@@ -313,6 +313,29 @@ class S88PlantModelTest {
         assertTrue(model.getDuplicateIds().isEmpty(),
                 "re-indexing the same element must not count it as a duplicate");
         assertSame(child, model.findById("TANQUE_1").orElseThrow());
+    }
+
+    @Test
+    void findByUidReachesAnElementWhereverItSits() {
+        S88Element root = new S88Element("uid-root").setId("PLANTA").setLevel(S88Level.AREA);
+        S88Element cell = new S88Element("uid-cell").setId("PC_1").setLevel(S88Level.PROCESSCELL);
+        S88Element unit = new S88Element("uid-unit").setId("TANQUE_1").setLevel(S88Level.UNIT);
+        root.addChild(cell);
+        cell.addChild(unit);
+        S88PlantModel model = new S88PlantModel(root);
+
+        assertSame(unit, model.findByUid("uid-unit").orElseThrow());
+        assertSame(cell, model.findByUid("uid-cell").orElseThrow());
+        assertSame(root, model.findByUid("uid-root").orElseThrow());
+    }
+
+    @Test
+    void findByUidFindsNothingForAnUnknownOrMissingUid() {
+        S88PlantModel model = new S88PlantModel(new S88Element("uid-root").setId("PLANTA"));
+
+        assertTrue(model.findByUid("uid-otro").isEmpty());
+        assertTrue(model.findByUid(null).isEmpty());
+        assertTrue(model.findByUid("  ").isEmpty());
     }
 
     @Test

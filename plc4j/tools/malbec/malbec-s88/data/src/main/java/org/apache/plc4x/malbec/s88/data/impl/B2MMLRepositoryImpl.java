@@ -159,7 +159,8 @@ public class B2MMLRepositoryImpl implements S88Repository {
                 xml.getEquipmentLevel() != null ? xml.getEquipmentLevel().getStringValue() : "");
 
 
-        S88Element element = new S88Element();
+        String storedUid = readStoredUid(xml);
+        S88Element element = storedUid != null ? new S88Element(storedUid) : new S88Element();
         element.setId(xml.getID() != null ? xml.getID().getStringValue() : "unknown");
         element.setLevel(level);
 
@@ -198,6 +199,12 @@ public class B2MMLRepositoryImpl implements S88Repository {
         if (desc != null && !String.valueOf(desc).isEmpty()) {
             equipment.addNewDescription().setStringValue(String.valueOf(desc));
         }
+
+        // The uid is written as a reserved property rather than as PhysicalAssetID: that B2MML
+        // field means the physical asset an equipment is made of, while the uid identifies this
+        // element inside the plant, and the two are not the same thing.
+        writeProperty(equipment.addNewEquipmentProperty(), element, null,
+                S88Element.UID_PROPERTY, element.getUid());
 
         for (var entry : element.getProperties().entrySet()) {
             writeProperty(equipment.addNewEquipmentProperty(), element, null, entry.getKey(), entry.getValue());
@@ -323,10 +330,39 @@ public class B2MMLRepositoryImpl implements S88Repository {
         }
     }
 
+    /**
+     * Reads the uid the plant file carries for an element.
+     * <p>
+     * A file written before the uid existed has none, and a file edited by hand may carry a blank
+     * one. In both cases the element gets a freshly generated uid, which is better than refusing to
+     * open the plant: the uid only has to be stable from the moment the element is loaded.
+     *
+     * @param xml equipment as stored
+     * @return the stored uid, or {@code null} when the element has none to restore
+     */
+    private String readStoredUid(EquipmentType xml) {
+        for (EquipmentPropertyType prop : xml.getEquipmentPropertyArray()) {
+            if (prop.getID() == null || !S88Element.UID_PROPERTY.equals(prop.getID().getStringValue())) {
+                continue;
+            }
+            Object raw = readScalarValue(prop);
+            String uid = raw != null ? String.valueOf(raw).trim() : "";
+            if (!uid.isEmpty()) {
+                return uid;
+            }
+        }
+        return null;
+    }
+
     private void buildProperties(EquipmentPropertyType[] properties, S88Element element) {
         for (EquipmentPropertyType prop : properties) {
             if (prop.getID() == null) continue;
             String name = prop.getID().getStringValue();
+            // The reserved uid property belongs to the element, not to its property bag, so it is
+            // never published as a variable the editor or a recipe could address.
+            if (S88Element.UID_PROPERTY.equals(name)) {
+                continue;
+            }
             element.setProperty(name, readPropertyValue(prop, element));
             if (!S88PlantModel.isContainerKey(name) && prop.isSetEquipmentClassPropertyID()) {
                 // A unit attribute is a top level property, so this is where its pointer to the

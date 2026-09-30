@@ -296,6 +296,17 @@ class RenameElementUseCaseTest {
     }
 
     @Test
+    void testTheIdentityOfAnElementSurvivesItsRename() {
+        String uidBefore = element.getUid();
+
+        RenameElementUseCase.execute(model, element, "NEW_NAME");
+
+        assertEquals(uidBefore, element.getUid(),
+                "a recipe bound to this element keeps addressing it after the rename");
+        assertEquals("NEW_NAME", element.getId());
+    }
+
+    @Test
     void testARefusedRenameLeavesTopLevelAttributesUntouched() {
         element.setProperty("NIVEL_OLDNAME", 3.2f);
         S88Element child = new S88Element().setId("CALENTAMIENTO_OLDNAME").setLevel(S88Level.EQUIPMENTMODULE);
