@@ -89,6 +89,9 @@ public class B2MMLRepositoryImpl implements S88Repository {
             for (S88ElementClass ec : tempClasses.values()) {
                 model.registerClass(ec);
             }
+            // A plant written before the ISA-88 variables existed has none, on its modules or on
+            // their types, so they are given here rather than left for the user to add by hand.
+            PlatformVariables.injectInto(model);
 
             return model;
 

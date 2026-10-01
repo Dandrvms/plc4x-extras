@@ -19,6 +19,7 @@
 
 package org.apache.plc4x.malbec.s88.plant.actions;
 
+import org.apache.plc4x.malbec.s88.api.PlatformEnumerations;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
 import org.apache.plc4x.malbec.s88.plant.panels.EnumerationDialogBuilder;
@@ -133,6 +134,9 @@ public class ManageEnumerationsAction extends AbstractAction implements ContextA
                             "Info", JOptionPane.INFORMATION_MESSAGE);
                     return;
                 }
+                if (refusePlatform(dialog, selected, "edited")) {
+                    return;
+                }
                 String name = selected.getName();
                 S88Enumeration fresh = plantModel.getModel().findEnumeration(name);
                 Map<String, Integer> current = fresh != null
@@ -162,6 +166,9 @@ public class ManageEnumerationsAction extends AbstractAction implements ContextA
                 if (selected == null) {
                     JOptionPane.showMessageDialog(dialog, "Select an enumeration set to delete.",
                             "Info", JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                if (refusePlatform(dialog, selected, "deleted")) {
                     return;
                 }
                 plantModel.getModel().unregisterEnumeration(selected.getName());
@@ -197,6 +204,34 @@ public class ManageEnumerationsAction extends AbstractAction implements ContextA
                 JOptionPane.showMessageDialog(null, "Failed to save: " + ex.getMessage(),
                         "Error", JOptionPane.ERROR_MESSAGE);
             }
+        }
+
+        /**
+         * Turns down an attempt to change one of the two enumerations the ISA-88 variables are
+         * drawn from.
+         * <p>
+         * Every equipment module of the plant publishes a state and receives a command, and the
+         * values they may take are the agreement between the batch and the module rather than a
+         * property of this installation. The order of the values is part of that agreement, since
+         * what travels on the wire is the index. Editing either one here would change what the
+         * numbers mean without anyone asking, so the two are left alone.
+         *
+         * @param dialog dialog to report on
+         * @param selected enumeration the user picked
+         * @param action what the user tried to do, for the message
+         * @return {@code true} when the enumeration belongs to the platform and the action was
+         *         refused
+         */
+        private static boolean refusePlatform(JDialog dialog, S88Enumeration selected, String action) {
+            if (!PlatformEnumerations.isPlatformEnumeration(selected.getName())) {
+                return false;
+            }
+            JOptionPane.showMessageDialog(dialog,
+                    "'" + selected.getName() + "' belongs to the ISA-88 model: every equipment module"
+                            + " publishes it, and its values are the agreement with the module, so it"
+                            + " cannot be " + action + ".",
+                    "Info", JOptionPane.INFORMATION_MESSAGE);
+            return true;
         }
     }
 }

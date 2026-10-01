@@ -18,6 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.core;
 
+import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 
 import java.util.Optional;
@@ -122,6 +123,7 @@ public final class NameValidator {
      * @throws IllegalArgumentException when the name breaks a rule and is not reserved
      */
     public static void validateProperty(String name) {
+        rejectPlatformName(name);
         if (isReservedProperty(name)) {
             return;
         }
@@ -140,9 +142,30 @@ public final class NameValidator {
      * @throws IllegalArgumentException when the name breaks a rule and is not reserved
      */
     public static void validateEntry(String containerKey, String entryKey) {
+        rejectPlatformName(entryKey);
         if (containerKey == null && isReservedProperty(entryKey)) {
             return;
         }
         validate(entryKey, "Entry name");
+    }
+
+    /**
+     * Refuses a name the platform already publishes.
+     * <p>
+     * The ISA-88 variables belong to the equipment module, not to the engineer defining the
+     * plant, and every module already has them. A variable the user defines under one of those
+     * names would sit next to the platform one and the two would be told apart by nothing, so the
+     * name is refused instead and the user picks another. Only the base names are refused: a longer
+     * name that happens to start with one of them, such as a bit selector called
+     * {@code STATE_MACHINE_SELECT}, collides with nothing and is left alone.
+     *
+     * @param name candidate name, may be {@code null}
+     * @throws IllegalArgumentException when the name is one of the platform variables
+     */
+    private static void rejectPlatformName(String name) {
+        PlatformVariable.find(name).ifPresent(variable -> {
+            throw new IllegalArgumentException("'" + name + "' is a variable every equipment module"
+                    + " already publishes, so it cannot be defined here. Pick another name.");
+        });
     }
 }

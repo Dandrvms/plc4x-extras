@@ -350,6 +350,139 @@ class B2MMLRepositoryImplTest {
         assertEquals("Root-123_Area", loaded.getRoot().getId());
     }
 
+    // ========== Round-trip: ISA-88 platform variables ==========
+
+    @Test
+    void roundTripKeepsTheIsa88VariablesOfAModule() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("PLANTA", S88Level.AREA);
+        S88Element unit = element("TANQUE_1", S88Level.UNIT);
+        S88Element em = element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE);
+        unit.addChild(em);
+        root.addChild(unit);
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        S88Element loadedEm = loaded.findById("CALENTAMIENTO_TANQUE_1").orElseThrow();
+        assertTrue(loadedEm.getStructuredProperty("Reports").containsKey("STATE_CALENTAMIENTO_TANQUE_1"),
+                loadedEm.getStructuredProperty("Reports").toString());
+        assertTrue(loadedEm.getStructuredProperty("Parameters").containsKey("COMMAND_CALENTAMIENTO_TANQUE_1"));
+        assertEquals("Reports/STATE", loadedEm.getBaseName("Reports", "STATE_CALENTAMIENTO_TANQUE_1"),
+                "the base name survives the trip, so a recipe resolves it on the loaded plant too");
+        assertEquals("IDLE", ((Map<?, ?>) loadedEm.getStructuredProperty("Reports")
+                .get("STATE_CALENTAMIENTO_TANQUE_1")).get("Default"));
+    }
+
+    @Test
+    void aModuleStoredWithoutThemGetsThemOnTheWayIn() throws XmlException, IOException {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("PLANTA", S88Level.AREA);
+        S88Element unit = element("TANQUE_1", S88Level.UNIT);
+        S88Element em = element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE);
+        unit.addChild(em);
+        root.addChild(unit);
+        repo.savePlant(model(root));
+        // A plant written before the variables existed: a module with no Reports and no Parameters.
+        storage.data = withoutPlatformVariables(storage.data);
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded);
+        S88Element loadedEm = loaded.findById("CALENTAMIENTO_TANQUE_1").orElseThrow();
+        assertTrue(loadedEm.getStructuredProperty("Reports").containsKey("STATE_CALENTAMIENTO_TANQUE_1"),
+                "the module is given the variables on the way in, rather than being left for the user"
+                        + " to add by hand");
+    }
+
+    @Test
+    void loadingTwiceDoesNotDuplicateThePlatformVariables() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("PLANTA", S88Level.AREA);
+        S88Element unit = element("TANQUE_1", S88Level.UNIT);
+        unit.addChild(element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE));
+        root.addChild(unit);
+        repo.savePlant(model(root));
+
+        S88Element loadedEm = repo.loadPlant().findById("CALENTAMIENTO_TANQUE_1").orElseThrow();
+        int afterFirst = loadedEm.getStructuredProperty("Reports").size();
+
+        S88Element loadedAgain = repo.loadPlant().findById("CALENTAMIENTO_TANQUE_1").orElseThrow();
+
+        assertEquals(afterFirst, loadedAgain.getStructuredProperty("Reports").size());
+        assertTrue(loadedAgain.getBaseNames().keySet().size() <= loadedAgain.getStructuredProperty("Reports").size() + 1,
+                "and the pointers recorded on the second load are still one per variable, rather than"
+                        + " one variable answering a base name twice, which is what would make a"
+                        + " recipe ambiguous");
+    }
+
+    @Test
+    void aUnitCarriesNoIsa88VariablesOfItsOwn() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("PLANTA", S88Level.AREA);
+        S88Element unit = element("TANQUE_1", S88Level.UNIT);
+        unit.addChild(element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE));
+        root.addChild(unit);
+        repo.savePlant(model(root));
+
+        S88Element loadedUnit = repo.loadPlant().findById("TANQUE_1").orElseThrow();
+
+        assertNull(loadedUnit.getProperties().get("Reports"),
+                "a unit does not execute anything, so it reports no state of its own");
+    }
+
+    @Test
+    void theTwoEnumerationsTravelWithThePlant() {
+        var storage = new InMemoryStorage();
+        var repo = newRepo(storage);
+
+        S88Element root = element("PLANTA", S88Level.AREA);
+        root.addChild(element("TANQUE_1", S88Level.UNIT));
+        repo.savePlant(model(root));
+
+        S88PlantModel loaded = repo.loadPlant();
+        assertNotNull(loaded.findEnumeration("STATE"),
+                "the plant file carries the values a module may report, so whoever compiles it"
+                        + " knows the vocabulary without reading the code");
+        assertNotNull(loaded.findEnumeration("COMMAND"));
+        assertTrue(loaded.findEnumeration("STATE").getValues().containsKey("COMPLETE"));
+    }
+
+    /**
+     * Removes the Parameters and Reports containers of every equipment module, imitating a plant
+     * written before the ISA-88 variables were part of the model.
+     */
+    private static byte[] withoutPlatformVariables(byte[] stored) throws XmlException, IOException {
+        EquipmentInformationDocument doc = EquipmentInformationDocument.Factory.parse(
+                new ByteArrayInputStream(stored));
+        for (EquipmentType type : doc.getEquipmentInformation().getEquipmentArray()) {
+            stripPlatformVariables(type);
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        doc.save(out);
+        return out.toByteArray();
+    }
+
+    private static void stripPlatformVariables(EquipmentType type) {
+        String level = type.getEquipmentLevel() != null
+                ? type.getEquipmentLevel().getStringValue() : "";
+        if ("EquipmentModule".equals(level)) {
+            while (type.sizeOfEquipmentPropertyArray() > 0) {
+                type.removeEquipmentProperty(0);
+            }
+        }
+        for (EquipmentType child : type.getEquipmentChildArray()) {
+            stripPlatformVariables(child);
+        }
+    }
+
     // ========== Error Handling ==========
 
     @Test

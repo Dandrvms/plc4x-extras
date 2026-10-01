@@ -24,6 +24,7 @@ import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.PlatformVariables;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -67,6 +68,13 @@ public class CreateElementUseCase {
         }
 
         S88ElementClass elementClass = resolveClass(model, targetParent, id, childLevel, s88ElementClass);
+        // The type states what every module of it publishes, so the ISA-88 variables are declared
+        // on it before the element is built from it: the module then receives them the same way it
+        // receives the rest of the type, and its siblings are not left without them.
+        if (model != null) {
+            PlatformVariables.ensureEnumerations(model);
+        }
+        PlatformVariables.injectIntoClass(elementClass);
 
         S88Element child =
                 new S88Element()

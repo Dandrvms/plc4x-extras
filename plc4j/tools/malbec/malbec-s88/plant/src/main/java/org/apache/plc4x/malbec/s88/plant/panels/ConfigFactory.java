@@ -19,6 +19,7 @@
 
 package org.apache.plc4x.malbec.s88.plant.panels;
 
+import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88ChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
@@ -367,6 +368,9 @@ public class ConfigFactory {
                     if (row < 0) {
                         return;
                     }
+                    if (isPlatformRow(paramsTable, row)) {
+                        return;
+                    }
                     String name = String.valueOf(paramsTable.getValueAt(row, 0));
                     S88Element live = currentElement(model, element);
                     Map<String, Object> params = live.getStructuredProperty("Parameters");
@@ -405,6 +409,9 @@ public class ConfigFactory {
                 if(e.getClickCount() == 2){
                     int row = reportsTable.rowAtPoint(e.getPoint());
                     if (row < 0) {
+                        return;
+                    }
+                    if (isPlatformRow(reportsTable, row)) {
                         return;
                     }
                     String name = String.valueOf(reportsTable.getValueAt(row, 0));
@@ -525,6 +532,23 @@ public class ConfigFactory {
         tableModel.setRowCount(0);
         int columnCount = tableModel.getColumnCount();
         iterate(element, tableModel, columnCount, null, null);
+    }
+
+    /**
+     * Whether a row is one of the ISA-88 variables every module publishes.
+     * <p>
+     * Those rows are listed so the plant file can be read, but they belong to the model rather than
+     * to the engineer, so the editor opens nothing for them. A row is recognised by the base name
+     * it carries, which is the same on every module of the plant, rather than by its concrete name,
+     * which is qualified with the id of this one.
+     *
+     * @param table table the row is in
+     * @param row   row to inspect
+     * @return {@code true} when the row is a platform variable
+     */
+    private static boolean isPlatformRow(JTable table, int row) {
+        Object baseName = table.getValueAt(row, 1);
+        return baseName != null && PlatformVariable.isPlatformName(String.valueOf(baseName));
     }
 
     private static void updateEMTableData(S88Element element, DefaultTableModel tableModel, String propertyName) {

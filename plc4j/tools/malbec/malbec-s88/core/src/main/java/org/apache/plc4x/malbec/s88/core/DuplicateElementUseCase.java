@@ -23,6 +23,7 @@ import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.PlatformVariables;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -90,6 +91,14 @@ public final class DuplicateElementUseCase {
             throw new IllegalArgumentException("Number of copies cannot be negative.");
         }
         guardDuplicableLevel(source);
+
+        // A module that predates the ISA-88 variables is given them, and so is the type of every
+        // module below it, before any schema is derived: the type then declares them and the copy
+        // inherits the same contract as its source instead of being one variable short of it.
+        if (model != null) {
+            PlatformVariables.ensureEnumerations(model);
+        }
+        PlatformVariables.injectIntoSubtree(source);
 
         S88ElementClass type = ensureClass(model, source, typeName, baseNameOverrides, source.getId());
         ensureChildClasses(model, source, baseNameOverrides);
