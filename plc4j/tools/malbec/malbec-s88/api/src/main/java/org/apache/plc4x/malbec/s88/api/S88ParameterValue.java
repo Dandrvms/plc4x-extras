@@ -25,10 +25,7 @@ import java.util.List;
 /**
  * One value of an {@link S88RecipeParameter}.
  * <p>
- * The text is kept as written rather than parsed. A recipe is written once and read by things that
- * were not there when it was written, so the value a parameter holds depends on what it is applied
- * to and on where the recipe was read, and deciding that here would commit the model to an answer
- * it does not have. What this does carry is everything needed to check the value later: the
+ * This carries everything needed to check the value later: the
  * {@link S88DataInterpretation} that says how to read the text, the {@link DataType} of the
  * variable it is aimed at, the unit, and the enumeration it is drawn from.
  */

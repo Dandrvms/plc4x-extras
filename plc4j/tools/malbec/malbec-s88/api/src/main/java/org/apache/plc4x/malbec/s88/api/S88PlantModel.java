@@ -52,9 +52,6 @@ public class S88PlantModel {
             if (indexed == null) {
                 idMap.put(id, element);
             } else if (indexed != element) {
-                // Keep the first occurrence addressable so that the element the user reached
-                // first stays reachable, and record the clash instead of failing the load:
-                // a plant written by other tools may legitimately arrive already broken.
                 duplicateIds.add(id);
             }
         }
@@ -209,12 +206,8 @@ public class S88PlantModel {
     public static final String REPORTS = "Reports";
 
     /**
-     * The properties whose value is a map of named entries, each entry being a variable, as
-     * opposed to the unit attributes published at the top level of an element.
+     * The properties whose value is a map of named entries, each entry being a variable.
      * <p>
-     * The distinction decides how a property is stored: a variable is re-suffixed with the id of
-     * the instance that owns it and keeps a base name keyed by its container, while an attribute is
-     * called what it is and keeps its base name at the top level of the element.
      */
     public static final Set<String> CONTAINER_KEYS = Set.of(PARAMETERS, REPORTS);
 
@@ -385,8 +378,6 @@ public class S88PlantModel {
     }
 
     private void removeFromIndex(S88Element element) {
-        // Only drop the id when the indexed element really is the one being removed: while a plant
-        // holds duplicated ids, removing one of them must not evict the other from the index.
         if (element.getId() != null && idMap.get(element.getId()) == element) {
             idMap.remove(element.getId());
         }

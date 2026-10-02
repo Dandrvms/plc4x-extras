@@ -22,9 +22,9 @@ package org.apache.plc4x.malbec.s88.api;
  * One end of an {@link S88ProcedureLink}, given as a name plus what to read it as and where to
  * look for it.
  * <p>
- * The recipe format writes the two ends of a link with the same three fields, so they are one type
- * here rather than a pair of near identical ones. {@link S88IdRefType} says whether the name
- * belongs to a box or a bar, and {@link S88IdScope} says whether to look for it inside this
+ * The recipe format writes the two ends of a link with the same three fields.
+ * {@link S88IdRefType} says whether the name belongs to a box or a bar, and
+ * {@link S88IdScope} says whether to look for it inside this
  * procedure or somewhere outside it.
  */
 public class S88IdRef {

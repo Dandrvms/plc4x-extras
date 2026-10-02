@@ -35,7 +35,7 @@ import java.util.Set;
 /**
  * Use Case to turn an element into an equipment type by giving it a class and producing copies of it.
  * <p>
- * Copying is the only way into a type: for the copies to be interchangeable the model needs a named
+ * Copying is one of two ways into a type: for the copies to be interchangeable the model needs a named
  * contract to attach them to, so the source element is either attached to an existing class or a new
  * class is derived from its variables under the type name, and every copy joins that class too.
  * Reusing a class never discards what the source already publishes either: base names present in the
@@ -52,7 +52,7 @@ import java.util.Set;
  * ({@code CALENTAMIENTO_OLLA} in the example), so the copies of a unit share the modules that make
  * it up instead of carrying free-shaped ones.
  * <p>
- * Nothing is propagated afterwards: mutating a variable of one instance changes only that instance,
+ * Nothing is propagated afterward: mutating a variable of one instance changes only that instance,
  * the class is a contract for the batch engine, not a source of updates.
  */
 public final class DuplicateElementUseCase {
@@ -92,9 +92,7 @@ public final class DuplicateElementUseCase {
         }
         guardDuplicableLevel(source);
 
-        // A module that predates the ISA-88 variables is given them, and so is the type of every
-        // module below it, before any schema is derived: the type then declares them and the copy
-        // inherits the same contract as its source instead of being one variable short of it.
+
         if (model != null) {
             PlatformVariables.ensureEnumerations(model);
         }
@@ -126,8 +124,7 @@ public final class DuplicateElementUseCase {
             }
             created.add(copy);
         }
-        // The base names of the source and the class membership changed too, so the tree listeners
-        // get a single sync after the batch instead of one per variable edited.
+
         if (model != null) {
             model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.RELOADED, source));
         }
@@ -139,7 +136,7 @@ public final class DuplicateElementUseCase {
      * <p>
      * A class recipe addresses variables by base name, so a copy where one base name is answered
      * by more than one variable cannot be bound to it: the recipe would not know which variable it
-     * meant. The copy is refused before it reaches the plant rather than left ambiguous.
+     * meant. The copy is refused before it reaches the plant.
      *
      * @param element element of the copy being built
      * @throws IllegalStateException when any base name of the element is answered more than once

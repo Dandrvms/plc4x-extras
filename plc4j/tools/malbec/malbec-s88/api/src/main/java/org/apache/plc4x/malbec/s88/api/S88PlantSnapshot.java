@@ -28,19 +28,17 @@ import java.util.Set;
 /**
  * The plant as it was when a set of recipes was started, seen read only.
  * <p>
- * A recipe is written against a plant, and the plant keeps being edited afterwards. Someone renames
+ * A recipe is written against a plant, and the plant keeps being edited afterward. Someone renames
  * a module, or adds a variable to a class, and a recipe that was correct an hour ago now names
  * something that is not there. Taking the plant as it stood when the recipes were written settles
- * that: the recipes are checked against the same thing every time, and a plant edited afterwards
+ * that: the recipes are checked against the same thing every time, and a plant edited
  * does not silently change what an approved recipe means.
  * <p>
  * The plant handed to this is taken over by the snapshot. Whatever the caller had it becomes
  * unreachable except through here, which is what makes holding one worth something, and
  * {@code PlantSnapshotUseCase} is what hands it a plant of its own.
  * <p>
- * It is a snapshot of one moment, not a record. A plant changed afterwards is not re-read into it,
- * because the point of it is to stop that from happening quietly. A plant whose recipes are now in
- * question needs the difference worked out deliberately, not absorbed.
+ * A plant changed is not re-read into it.
  */
 public class S88PlantSnapshot {
 
@@ -73,8 +71,7 @@ public class S88PlantSnapshot {
      * The plant this snapshot holds.
      * <p>
      * Exposed because a caller has to be able to walk the hierarchy to find the elements a recipe
-     * names, and there is no read only tree to look at instead. Nothing here offers a reason to
-     * change anything: this plant belongs to this snapshot and to nothing else.
+     * names, and there is no read only tree to look at instead.
      */
     public S88PlantModel getPlant() {
         return plant;

@@ -21,10 +21,9 @@ package org.apache.plc4x.malbec.s88.api;
 /**
  * What an {@link S88ProcedureLink} means between the two things it joins.
  * <p>
- * This is where the shape of the flow is written down rather than left to be guessed: a link
+ * This is where the shape of the flow is written down: a link
  * marked {@link #PARALLEL_DIVERGENT} says the two sides run at the same time, and one marked
- * {@link #SERIAL_DIVERGENT} says they run one after the other. Whoever runs the recipe reads this
- * instead of working out forks and joins from how many links share an endpoint.
+ * {@link #SERIAL_DIVERGENT} says they run one after the other. Whoever runs the recipe reads this.
  */
 public enum S88LinkType {
     /** The flow is waiting for a transition to fire. */

@@ -18,8 +18,6 @@
  */
 package org.apache.plc4x.malbec.s88.api;
 
-import java.util.List;
-
 /**
  * A master recipe that has been set for one batch and is on its way to the equipment.
  * <p>
@@ -27,13 +25,6 @@ import java.util.List;
  * makes it different from every other recipe on disk: a master recipe may be edited and reused as
  * often as the process needs, while a control recipe belongs to one run and is what the plant is
  * working on right now.
- * <p>
- * A control recipe is always addressed for particular equipment, whatever the master recipe it came
- * from was written for. That is the point of it: a master written by class still has to name real
- * modules before anything can run, and this is the recipe where that happens. The kind is therefore
- * forced here rather than taken from the master, so that a control recipe that somehow arrived
- * claiming to be addressed by class is corrected on load instead of being run as something that
- * could not work.
  */
 public class S88ControlRecipe extends S88MasterRecipe {
 
@@ -47,12 +38,7 @@ public class S88ControlRecipe extends S88MasterRecipe {
     private String batchId;
 
     /**
-     * A control recipe is set for particular equipment, and that is what it defaults to.
-     * <p>
-     * The rule is not enforced from here on purpose. It belongs to whatever sets a control recipe
-     * for a batch, which is where the decision is actually made; a class placed on the data would
-     * apply it to every control recipe constructed anywhere, including the one a reader builds from
-     * a file that says otherwise, and would quietly turn a mistake into a recipe that looks fine.
+     * A control recipe is set for particular equipment.
      */
     public S88ControlRecipe() {
         this(null, null);

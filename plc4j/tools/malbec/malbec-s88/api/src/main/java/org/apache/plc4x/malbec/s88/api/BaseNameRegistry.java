@@ -27,9 +27,7 @@ import java.util.Map;
  * name.
  * <p>
  * A base name is the identifier a recipe addresses within an equipment type, so that the variable
- * can be found even when its concrete name was given something else. Keeping the mapping here,
- * apart from the element, gives the recipe modules one contract to resolve against instead of
- * reading a nested map out of the plant model.
+ * can be found even when its concrete name was given something else.
  * <p>
  * A {@code null} container addresses a top level property and is stored under the empty key.
  * Instances are not thread safe; the plant model is edited from one thread at a time.

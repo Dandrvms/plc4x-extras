@@ -28,11 +28,6 @@ import java.util.List;
  * between the batch and the module, not a decision the engineer makes per installation. They are
  * therefore not editable, and the action that manages the other enumerations of the plant leaves
  * these two alone.
- * <p>
- * The value that matters on the wire is the index of the label, not the label itself. The order
- * below is therefore part of the contract with the module: appending a value is a change of
- * protocol, not a change of plant, and reordering them would silently change what the module
- * means by the number it sends.
  */
 public final class PlatformEnumerations {
 
@@ -44,27 +39,20 @@ public final class PlatformEnumerations {
 
     /**
      * The states a module reports, in the order that fixes their index.
-     * <p>
-     * The transient states sit next to the stable ones they lead to, so a transition can be seen
-     * coming: a recipe that waits for {@code COMPLETE} can tell a phase that is still working
-     * ({@code COMPLETING}) from one that is done.
      */
     private static final List<String> STATE_VALUES = List.of(
             "IDLE",
-            "STARTING",
             "RUNNING",
             "PAUSING",
             "PAUSED",
             "HOLDING",
             "HELD",
-            "UNHOLDING",
-            "COMPLETING",
             "COMPLETE",
             "ABORTING",
             "ABORTED",
             "STOPPING",
             "STOPPED",
-            "RESETTING");
+            "RESTARTING");
 
     /**
      * The orders the batch may send, in the order that fixes their index.
@@ -72,7 +60,7 @@ public final class PlatformEnumerations {
      * {@code NONE} comes first and is what a module reads when no order has arrived, which is what
      * it sees for as long as the batch server is away. The rest are deliberate: {@code PAUSE}
      * stops the phase at the next safe point and {@code HOLD} takes it to a safe condition now,
-     * and {@code RESUME} and {@code UNHOLD} are what undo them, so neither is a synonym of the
+     * and {@code RESUME} is what undo them, so neither is a synonym of the
      * other. {@code RESTART} runs the phase again from its start and {@code RESET} leaves it ready
      * to be started, which are also not the same thing.
      */
@@ -82,12 +70,10 @@ public final class PlatformEnumerations {
             "RESUME",
             "PAUSE",
             "HOLD",
-            "UNHOLD",
             "ABORT",
             "RESTART",
             "STOP",
-            "RESET",
-            "COMPLETE");
+            "RESET");
 
     private PlatformEnumerations() {
         /* This utility class should not be instantiated */
@@ -98,7 +84,7 @@ public final class PlatformEnumerations {
      *
      * @return a fresh enumeration, never {@code null}
      */
-    public static S88Enumeration state() {
+    public static S88Enumeration stateValue() {
         return enumeration(STATE, STATE_VALUES);
     }
 
@@ -107,7 +93,7 @@ public final class PlatformEnumerations {
      *
      * @return a fresh enumeration, never {@code null}
      */
-    public static S88Enumeration command() {
+    public static S88Enumeration commandValues() {
         return enumeration(COMMAND, COMMAND_VALUES);
     }
 

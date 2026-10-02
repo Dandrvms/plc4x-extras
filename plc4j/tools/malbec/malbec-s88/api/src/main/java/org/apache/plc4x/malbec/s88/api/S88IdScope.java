@@ -23,8 +23,7 @@ package org.apache.plc4x.malbec.s88.api;
  * <p>
  * A recipe normally refers to the steps and transitions it carries itself, which is
  * {@link #INTERNAL}. When it names something that lives outside that procedure, the reference has
- * to be resolved against the recipe or the plant instead, which is {@link #EXTERNAL}. Getting this
- * wrong is not cosmetic: it decides where the runtime looks for the thing being referred to.
+ * to be resolved against the recipe or the plant instead, which is {@link #EXTERNAL}.
  */
 public enum S88IdScope {
     /** The name is carried by the procedure logic that holds the reference. */

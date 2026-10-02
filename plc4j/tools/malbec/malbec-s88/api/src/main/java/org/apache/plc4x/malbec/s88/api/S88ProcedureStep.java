@@ -25,15 +25,14 @@ import java.util.List;
 /**
  * A box on the chart, naming the element of the plant it works on.
  * <p>
- * A step does not copy the element. It points at it by its exact name, so a box on the chart and the
+ * It points at an element by its exact name, so a box on the chart and the
  * module in the plant are recognisably the same thing by reading them. The recipe adds values to
  * the parameters of that module and reads its reports, and it does so on the element itself, which
  * two steps pointing at the same module share.
  * <p>
- * The name is the name the plant published. Nothing prefixes it, shortens it, or re-suffixes it
- * along the way, because a recipe that reads {@code HEAT} has to mean the same thing to whoever
- * wrote it, to the person looking at the plant, and to whatever runs it. A step whose element is
- * named differently from the element in the plant is a step nobody can follow.
+ * The name is the name the plant published. A recipe that reads something like {@code HEAT}
+ * has to mean the same thing to whoever wrote it, to the person looking at the plant,
+ * and to whatever runs it.
  */
 public class S88ProcedureStep {
 

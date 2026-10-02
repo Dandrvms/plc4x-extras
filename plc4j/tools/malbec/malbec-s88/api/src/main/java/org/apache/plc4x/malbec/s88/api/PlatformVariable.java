@@ -23,13 +23,11 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The variables ISA-88 every equipment module publishes, whatever the recipe asks of it.
+ * The variables every equipment module publishes, whatever the recipe asks of it.
  * <p>
  * A module runs the phase by itself, from beginning to end, and reports how it is going while the
  * batch server is free to come and go. These variables are the vocabulary of that conversation:
- * {@code COMMAND} goes down to the module, and the rest comes back up. They are declared by the
- * platform rather than by the user, so every module of the plant has the same ones with the same
- * meaning, and a recipe written against one module can be bound to another without knowing it.
+ * {@code COMMAND} goes down to the module, and the rest comes back up.
  * <p>
  * The names are published re-suffixed with the id of the module, the same way every other variable
  * of the plant is: the base name {@code STATE} of module {@code CALENTAMIENTO_TANQUE_1} is
@@ -37,8 +35,7 @@ import java.util.Optional;
  * still reaches one instance, and a recipe bound to an instance reaches it by its own name.
  * <p>
  * A unit declares none of them: a unit does not execute anything, it owns the modules that do, and
- * the state of a unit is the state of the phase running in it. That is a question for the runtime,
- * not for the plant model.
+ * the state of a unit is the state of the phase running in it.
  */
 public enum PlatformVariable {
 
@@ -125,7 +122,7 @@ public enum PlatformVariable {
     }
 
     /**
-     * Whether the variable is one the module reports rather than one it is given.
+     * Whether the variable is input or output.
      *
      * @return {@code true} when the batch reads this variable
      */
@@ -134,7 +131,7 @@ public enum PlatformVariable {
     }
 
     /**
-     * The name this variable is published under on a module.
+     * The name this variable is published.
      *
      * @param elementId id of the module, may be {@code null} or blank
      * @return the published name, e.g. {@code STATE_CALENTAMIENTO_TANQUE_1}, or the bare base name
@@ -150,11 +147,6 @@ public enum PlatformVariable {
     /**
      * The definition of the variable, as it is stored in the plant: the data type, the
      * enumeration that gives it its values and the value it starts from.
-     * <p>
-     * No maximum and no minimum: a command and a state are drawn from a fixed set of values, not
-     * from a range, so the fields the editor shows for a process parameter have no meaning here.
-     * No reference either: the module is found by the name of the variable, so the editor is not
-     * asked to map it to a tag.
      *
      * @return a fresh map holding the definition, never {@code null}
      */
@@ -200,7 +192,7 @@ public enum PlatformVariable {
     /**
      * The base name a published name answers to, read off the variable it is qualified with.
      * <p>
-     * Only the names this platform publishes are recognised, so a name that merely looks like a
+     * Only the names this platform publishes are recognized, so a name that merely looks like a
      * qualified one is left alone.
      *
      * @param publishedName name as published on a module, may be {@code null}

@@ -18,8 +18,6 @@
  */
 package org.apache.plc4x.malbec.s88.api;
 
-import java.util.List;
-
 /**
  * A recipe that is not bound to one batch: the thing an engineer writes and keeps.
  * <p>
@@ -73,9 +71,7 @@ public class S88MasterRecipe extends S88Recipe {
      * <p>
      * A file that does not say is read as {@link S88RecipeKind#CLASS}, which is the reading that
      * needs the most from the plant and therefore the one worth assuming: a recipe that says
-     * nothing about how it addresses its equipment is one that has to be bound before it can run,
-     * and a reader is better off being told that than being handed a guess that happens to work
-     * for a recipe that was really written for one particular tank.
+     * nothing about how it addresses its equipment is one that has to be bound before it can run.
      *
      * @param recipe recipe to read, may be {@code null}
      * @return the stored kind, or {@code null} when there is no recipe

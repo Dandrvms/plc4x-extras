@@ -21,11 +21,11 @@ package org.apache.plc4x.malbec.s88.api;
 
 import java.util.*;
 
-/**
- * AREA <br>
- * PROCESS CELL <br>
- * UNIT <br>
- * EQUIPMENT MODULE
+/**ISA-88 hierarchy elements. From top to bottom, each one contains the other: <p>
+ * AREA contains a: <p>
+ * PROCESS CELL which must contain one or more: <p>
+ * UNIT which must contain one or more: <p>
+ * EQUIPMENT MODULE which is made of Control modules that are not modeled here.
  */
 public class S88Element {
 
@@ -69,12 +69,13 @@ public class S88Element {
         this.uid = uid;
     }
 
-
+    /** The class/type this element belongs to **/
     public S88Element setClass(S88ElementClass elementClass){
         this.elementClass = elementClass;
         return this;
     }
 
+    /** Helper for another project **/
     public void setCheck(boolean check){
         setProperty(CHECK, check);
     }

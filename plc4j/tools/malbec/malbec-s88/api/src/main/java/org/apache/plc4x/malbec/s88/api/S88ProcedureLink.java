@@ -90,10 +90,6 @@ public class S88ProcedureLink {
 
     /**
      * Detaches one end of the line.
-     * <p>
-     * Removing an end does not tidy the line up afterwards. A line left with one end is a line in
-     * the middle of being drawn, and repairing it here would mean guessing which of the two ends
-     * was meant to go.
      */
     public void removeFrom(S88IdRef ref) {
         from.remove(ref);

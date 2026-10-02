@@ -27,13 +27,9 @@ import java.util.List;
  * <p>
  * The recipe format has no place for a handful of things this tool needs: the class of the
  * equipment a step of a {@link S88RecipeKind#CLASS} recipe applies to, where a box sits on the
- * chart, and the text of a condition whose evaluation is not written down in the recipe. Rather
- * than leave them out, they are kept here under a name, so a recipe written by hand and a recipe
- * written by this tool can be read back the same way and nothing is silently dropped.
- * <p>
- * This is a general slot, not a place where the meaning of a well known field is decided. The
- * names this tool relies on are declared as constants here, so that there is one place that says
- * what {@code EquipmentClassID} means and not a string repeated in every reader.
+ * chart, and the text of a condition whose evaluation is not written down in the recipe. They are
+ * kept here under a name, so a recipe written by hand and a recipe written by this tool can be
+ * read back the same way and nothing is silently dropped.
  */
 public class S88OtherInformation {
 
@@ -48,11 +44,6 @@ public class S88OtherInformation {
      * Whether the recipe addresses its equipment by class or by instance, held as the value of an
      * entry with this id.
      * <p>
-     * It has to be written down rather than worked out from the steps. The recipe format has no
-     * field for it, and reading it back off the steps would mean assuming that a recipe which names
-     * a class in some step and a module in another was meant to be one or the other, when the
-     * likelier reading is that whoever wrote it was part way through and had not decided. Once a
-     * recipe has been saved this is the only statement of which it is.
      */
     public static final String RECIPE_KIND = "RecipeKind";
 
@@ -65,8 +56,7 @@ public class S88OtherInformation {
 
     /**
      * The text of a condition that the recipe names but does not express, held as the value of an
-     * entry with this id. The condition of a transition in the standard is a name rather than an
-     * expression, and this is where the name is resolved into something a reader can act on.
+     * entry with this id.
      */
     public static final String CONDITION = "Condition";
 

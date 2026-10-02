@@ -191,35 +191,68 @@ class PlatformVariablesTest {
 
     @Test
     void theStateEnumerationCarriesTheTransientsBesideTheStableStates() {
-        S88Enumeration state = PlatformEnumerations.state();
+        S88Enumeration state = PlatformEnumerations.stateValue();
 
         assertEquals("IDLE", state.getValues().keySet().iterator().next(),
                 "the first value is what a module reports before anything has happened to it");
         assertTrue(state.getValues().containsKey("RUNNING"));
         assertTrue(state.getValues().containsKey("COMPLETE"));
-        assertTrue(state.getValues().containsKey("COMPLETING"),
-                "a recipe waiting for COMPLETE can tell a phase that is still working from one that is done");
         assertTrue(state.getValues().containsKey("PAUSING"));
         assertTrue(state.getValues().containsKey("ABORTING"));
+        assertTrue(state.getValues().containsKey("STOPPING"));
+        assertTrue(state.getValues().containsKey("HOLDING"),
+                "a module that is on its way somewhere says so, so a recipe waiting for PAUSED or"
+                        + " STOPPED can tell one that is still going from one that has arrived");
+        assertTrue(state.getValues().containsKey("RESTARTING"),
+                "RESTARTING is the transient of the RESTART command, which does exist, so the phase"
+                        + " says it is beginning again rather than looking stopped");
     }
 
     @Test
-    void pauseAndHoldAreNotTheSameOrderAndResumeIsNotUnhold() {
-        S88Enumeration command = PlatformEnumerations.command();
+    void theStateVocabularyIsTheOneIsa88NamesAndNoMore() {
+        S88Enumeration state = PlatformEnumerations.stateValue();
+
+        assertFalse(state.getValues().containsKey("COMPLETING"),
+                "COMPLETE is a state, not a journey to one, so a phase that has finished says"
+                        + " COMPLETE and there is nothing to distinguish on the way there");
+        assertFalse(state.getValues().containsKey("STARTING"),
+                "a phase that is beginning says RUNNING, which is what it is already doing");
+        assertFalse(state.getValues().containsKey("UNHOLDING"),
+                "there is no UNHOLD command either, so a phase coming out of a hold says RUNNING");
+        assertFalse(state.getValues().containsKey("RESETTING"),
+                "RESET leaves a phase ready to be started, and a phase that has been reset is IDLE"
+                        + " until something starts it");
+    }
+
+    @Test
+    void resumeIsWhatUndoesAPauseAndAHold() {
+        S88Enumeration command = PlatformEnumerations.commandValues();
 
         assertTrue(command.getValues().containsKey("PAUSE"));
         assertTrue(command.getValues().containsKey("HOLD"));
         assertTrue(command.getValues().containsKey("RESUME"));
-        assertTrue(command.getValues().containsKey("UNHOLD"),
-                "RESUME undoes a PAUSE and UNHOLD undoes a HOLD, so neither is a synonym of the other");
+        assertFalse(command.getValues().containsKey("UNHOLD"),
+                "RESUME is what undoes a PAUSE and what undoes a HOLD, so a second command to come"
+                        + " out of a hold would be the same thing under another name");
+    }
+
+    @Test
+    void completeIsAStateAndNotSomethingTheBatchCanOrder() {
+        S88Enumeration command = PlatformEnumerations.commandValues();
+        S88Enumeration state = PlatformEnumerations.stateValue();
+
+        assertFalse(command.getValues().containsKey("COMPLETE"),
+                "a phase finishes by itself; the batch asking it to complete would be asking it to"
+                        + " stop working, which is what STOP is for");
+        assertTrue(state.getValues().containsKey("COMPLETE"));
     }
 
     @Test
     void theIndexOfEveryValueIsFixedByItsPosition() {
-        S88Enumeration state = PlatformEnumerations.state();
+        S88Enumeration state = PlatformEnumerations.stateValue();
 
         assertEquals(0, state.getIndex("IDLE"));
-        assertEquals(1, state.getIndex("STARTING"));
+        assertEquals(1, state.getIndex("RUNNING"));
         assertEquals(state.getValues().size() - 1, state.getIndex(state.getValues().keySet()
                 .stream().toList().get(state.getValues().size() - 1)),
                 "the last value sits at the end, so adding one at the end does not move the others");

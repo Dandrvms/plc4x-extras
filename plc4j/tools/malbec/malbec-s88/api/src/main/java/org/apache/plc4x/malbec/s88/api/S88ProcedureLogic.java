@@ -28,13 +28,6 @@ import java.util.Optional;
 /**
  * The chart of a recipe: the boxes, the lines between them, and the bars the flow has to cross.
  * <p>
- * This holds the shape and nothing else. There is no notion here of which step is running, of
- * what comes next, or of whether a condition holds, and that is a deliberate limit rather than a
- * gap. The chart is saved, closed, and read back by something written later, and if this class
- * carried a notion of how to walk it then every recipe already on disk would mean whatever the
- * first version of the walker meant. Keeping it to structure is what lets the engine that runs the
- * recipe be written, corrected, or replaced without touching a recipe that was already stored.
- * <p>
  * What it does offer is lookup: given a name, find the step, the line, or the bar. That is enough
  * to draw the chart and enough to check it, and it commits to nothing about running it.
  * <p>
@@ -192,9 +185,7 @@ public class S88ProcedureLogic {
      * Endpoints of internal links that name a step or a bar this chart does not carry.
      * <p>
      * A chart whose line points at a box that is not there cannot be run, but it can still be opened
-     * and read, and the point of a recipe is usually to be edited rather than discarded. So the
-     * names are collected instead of rejected at load time, which is the same choice the plant
-     * makes when two elements turn up with the same id.
+     * and read. So the names are collected instead of rejected at load time.
      *
      * @return the names that could not be resolved, in the order they were found
      */

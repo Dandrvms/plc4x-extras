@@ -110,9 +110,8 @@ public final class BaseNameResolver {
     /**
      * The base names of a container mapped to the variable answering each one.
      * <p>
-     * Ambiguous base names are left out rather than resolved arbitrarily. A recipe that binds to
-     * this element is told about the ambiguity by {@link #validate(S88Element)} rather than
-     * receiving one of the candidates here.
+     * Ambiguous base names are left out. A recipe that binds to
+     * this element is told about the ambiguity by {@link #validate(S88Element)}.
      *
      * @param element      element owning the variables, may be {@code null}
      * @param containerKey container holding the variables, may be {@code null} for the top level

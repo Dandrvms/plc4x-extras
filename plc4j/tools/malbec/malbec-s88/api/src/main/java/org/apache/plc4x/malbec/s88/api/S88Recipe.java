@@ -49,10 +49,11 @@ public abstract class S88Recipe {
     /**
      * The calculation the recipe carries on its own, kept as the recipe wrote it.
      * <p>
-     * Nothing here works the expression out. A recipe is written once and read by something that
-     * was not there when it was written, so a model that agreed on a meaning for the expression
-     * would commit every recipe already saved to whatever the first reader of it thought. The
-     * parameters are held as text, and reading them is the business of whatever runs the recipe.
+     * Nothing here works the expression out. A recipe is written once, so a model that agreed
+     * on a meaning for the expression would commit every recipe already saved to whatever the
+     * first reader of it thought.
+     * <p>
+     * The parameters are held as text, and reading them is the business of whatever runs the recipe.
      */
     private final List<S88ParameterValue> formula = new ArrayList<>();
 

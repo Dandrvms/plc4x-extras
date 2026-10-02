@@ -117,11 +117,6 @@ public class S88RecipeParameter {
 
     /**
      * Throws the values this parameter holds away and puts these in their place.
-     * <p>
-     * The one way to do this, rather than a {@code clear} beside the getter, because the value of a
-     * parameter is one thing: a recipe that says a step is set to 75 and also says it is set to 80
-     * is a recipe that says two things, and which of them the plant would honour is a question
-     * nobody should have to guess at.
      *
      * @param newValues values to hold, ignored when {@code null}
      */

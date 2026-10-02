@@ -122,11 +122,9 @@ public final class NamingAdvisor {
      * Suggests the name an EquipmentModule would get if the structural convention were followed:
      * <code>{name}_{parentUnitId}</code>, for instance {@code CALENTAMIENTO_TANQUE_1}.
      * <p>
-     * Only EquipmentModules take part. A ProcessCell or a Unit is named freely by the plant, and
-     * appending its parent id to it would fight the user's own scheme without any downstream
-     * benefit, since their variable keys do not read the parent id. The suggestion is also left
-     * out when the last segment of the name already carries the unit's id, so a conforming name is
-     * not told to append what it already has.
+     * Only EquipmentModules take part. A ProcessCell or a Unit is named freely by the plant.
+     * The suggestion is also left out when the last segment of the name already carries the
+     * unit's id, so a conforming name is not told to append what it already has.
      *
      * @param element element being named, may be {@code null}
      * @param typedId the name the user typed, may be {@code null}
@@ -143,8 +141,6 @@ public final class NamingAdvisor {
 
         String normalized = typedId.trim().toUpperCase(Locale.ROOT);
         if (NameValidator.check(normalized, "Element ID").isPresent()) {
-            // A name the blocking validator would reject needs fixing first, not a second
-            // opinion on top of an invalid name.
             return null;
         }
 
@@ -190,8 +186,6 @@ public final class NamingAdvisor {
         }
         String normalized = typedName.trim().toUpperCase(Locale.ROOT);
         if (NameValidator.check(normalized, "Name").isPresent()) {
-            // A name the blocking validator would reject needs fixing first, not a second opinion
-            // on top of an invalid name.
             return null;
         }
 

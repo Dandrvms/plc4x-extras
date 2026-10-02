@@ -31,12 +31,6 @@ import java.util.List;
  * what the recipe is waiting for. So a condition is an address in the same form a parameter of a
  * class recipe uses, and {@link S88VariableAddress} is what reads it.
  * <p>
- * The name is kept as written rather than resolved here. Resolving it means finding the module the
- * step is applied to, and which module that is depends on the batch, not on the recipe: the same
- * recipe is set for a different tank on every run, and the recipe has to mean the same thing each
- * time. That is why the recipe names the variable and whoever runs the recipe decides what it reads
- * it from.
- * <p>
  * What the value is compared against is not in the recipe either. The recipe format carries a name
  * here, and the text of a comparison, when there is one, is kept as an
  * {@link S88OtherInformation#CONDITION} entry.

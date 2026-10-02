@@ -20,7 +20,6 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
-import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -78,7 +77,7 @@ public final class ClassConformance {
 
     /**
      * The divergence of {@code element} against the class it carries. The pointers the element
-     * already recorded are honoured, so a variable whose base name was set by hand is compared
+     * already recorded are honored, so a variable whose base name was set by hand is compared
      * under that name rather than the one its concrete name suggests.
      */
     public static ClassConformance of(S88Element element) {
@@ -116,7 +115,7 @@ public final class ClassConformance {
      * Every base name the element publishes, in the form a pointer uses: the container and the name
      * for a variable, the bare name for a top level attribute, which belongs to no container.
      * <p>
-     * The pointers the element records are honoured, so a variable whose base name was set by hand
+     * The pointers the element records are honored, so a variable whose base name was set by hand
      * appears under that name rather than the one its concrete name suggests.
      *
      * @param element element to inspect, may be {@code null}
@@ -247,8 +246,7 @@ public final class ClassConformance {
                 if (!(entry.getValue() instanceof Map<?, ?> container)) {
                     continue;
                 }
-                // A variable lives inside its container, so the container map is rebuilt with the
-                // new entry rather than the entry being published at the top level of the element.
+
                 Map<String, Object> published = new LinkedHashMap<>();
                 if (element.getProperties().get(key) instanceof Map<?, ?> existing) {
                     for (Map.Entry<?, ?> held : existing.entrySet()) {
@@ -274,9 +272,7 @@ public final class ClassConformance {
                 if (known.contains(key)) {
                     continue;
                 }
-                // The concrete name of an attribute follows the element it belongs to, the way the
-                // attributes the element already carries are named; the base name is what the
-                // class declares.
+
                 String name = BaseNameSupport.rePrefixed(key, null, element.getId());
                 element.setProperty(name, PropertyValues.deepCopy(entry.getValue()));
                 element.setBaseName(null, name, key);

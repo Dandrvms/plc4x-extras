@@ -27,8 +27,7 @@ import java.util.List;
  * <p>
  * This is the demand a step makes, as opposed to the equipment it was given. Keeping the two apart
  * is what lets a recipe written for one class of module be checked against another one: the
- * requirement says what is needed, the plant says what exists, and comparing them is a question for
- * the binding rather than something either model decides on its own.
+ * requirement says what is needed, the plant says what exists.
  */
 public class S88EquipmentRequirement {
 
@@ -53,7 +52,7 @@ public class S88EquipmentRequirement {
 
     /**
      * The conditions that narrow this requirement down, kept as the recipe wrote them. A condition
-     * here is a name rather than an expression, in the same way that the condition of a transition
+     * here is a name in the same way that the condition of a transition
      * is, so it is not evaluated at this level.
      */
     public List<String> getConstraints() {

@@ -29,15 +29,13 @@ import java.util.Optional;
  * <p>
  * <b>A step that works on equipment is called by the name that equipment has in the plant.</b> If the
  * module is called {@code HEAT} then the step is called {@code HEAT}, and the same name is what
- * {@link #getActualEquipmentIds()} and {@link #getEquipmentClassId()} carry. Nothing here prefixes
- * it, shortens it, or re-suffixes it along the way, so a row in the recipe, a box on the chart and
- * a row in the plant all read the same and are understood to be the same thing.
+ * {@link #getActualEquipmentIds()} and {@link #getEquipmentClassId()} carry.
  * <p>
- * The levels above the equipment do not have an element of the plant behind them and are named for
+ * The levels above the equipment or unit do not have an element of the plant behind them and are named for
  * themselves: a procedure is a procedure wherever it sits. {@link S88RecipeElementKind} says which
  * of the two a step is.
  * <p>
- * A step is not a copy of a module. It is that module with values given to it: the parameters say
+ * This element gives value to the properties defined in the module: the parameters say
  * what to set on it, and the bars of the chart say what has to be read back off it before moving on,
  * which is where its reports come in. Nothing the plant owns is repeated here, so a recipe stays
  * true to the plant it was written against rather than drifting into a copy of it.

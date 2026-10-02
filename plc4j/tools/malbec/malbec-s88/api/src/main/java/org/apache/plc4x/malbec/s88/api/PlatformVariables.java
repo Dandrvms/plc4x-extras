@@ -44,9 +44,8 @@ public final class PlatformVariables {
     /**
      * Whether the variables belong on an element.
      * <p>
-     * Only a module executes a phase, so only a module reports a state or receives an order. A unit
-     * owns the modules that do, and the state of a unit is the state of the module running in it,
-     * which is a question the runtime answers rather than the plant.
+     * Only an equipment module executes a phase, so only an equipment module reports a state or receives an order. A unit
+     * owns the modules that do, and the state of a unit is the state of the module running in it.
      *
      * @param element element to inspect, may be {@code null}
      * @return {@code true} when the element is an equipment module
@@ -100,11 +99,7 @@ public final class PlatformVariables {
 
     /**
      * Gives the whole plant its platform variables, together with the enumerations that give them
-     * their values.
-     * <p>
-     * This is the path a plant file takes: a module written before these variables existed has
-     * none, and the same goes for the type that describes it, so both are filled in on the way in
-     * rather than by the user having to add them.
+     * their values. This is for legacy plants or external/imported projects.
      *
      * @param model plant to complete, ignored when {@code null}
      */
@@ -122,7 +117,7 @@ public final class PlatformVariables {
      * The whole subtree is walked rather than the element alone, because the modules nested under
      * a unit are modules in their own right and each carries its own type. This runs before any
      * schema is derived, so a type built from these modules declares the variables and the copies
-     * made afterwards inherit them with the rest of the contract.
+     * made afterward inherit them with the rest of the contract.
      *
      * @param root element to walk down from, ignored when {@code null}
      */
@@ -144,10 +139,10 @@ public final class PlatformVariables {
             return;
         }
         if (model.findEnumeration(PlatformEnumerations.STATE) == null) {
-            model.registerEnumeration(PlatformEnumerations.state());
+            model.registerEnumeration(PlatformEnumerations.stateValue());
         }
         if (model.findEnumeration(PlatformEnumerations.COMMAND) == null) {
-            model.registerEnumeration(PlatformEnumerations.command());
+            model.registerEnumeration(PlatformEnumerations.commandValues());
         }
     }
 

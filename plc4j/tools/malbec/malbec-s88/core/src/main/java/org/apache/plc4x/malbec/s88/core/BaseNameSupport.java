@@ -139,9 +139,7 @@ public final class BaseNameSupport {
     }
 
     /**
-     * The base name a pointer names, with the container segment dropped. A pointer written before
-     * unit attributes were pointed at by their bare name still carries a container in front of it,
-     * and the class declares the attribute at the top level of its schema either way.
+     * The base name a pointer names, with the container segment dropped.
      *
      * @param pointer the recorded pointer, may be {@code null}
      * @return the base name, or {@code null} when there is no pointer
