@@ -37,9 +37,7 @@ public class EquipmentModuleNode extends PlantElementNode {
         return "org/apache/plc4x/malbec/s88/plant/nodes/EquipmentModule.png";
     }
 
-    // A module takes no children, so it keeps the actions every element has - including Duplicate,
-    // which fits a module into a unit - and none of the ones that would create something under it.
-    // hasChildren() is what draws that line now that the level filter lives in the parent.
+
     @Override
     protected boolean hasChildren() {
         return false;

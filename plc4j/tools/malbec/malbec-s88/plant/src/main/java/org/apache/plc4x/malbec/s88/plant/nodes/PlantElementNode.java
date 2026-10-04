@@ -140,13 +140,10 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
     @Override
     public Action[] getActions(boolean context) {
         List<Action> actions = new ArrayList<>();
-        actions.add(org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class));
-        actions.add(new ViewClassesAction().createContextAwareInstance(getLookup()));
-        actions.add(null);
-        // A leaf level holds no children, so it can neither take an element nor define a class for
-        // one: offering both would only hand the user an action that fails or produces a class with
-        // no target level. The check is on the level the node would create under, not on the node's
-        // own level, so an element is offered exactly the actions its own children could use.
+        if(equipmentLevel != S88Level.PROCESSCELL){
+            actions.add(org.openide.util.actions.SystemAction.get(org.openide.actions.OpenAction.class));
+        }
+
         if (hasChildren()) {
             actions.add(new CreatePlantElementAction().createContextAwareInstance(getLookup()));
             actions.add(new CreateClassAction().createContextAwareInstance(getLookup()));
@@ -155,15 +152,13 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
             actions.add(new DuplicateElementAction().createContextAwareInstance(getLookup()));
         }
         actions.add(null);
+        actions.add(new ViewClassesAction().createContextAwareInstance(getLookup()));
         actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-plant-element/Actions"));
         actions.add(new PropertiesAction().createContextAwareInstance(getLookup()));
         return actions.toArray(new Action[0]);
     }
     
-    /**
-     * Whether an element or a class can be created under this one: only a level that has a child
-     * level can hold either.
-     */
+
     protected boolean hasChildren() {
         return equipmentLevel != null && equipmentLevel.getChildLevel() != null;
     }
@@ -188,10 +183,7 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
         if (model == null) {
             return false;
         }
-        // The Explorer has already closed its own rename editor by the time it calls us, so the
-        // exchange is handed to a dialog of our own: a name the use cases reject has to be fixed
-        // there, with the window still open, instead of leaving a label that no longer matches the
-        // model.
+
         if (!RenameElementDialog.rename(null, model, currentElement, newID)) {
             return false;
         }
@@ -256,8 +248,7 @@ public class PlantElementNode extends AbstractNode implements ChangeListener {
 
     @Override
     public void setName(String newName) {
-        // Only let the Explorer keep the new label when the model really took the new id, so a
-        // rejected name cannot leave the tree showing something the plant does not contain.
+
         if (updateEquipmentID(newName)) {
             super.setName(newName);
         } else {

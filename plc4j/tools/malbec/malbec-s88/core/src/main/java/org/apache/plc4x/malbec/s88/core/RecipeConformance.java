@@ -39,20 +39,8 @@ import java.util.Set;
 /**
  * How far a recipe has drifted away from holding together.
  * <p>
- * The counterpart of {@link ClassConformance} for the other side of the model: that one measures an
- * element against the class it belongs to, and this one measures a recipe against itself. A recipe
- * is written by hand, saved half finished, and reopened in order to be finished, so most of what is
- * reported here is not a failure but a recipe part way through being written. That is why the
- * result is a report and not an exception, and why an incomplete recipe is still loaded and editable.
- * <p>
- * What is reported is only what can be seen from the recipe alone. Whether the steps name equipment
- * and variables that exist in the plant is a different question, asked by
- * {@code ResolveRecipeUseCase} against a loaded plant, and a recipe is judged here before it has ever
- * met one.
- * <p>
- * The state is derived, never stored, exactly as in {@link ClassConformance}: it is read off the
- * recipe every time it is asked for, so a recipe that is edited in memory cannot go stale against
- * the verdict it was given when it was read.
+ * A recipe is written by hand, saved half finished, and reopened in order to be finished, so
+ * most of what is reported here is not a failure but a recipe part way through being written.
  */
 public final class RecipeConformance {
 
@@ -144,9 +132,7 @@ public final class RecipeConformance {
      * <p>
      * The three ways a step can be wrong here are kept apart because they are three different
      * mistakes. Naming neither leaves nothing to run on, which is a missing thing. Naming both means
-     * the recipe is not consistent with itself, which is a thing in the way. A control recipe naming
-     * a class rather than a module is a fourth, handled by the fact that a control recipe addresses
-     * by instance whatever it says.
+     * the recipe is not consistent with itself, which is a thing in the way.
      */
     private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, String label,
                                         List<String> excess, List<String> deficit) {
@@ -203,9 +189,6 @@ public final class RecipeConformance {
      * <p>
      * A parallel divergent link with a single destination is a split that does not go anywhere, and
      * a convergent link with a single origin is a join that waits for something that never arrives.
-     * Neither is repaired here: a chart that was drawn and saved halfway is the normal state of a
-     * recipe being written, and quietly inventing the missing side would produce a recipe that looks
-     * complete and does not mean what its author intended.
      */
     private static void checkBranches(S88ProcedureLogic logic, List<String> excess) {
         for (S88ProcedureLink link : logic.getLinks()) {
@@ -224,8 +207,7 @@ public final class RecipeConformance {
 
     /**
      * The chart has to start somewhere, and everything on it has to be reachable from where it
-     * starts. A step that no line reaches is a step the process never performs, which is a different
-     * mistake from a chart with no start, and is reported as one.
+     * starts.
      */
     private static void checkReachability(S88Recipe recipe, S88ProcedureLogic logic,
                                           List<String> excess, List<String> deficit) {
@@ -260,7 +242,7 @@ public final class RecipeConformance {
     /**
      * Walks the chart from one step, following the lines out of whatever it reaches. Links are
      * followed in the order the recipe lists them and a step is only ever entered once, so a cycle
-     * ends the walk instead of going round for ever.
+     * ends the walk instead of going round forever.
      */
     private static void walkFrom(String startStepId, S88ProcedureLogic logic, Set<String> reached) {
         Deque<String> pending = new ArrayDeque<>();
@@ -282,8 +264,7 @@ public final class RecipeConformance {
 
     /**
      * The first step of the chart whose element is of the given kind, which is how the start and the
-     * end of the flow are found. The kind lives on the element rather than on the step, so the
-     * element the step points at is what decides it.
+     * end of the flow are found.
      */
     private static S88ProcedureStep firstOfKind(S88Recipe recipe, S88ProcedureLogic logic,
                                                  S88RecipeElementKind kind) {

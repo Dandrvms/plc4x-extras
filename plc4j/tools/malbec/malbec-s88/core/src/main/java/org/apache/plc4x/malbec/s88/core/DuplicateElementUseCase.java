@@ -424,9 +424,7 @@ public final class DuplicateElementUseCase {
             if (element.getBaseName(null, name) != null) {
                 continue;
             }
-            // An attribute has no container of its own to key it by, and the class declares it at
-            // the top level of its schema, so the pointer is the bare base name: a container segment
-            // here would name a container the class does not have.
+
             String base = attributeBaseName(element, name, element.getId(), baseNameOverrides);
             element.setBaseName(null, name, base);
         }
@@ -511,7 +509,7 @@ public final class DuplicateElementUseCase {
      * The base name a variable of {@code source} is derived from.
      * <p>
      * The base name the user chose for this very variable in the dialog wins, because it is the
-     * decision taken last. Otherwise the one the source already recorded is kept: a recipe bound to
+     * decision taken last. Otherwise, the one the source already recorded is kept: a recipe bound to
      * that base name would otherwise stop answering on the copy, whose variable is published under
      * another name. Only a variable that carries no recorded base name has one derived from its name.
      */

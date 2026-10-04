@@ -43,6 +43,10 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 public class ClassFactory {
+    private ClassFactory() {
+        /* This utility class should not be instantiated */
+    }
+
 
     public static void createDialog(S88Element parent, Plc4xPlantModel model) {
         createDialog(parent, model, null);

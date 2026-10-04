@@ -32,7 +32,7 @@ import org.apache.plc4x.malbec.s88.core.NameValidator;
  * The one text filter used by the plant editor dialogs.
  * <p>
  * Two kinds of field share it: numeric or free text values, whose only rule is the data type, and
- * identifiers, whose charset is the one {@link NameValidator} enforces. Identifiers are upper cased
+ * identifiers, whose charset is the one {@link NameValidator} enforces. Identifiers are upper-cased
  * as they are typed and reject anything else, so an id that the use cases would refuse is never
  * typed in the first place. Programmatic writes are untouched: {@code setText} and
  * {@code replace} bypass the filter, which is what lets already stored values load unchanged.
@@ -42,7 +42,7 @@ final class RestrictedDocumentFilter extends DocumentFilter {
     /** Told about every rejected keystroke so the dialog can say why nothing happened. */
     interface RejectionListener {
         /**
-         * @param message human readable reason, already naming the offending character
+         * @param message human-readable reason, already naming the offending character
          */
         void rejected(String message);
     }

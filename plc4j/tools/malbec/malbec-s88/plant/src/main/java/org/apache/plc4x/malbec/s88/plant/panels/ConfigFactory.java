@@ -60,8 +60,6 @@ public class ConfigFactory {
     }
 
     private static JPanel buildUnitPanel(Plc4xPlantModel model, S88Element element) {
-        // The unit attributes carry the base name a recipe addresses alongside the concrete
-        // attribute name, exactly as the variables of an equipment module do.
         String[] columns = {"Name", "Base Name", "Type", "Eng_Units/Enum", "Reference", "StaticValue"};
         DefaultTableModel tableModel = createReadOnlyTableModel(columns);
         JTable table = createStandardConfigTable(tableModel);
@@ -80,8 +78,7 @@ public class ConfigFactory {
                     S88Element live = currentElement(model, element);
                     Map<String, Object> prop = live.getStructuredProperty(name);
                     if (prop == null) {
-                        // The row is a leftover of an earlier state of the plant. Editing it would
-                        // open a dialog for an attribute that no longer exists.
+
                         updateUnitTableData(live, tableModel);
                         showError("'" + name + "' is no longer an attribute of " + live.getId() + ".");
                         return;
@@ -127,8 +124,7 @@ public class ConfigFactory {
                 .onUpdate(() -> updateUnitTableData(currentElement(model, element), tableModel))
                 .show());
 
-        // The built panel is handed to the refresher through a holder the panel closes over, so the
-        // summary follows the plant the same way the table does.
+
         JPanel[] built = new JPanel[1];
         Runnable refresh = () -> {
             S88Element current = currentElement(model, element);
@@ -160,8 +156,7 @@ public class ConfigFactory {
 
     /**
      * Pushes the element's own base names into the class. The class is shared, so the siblings are
-     * left short of what it now declares; the user is told how many before it happens, because
-     * repairing them behind their back would decide for them what a recipe of the type now needs.
+     * left short of what it now declares; the user is told how many before it happens.
      */
     private static void addToClass(Plc4xPlantModel model, S88Element element) {
         S88Element current = currentElement(model, element);
@@ -223,9 +218,7 @@ public class ConfigFactory {
     }
 
     /**
-     * Writes the plant and tells the panels that are listening. Saving on its own only puts the
-     * change on disk: the tables and the conformance summary are refreshed by the change
-     * announcement, so without it the panel would keep describing the gap the user just closed.
+     * Writes the plant and tells the panels that are listening.
      */
     private static void announce(Plc4xPlantModel model, S88Element element) throws IOException {
         if (model == null) {
@@ -239,7 +232,7 @@ public class ConfigFactory {
 
     /**
      * How many other elements of the same class would be left short of the base names just added,
-     * so the impact of a change to the shared contract can be stated rather than discovered later.
+     * so the impact of a change to the shared contract can be stated.
      */
     private static int deficientSiblings(Plc4xPlantModel model, S88Element element,
                                          S88ElementClass elementClass, List<String> excess) {
@@ -254,9 +247,7 @@ public class ConfigFactory {
             if (candidate.getElementClass() != elementClass) {
                 continue;
             }
-            // Only the names that are about to be added decide this: an element that already
-            // publishes them is not left short of anything by the change, however far it is from
-            // the class in other respects.
+
             if (!ClassConformance.publishesAll(candidate, excess)) {
                 count++;
             }
@@ -302,13 +293,6 @@ public class ConfigFactory {
         DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(message, NotifyDescriptor.ERROR_MESSAGE));
     }
 
-    /**
-     * Keeps a table in step with the plant. The table is filled once when the panel is built, so
-     * without this it goes on showing the names it was built with: a unit attribute added, renamed
-     * or removed elsewhere leaves rows behind that address nothing. The table is read back
-     * whenever the model announces a change, and the element is looked up again by id, because the
-     * element the panel was built for is a copy the model replaces on every reload.
-     */
     private static JPanel refreshOnModelChange(Plc4xPlantModel model, JPanel content, Runnable refresh) {
         return new RefreshOnChangePanel(model, content, refresh);
     }
@@ -345,9 +329,7 @@ public class ConfigFactory {
     }
 
     private static JPanel buildEMPanel(Plc4xPlantModel model, S88Element element) {
-        // The EM tables carry the base name a recipe addresses alongside the concrete variable
-        // name, so a variable is identifiable at a glance. The unit attributes are omitted: a unit
-        // attribute is called exactly what it is, so the base name column would just echo it.
+
         String[] paramColumns = {"Name", "Base Name", "Eng_Units/Enum", "Type", "Max", "Min", "Default", "Reference"};
         String[] reportColumns = {"Name", "Base Name", "Eng_Units/Enum", "Type", "Reference"};
 
@@ -537,10 +519,8 @@ public class ConfigFactory {
     /**
      * Whether a row is one of the ISA-88 variables every module publishes.
      * <p>
-     * Those rows are listed so the plant file can be read, but they belong to the model rather than
-     * to the engineer, so the editor opens nothing for them. A row is recognised by the base name
-     * it carries, which is the same on every module of the plant, rather than by its concrete name,
-     * which is qualified with the id of this one.
+     * Those rows are listed so the plant file can be read, but they belong to the model not to
+     * the engineer, so the editor opens nothing for them.
      *
      * @param table table the row is in
      * @param row   row to inspect

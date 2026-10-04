@@ -34,22 +34,7 @@ import java.util.List;
  * <p>
  * A step is named after an element of the plant, so changing its name is changing which element of
  * the plant the recipe works on. That name is written down wherever a box works on the step, which
- * may be on any chart in the recipe and not only the one the step itself has. Miss one and that box
- * is left working on a step that is no longer there, which the reader finds out as a chart full of
- * boxes pointing at nothing rather than as a rename.
- * <p>
- * So the whole rename is worked out and checked before anything moves, the same way
- * {@code RenameElementUseCase} does it for the plant. A rename that is going to be refused is refused
- * with the recipe exactly as it was, rather than half applied and left for someone to find.
- * <p>
- * What is deliberately not touched: the names of the boxes on the chart. A line names the box it runs
- * between, which is the chart's own naming and not the recipe's, so a box called {@code BOX_HEAT}
- * keeps that name when the step it works on is renamed. Changing what a box works on is what this
- * does; changing what the box is called is a different thing and belongs to whoever drew it.
- * <p>
- * Nor is anything checked here about the plant. A step that works on equipment, a class recipe, and a
- * step that is itself named for a module: those names come from the plant, and whether the plant
- * still has an element of that name is a question {@code ResolveRecipeUseCase} asks.
+ * may be on any chart in the recipe and not only the one the step itself has.
  */
 public class RenameRecipeElementUseCase {
 
@@ -77,13 +62,9 @@ public class RenameRecipeElementUseCase {
         if (oldId != null && oldId.equals(newId)) {
             return;
         }
-        // Checked before the name, because the name the recipe is already going to be called is the
-        // one name the recipe has. Validating it first would refuse a rename to the name it already
-        // has, which is the most harmless thing anybody can ask for.
+
         RecipeNameValidator.validate(recipe, newId);
-        // The index keeps only the first of a pair, so a recipe that already has a clash is not one
-        // this can be trusted to keep coherent. Refusing to rename into it is better than renaming
-        // and making the clash harder to see.
+
         if (!recipe.getDuplicateIds().isEmpty()) {
             throw new IllegalStateException("This recipe already has two steps of the same name ("
                     + String.join(", ", recipe.getDuplicateIds()) + "), so it cannot be renamed"
@@ -99,16 +80,6 @@ public class RenameRecipeElementUseCase {
 
     /**
      * Works out what a rename has to touch, without touching any of it.
-     * <p>
-     * Only the boxes of the chart. A line names the box it runs between, not the step the box works
-     * on, so the two are separate names in separate places: a box called {@code BOX_HEAT} working on
-     * a step called {@code HEAT} keeps its own name when {@code HEAT} is renamed, and a line into
-     * {@code BOX_HEAT} is not touched either. The chart's own naming belongs to whoever is drawing
-     * it and is changed by renaming a box, which is a different thing from renaming what the box
-     * does.
-     * <p>
-     * Every chart in the recipe is looked through, not only the one of the step being renamed,
-     * because a chart drawn at a level above works on a step of its own that may be one of these.
      */
     private static List<StepRename> plan(S88Recipe recipe, S88RecipeElement step,
                                          String oldId, String newId) {

@@ -260,11 +260,9 @@ public class ParameterDialogBuilder {
         addFullWidthRow(formPanel, gbc, row++, nameHintLabel);
         variableKeyPreview = new VariableKeyPreviewPanel();
         variableKeyPreview.bind(previewElement, previewModel != null ? previewModel.getModel() : null);
-        // The convention is offered, never imposed: pressing the button puts the conventional name
-        // in the field, and whatever is in the field is what gets stored.
+
         variableKeyPreview.setApplyName(txtName::setText);
-        // On an edit the property is already in the model publishing the very key being previewed,
-        // so it has to be named as the one under edit or it reads as a collision with itself.
+
         if (isEditMode) {
             variableKeyPreview.setEditingProperty(initialName);
         }

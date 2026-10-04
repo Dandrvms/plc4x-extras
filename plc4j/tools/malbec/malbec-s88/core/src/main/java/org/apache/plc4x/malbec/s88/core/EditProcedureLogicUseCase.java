@@ -37,22 +37,16 @@ import java.util.List;
 /**
  * Drawing the chart of a recipe: the boxes, the lines between them, and the bars.
  * <p>
- * Nothing in the plant decides any of this, so what these use cases check is narrower than it is
- * elsewhere. A box has to name a step the recipe carries, because a name nobody can resolve is a
- * mistake somebody made typing it rather than a decision. A line has to end somewhere that exists,
+ * A box has to name a step the recipe carries. A line has to end somewhere that exists,
  * unless it says it points outside, which is how a line refers to a step of another part of the
  * process.
  * <p>
  * The one thing that is not checked is whether the chart makes sense as a process: whether it starts
  * somewhere, whether a split has two sides, whether a step is reachable. That is
- * {@code RecipeConformance}'s job, and it reports rather than refuses, because a chart saved half
- * drawn is the ordinary state of a recipe being written. These refuse only what cannot be drawn at
- * all.
+ * {@code RecipeConformance}'s job.
  * <p>
  * A chart belongs to the step it was drawn under, and a step of the chart is a box on it. They are
- * named separately because one names a step of the recipe and the other names a box, and a recipe
- * whose flow is drawn twice, at two levels, has two boxes of the same name meaning two different
- * things.
+ * named separately. One names a step of the recipe and the other names a box.
  */
 public class EditProcedureLogicUseCase {
 
@@ -61,9 +55,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * The chart of a step, made if it is not there yet. Drawing a chart is the ordinary thing to do
-     * with a step, so asking for the chart brings one into being rather than being a separate step
-     * the caller has to remember.
+     * The chart of a step, made if it is not there yet.
      *
      * @param step step to give a chart to, may be {@code null}
      * @return the chart, or {@code null} when there was no step
@@ -116,11 +108,6 @@ public class EditProcedureLogicUseCase {
 
     /**
      * Takes a box off the chart, and refuses while a line runs into it.
-     * <p>
-     * The lines are the reason this is not simply a matter of detaching it. A line left with one end
-     * names something the chart no longer has, and choosing which of the ends was meant to go would
-     * be guessing at what the reader wanted. So the line is taken off first, by
-     * {@link #removeLink}, and this one then has nothing to refuse about.
      *
      * @param recipe recipe the step belongs to, may be {@code null}
      * @param step   step whose chart the box is on
@@ -192,10 +179,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Takes a line off the chart, and says so even when there was none. A line is the one thing a
-     * chart can lose without anything else being left inconsistent, so this is allowed to be asked
-     * for something that is not there: the editor asks to undo a drawing, and whether the second
-     * undo finds the line or not is the editor's business.
+     * Takes a line off the chart, and says so even when there was none.
      *
      * @param recipe recipe the step belongs to, may be {@code null}
      * @param step   step whose chart the line is on
@@ -287,7 +271,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Takes a bar off the chart, and says so even when there was none, for the same reason as lines.
+     * Takes a bar off the chart, and says so even when there was none.
      *
      * @param recipe recipe the step belongs to, may be {@code null}
      * @param step   step whose chart the bar is on
@@ -307,11 +291,6 @@ public class EditProcedureLogicUseCase {
 
     /**
      * One end of a line, which has to name something this chart carries.
-     * <p>
-     * A name ending in a mark means the line points at a step of another part of the process rather
-     * than at one of its own, and is left alone by everything that renames or takes away steps here.
-     * That is the difference between the two kinds of reference the recipe format has, and it is why
-     * a name the chart cannot resolve is a mistake rather than a thing to resolve later.
      */
     private static S88IdRef existingEnd(S88ProcedureLogic chart, String name, String doing) {
         if (name == null || name.isBlank()) {
@@ -328,8 +307,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Tells whoever is looking that the chart changed. Carries no step, because a line or a box
-     * belongs to the chart and not to any one step of the recipe.
+     * Tells whoever is looking that the chart changed.
      */
     private static void announce(S88Recipe recipe) {
         if (recipe != null) {

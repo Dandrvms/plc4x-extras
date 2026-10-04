@@ -28,6 +28,10 @@ import org.openide.util.Lookup;
  * NetBeans integration service for S88 repositories.
  */
 public final class S88ProjectServices {
+    private S88ProjectServices() {
+        /* This utility class should not be instantiated */
+    }
+
 
     public static S88Repository createRepository(String format, S88Storage storage) {
         var providers = Lookup.getDefault().lookupAll(S88RepositoryProvider.class);

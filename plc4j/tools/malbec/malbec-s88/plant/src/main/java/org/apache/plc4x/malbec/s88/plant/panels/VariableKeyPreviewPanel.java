@@ -174,9 +174,7 @@ final class VariableKeyPreviewPanel extends JPanel {
         adviceLabel.setText(render(advice));
 
         if (editingProperty == null) {
-            // Offering the convention only makes sense while naming a new variable. Editing the
-            // limits of an existing one cannot change its name, so the button would only tease
-            // a name the form would never let the user type in.
+
             NamingAdvisor.Advice conventional =
                     NamingAdvisor.suggestConventionalVariableName(element, propertyName);
             suggestedName = conventional != null ? conventional.suggestion() : null;

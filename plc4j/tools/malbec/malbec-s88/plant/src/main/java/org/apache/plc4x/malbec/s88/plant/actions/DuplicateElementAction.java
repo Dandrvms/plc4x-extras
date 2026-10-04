@@ -35,10 +35,6 @@ import org.openide.util.NbBundle.Messages;
 
 /**
  * Action to turn an ISA-88 element into an equipment type and create copies of it.
- * <p>
- * Copying is the only way into a type: the element gets a class (a new one derived from its
- * variables when it has none yet) and {@code n} instances of it are created with unique ids and
- * base-linked variable names.
  */
 public class DuplicateElementAction extends AbstractAction implements ContextAwareAction {
 

@@ -89,8 +89,7 @@ public class B2MMLRepositoryImpl implements S88Repository {
             for (S88ElementClass ec : tempClasses.values()) {
                 model.registerClass(ec);
             }
-            // A plant written before the ISA-88 variables existed has none, on its modules or on
-            // their types, so they are given here rather than left for the user to add by hand.
+
             PlatformVariables.injectInto(model);
 
             return model;
@@ -104,11 +103,7 @@ public class B2MMLRepositoryImpl implements S88Repository {
 
     @Override
     public void savePlant(S88PlantModel model) {
-        // Diagnostics only: a plant that already holds a clashing id must stay loadable so it can be
-        // repaired, so this never blocks the write. Duplicated ids are the root cause behind the
-        // derived variable keys that end up duplicated as well, which is why they are worth reporting
-        // here. The derived key check itself lives in the core module, closer to the future catalog
-        // consumer, so it is not run from this persistence layer.
+
         reportDuplicatedIds(model);
 
         try (OutputStream output = storage.openOutput()){
@@ -203,9 +198,7 @@ public class B2MMLRepositoryImpl implements S88Repository {
             equipment.addNewDescription().setStringValue(String.valueOf(desc));
         }
 
-        // The uid is written as a reserved property rather than as PhysicalAssetID: that B2MML
-        // field means the physical asset an equipment is made of, while the uid identifies this
-        // element inside the plant, and the two are not the same thing.
+
         writeProperty(equipment.addNewEquipmentProperty(), element, null,
                 S88Element.UID_PROPERTY, element.getUid());
 
@@ -220,25 +213,11 @@ public class B2MMLRepositoryImpl implements S88Repository {
     }
 
 
-    /**
-     * Writes a property of an element. A variable (an entry of a container such as "Parameters")
-     * carries its base name as an {@code EquipmentClassPropertyID}, the standard B2MML field
-     * pointing back at the class schema the variable was derived from.
-     *
-     * @param propXml      the XML property being built
-     * @param element      element owning the property, used to look up the base names
-     * @param containerKey the container holding the entry being written, {@code null} at the top
-     *                     level of the element
-     * @param key          property name
-     * @param value        property value
-     */
+
     private void writeProperty(EquipmentPropertyType propXml, S88Element element,
                                String containerKey, String key, Object value) {
         propXml.addNewID().setStringValue(key);
         if (containerKey == null && !S88PlantModel.isContainerKey(key)) {
-            // A unit attribute is published at the top level of the element, so it is this
-            // property - not one of its children - that carries the pointer to the schema entry
-            // the recipe addresses it by.
             String baseName = element.getBaseName(null, key);
             if (baseName != null) {
                 propXml.addNewEquipmentClassPropertyID().setStringValue(baseName);
@@ -259,8 +238,6 @@ public class B2MMLRepositoryImpl implements S88Repository {
     private void writePropertyChild(EquipmentPropertyType parentXml, S88Element element,
                                     String containerKey, String key, Object value) {
         EquipmentPropertyType propXml = parentXml.addNewEquipmentPropertyChild();
-        // The ID of the property is written once by writeProperty; writing it here again would
-        // leave every variable with two <b2m:ID> elements in the stored plant.
         String baseName = element.getBaseName(containerKey, key);
         if (baseName != null) {
             propXml.addNewEquipmentClassPropertyID().setStringValue(baseName);
@@ -333,16 +310,7 @@ public class B2MMLRepositoryImpl implements S88Repository {
         }
     }
 
-    /**
-     * Reads the uid the plant file carries for an element.
-     * <p>
-     * A file written before the uid existed has none, and a file edited by hand may carry a blank
-     * one. In both cases the element gets a freshly generated uid, which is better than refusing to
-     * open the plant: the uid only has to be stable from the moment the element is loaded.
-     *
-     * @param xml equipment as stored
-     * @return the stored uid, or {@code null} when the element has none to restore
-     */
+
     private String readStoredUid(EquipmentType xml) {
         for (EquipmentPropertyType prop : xml.getEquipmentPropertyArray()) {
             if (prop.getID() == null || !S88Element.UID_PROPERTY.equals(prop.getID().getStringValue())) {
@@ -361,15 +329,12 @@ public class B2MMLRepositoryImpl implements S88Repository {
         for (EquipmentPropertyType prop : properties) {
             if (prop.getID() == null) continue;
             String name = prop.getID().getStringValue();
-            // The reserved uid property belongs to the element, not to its property bag, so it is
-            // never published as a variable the editor or a recipe could address.
+
             if (S88Element.UID_PROPERTY.equals(name)) {
                 continue;
             }
             element.setProperty(name, readPropertyValue(prop, element));
             if (!S88PlantModel.isContainerKey(name) && prop.isSetEquipmentClassPropertyID()) {
-                // A unit attribute is a top level property, so this is where its pointer to the
-                // schema entry a recipe addresses it by comes back in.
                 element.setBaseName(null, name, prop.getEquipmentClassPropertyID().getStringValue());
             }
         }
@@ -382,8 +347,6 @@ public class B2MMLRepositoryImpl implements S88Repository {
             for (EquipmentPropertyType child : prop.getEquipmentPropertyChildArray()) {
                 if (child.getID() == null) continue;
                 String name = child.getID().getStringValue();
-                // The standard B2MML field pointing a variable back at the class schema it was
-                // derived from; the batch engine uses it to resolve the variable by base name.
                 if (child.isSetEquipmentClassPropertyID()) {
                     element.setBaseName(containerKey, name, child.getEquipmentClassPropertyID().getStringValue());
                 }

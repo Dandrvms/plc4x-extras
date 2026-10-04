@@ -27,14 +27,9 @@ import java.util.Optional;
 /**
  * Whether a recipe is willing to call a step something.
  * <p>
- * Much less to do here than {@link NameValidator} has for the plant, and deliberately so. There is
- * no length limit, because a step is named after an element of the plant and the plant's own limit
- * already applies to it. There is no re-suffixing, because a recipe that called a step something
- * other than the element's own name would be a step nobody could follow back to the equipment.
- * <p>
- * What is left is the one rule that has real consequences: a name is used exactly once. A step is
- * named by a module, and two steps both called {@code HEAT} is two claims on one module that nothing
- * can tell apart. The chart points at steps by name, so the ambiguity would reach there too.
+ * A name is used exactly once. A step is named by a module, and two steps both called {@code HEAT}
+ * is two claims on one module that nothing can tell apart. The chart points at steps by name, so
+ * the ambiguity would reach there too.
  */
 public class RecipeNameValidator {
 
@@ -123,16 +118,13 @@ public class RecipeNameValidator {
     }
 
     /**
-     * How long a name may be. The same limit the plant puts on an element id, taken here for a
-     * different reason: not because a step name is a plant name, but because the tools that read a
-     * recipe file, including the ones nobody wrote here, will not take more.
+     * How long a name may be.
      */
     public static final int MAX_LENGTH = 60;
 
     /**
      * What stands between a container and a variable inside a parameter, and so cannot appear in the
-     * name of a step. Named from the address type that owns the rule rather than repeated as a bare
-     * character, so the two cannot drift apart.
+     * name of a step.
      */
     public static final String S88_VARIABLE_SEPARATOR = S88VariableAddress.SEPARATOR;
 }

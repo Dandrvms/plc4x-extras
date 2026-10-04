@@ -206,22 +206,7 @@ public class ManageEnumerationsAction extends AbstractAction implements ContextA
             }
         }
 
-        /**
-         * Turns down an attempt to change one of the two enumerations the ISA-88 variables are
-         * drawn from.
-         * <p>
-         * Every equipment module of the plant publishes a state and receives a command, and the
-         * values they may take are the agreement between the batch and the module rather than a
-         * property of this installation. The order of the values is part of that agreement, since
-         * what travels on the wire is the index. Editing either one here would change what the
-         * numbers mean without anyone asking, so the two are left alone.
-         *
-         * @param dialog dialog to report on
-         * @param selected enumeration the user picked
-         * @param action what the user tried to do, for the message
-         * @return {@code true} when the enumeration belongs to the platform and the action was
-         *         refused
-         */
+
         private static boolean refusePlatform(JDialog dialog, S88Enumeration selected, String action) {
             if (!PlatformEnumerations.isPlatformEnumeration(selected.getName())) {
                 return false;

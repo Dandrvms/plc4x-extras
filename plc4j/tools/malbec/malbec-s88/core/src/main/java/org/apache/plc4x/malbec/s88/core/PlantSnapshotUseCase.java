@@ -32,19 +32,7 @@ import java.util.Map;
  * Takes the plant a set of recipes is written against.
  * <p>
  * Recipes are written, approved, and then run against a plant that keeps being edited underneath
- * them. A copy taken once settles that: the recipes are checked against the same thing every time,
- * and the question of what a plant edit now means for the recipes is something somebody decided
- * rather than something that happened quietly.
- * <p>
- * Everything a recipe is checked against is copied, and the copy is built fresh rather than shared.
- * Base names come along because that is how a recipe written by class reaches a variable at all, and
- * an element copied without them would answer to the wrong names. The identity travels too, for the
- * same reason: a recipe names elements, and a copy that lost its identity would be a second,
- * unrelated element with the same name.
- * <p>
- * A plant that is already broken is copied as it stands, duplicate ids and all. The snapshot records
- * the clash rather than refusing to be taken, because the recipes need something to be checked
- * against, and a plant with a duplicate id is the one that most needs to be looked at.
+ * them. A copy taken once settles that the recipes are checked against the same thing every time.
  */
 public class PlantSnapshotUseCase {
 
@@ -122,12 +110,6 @@ public class PlantSnapshotUseCase {
         return copy;
     }
 
-    /**
-     * Copies the properties of an element or a class. The containers are copied rather than shared,
-     * because a property that is still the same object after the plant was copied is a way for a
-     * change to the original to reach into the snapshot. Values that are maps are copied too;
-     * anything else is left as it is, since what an attribute holds is a string or a number.
-     */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> copyProperties(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();

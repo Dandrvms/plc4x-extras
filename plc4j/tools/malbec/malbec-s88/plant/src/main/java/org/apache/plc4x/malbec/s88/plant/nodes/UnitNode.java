@@ -36,8 +36,4 @@ public class UnitNode extends PlantElementNode {
         return "org/apache/plc4x/malbec/s88/plant/nodes/Unit.png";
     }
 
-    @Override
-    public Action[] getActions(boolean context) {
-        return super.getActions(context);
-    }
 }

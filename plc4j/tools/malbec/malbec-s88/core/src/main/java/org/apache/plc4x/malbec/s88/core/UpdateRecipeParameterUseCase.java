@@ -33,10 +33,10 @@ import java.util.List;
  * <p>
  * A parameter of a recipe is the address of a variable of the element the step works on, and this is
  * what puts a value against it. Which address it is depends on how the recipe addresses its
- * equipment, and that is settled by the recipe rather than here: a recipe written by class says
- * {@code Parameters/TARGET_TEMPERATURE}, which is the same on every module of that class, and one
- * written for particular equipment says the name that module published. Either way the name written
- * is the name kept, and {@code ResolveRecipeUseCase} is what reads it against the plant.
+ * equipment. A recipe written by class says  {@code Parameters/TARGET_TEMPERATURE}, which is the same
+ * on every module of that class, and one written for particular equipment says the name that module
+ * published. Either way the name written is the name kept, and {@code ResolveRecipeUseCase} is what
+ * reads it against the plant.
  * <p>
  * The value is stored as text, exactly as given, with the type and the unit alongside it. Deciding
  * whether 75 is acceptable for a variable that takes a number, or whether {@code COMPLETE} is one of
@@ -129,8 +129,7 @@ public class UpdateRecipeParameterUseCase {
             return false;
         }
         step.removeParameter(parameter);
-        // A parameter nested inside another one is not on the step's own list, so it is taken off
-        // whichever list is actually holding it.
+
         for (S88RecipeParameter outer : step.getParameters()) {
             if (outer.removeParameter(parameter)) {
                 break;

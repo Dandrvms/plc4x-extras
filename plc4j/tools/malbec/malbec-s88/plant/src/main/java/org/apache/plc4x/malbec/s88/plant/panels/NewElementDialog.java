@@ -24,7 +24,6 @@ import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.core.BaseNameSupport;
 import org.apache.plc4x.malbec.s88.core.CreateElementUseCase;
-import org.apache.plc4x.malbec.s88.core.NameValidator;
 import org.apache.plc4x.malbec.s88.core.NamingAdvisor;
 import org.apache.plc4x.malbec.s88.core.VariableKeySupport;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantModel;
@@ -96,8 +95,6 @@ public class NewElementDialog extends JDialog{
             classList.setSelectedIndex(0);
         }
 
-        // attached last: the listener keeps the preview in sync with the id, and it needs
-        // IDField, txtClass and variableKeyPreviewLabel to already exist
         IDField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -138,7 +135,7 @@ public class NewElementDialog extends JDialog{
             int sizeBefore = classListModel.size();
             ClassFactory.createDialog(parent, model, this);
 
-            // Classes are global, so read them back from the registry rather than from the parent
+
             S88ElementClass created = null;
             if (model.getModel() != null) {
                 List<S88ElementClass> updated = model.getModel().getClassesForChildLevel(childLevel);
@@ -310,10 +307,9 @@ public class NewElementDialog extends JDialog{
         panel.add(field, gbc);
     }
 
-    private JTextField createField(String text, Boolean editable) {
+    private JTextField createField(String text, Boolean enabled) {
         JTextField tf = new JTextField(text);
-        tf.setEditable(editable);
-        tf.setBackground(new Color(240, 240, 240));
+        tf.setEnabled(enabled);
         return tf;
     }
 

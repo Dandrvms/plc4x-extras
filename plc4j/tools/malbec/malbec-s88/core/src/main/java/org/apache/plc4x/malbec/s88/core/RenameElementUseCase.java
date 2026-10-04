@@ -162,9 +162,7 @@ public class RenameElementUseCase {
             }
         }
 
-        // The names the top level attributes will be published under once the rename is done, kept
-        // up to date as the plan is built so a re-suffixed name is caught against every other one,
-        // whichever order they were typed in.
+
         Set<String> publishedTopLevel = new LinkedHashSet<>();
         for (String name : properties.keySet()) {
             if (!CONTAINER_KEYS.contains(name) && !NameValidator.isReservedProperty(name)) {
@@ -228,8 +226,7 @@ public class RenameElementUseCase {
             }
             for (String removal : topLevelRemovals) {
                 element.setProperty(removal, null);
-                // The attribute moved: its base name pointer has to move with it, or the recipe
-                // that addresses the attribute by base name loses it.
+
                 String pointer = element.getBaseName(null, removal);
                 if (pointer != null) {
                     String base = removal.substring(0, removal.length() - oldDiscriminator.length());
@@ -248,8 +245,7 @@ public class RenameElementUseCase {
      * chaining into the next: a child conforming to its parent is re-suffixed ({@code
      * CALENTAMIENTO_OLLA_1} to {@code CALENTAMIENTO_OLLA_2}), and its own children are then
      * measured against the child's old and new ids; a child that does not conform keeps its id and
-     * passes its parent's pair down unchanged. Nothing is touched here, so a rename can never leave
-     * two elements sharing an id.
+     * passes its parent's pair down unchanged.
      */
     private static List<ChildRename> planChildRenames(S88Element element, String oldId, String newId) {
         List<ChildRename> planned = new ArrayList<>();

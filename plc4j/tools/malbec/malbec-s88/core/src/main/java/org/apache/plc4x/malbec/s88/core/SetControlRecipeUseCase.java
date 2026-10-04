@@ -33,23 +33,14 @@ import java.util.List;
  * <p>
  * A master recipe says what the process is and, if it was written by class, what kind of equipment
  * it expects. A control recipe says both that and which particular equipment is doing it this time.
- * This is where the second half gets decided, and it is decided here rather than in the data class
- * because a control recipe can be produced in more than one way: set from a master, handed over from
- * a batch server, or read back from a file somebody wrote. Whatever produces one has to say the same
- * thing about it, and a rule buried in a setter would apply to all of them and to none of them on
- * purpose.
  * <p>
- * The result is set for particular equipment whatever the master said. A master written by class
- * still has to name real modules before anything can run, and doing that is what this does. It does
- * not do it: choosing which tank is free is the plant's business, and this reports what the recipe
- * still needs so that whoever binds it can be asked.
+ * The result is set for particular equipment whatever the master said. This module ensures that
+ * a master recipe written by class ends naming real modules before anything can run.
  */
 public class SetControlRecipeUseCase {
 
     /**
-     * The id given to the control recipe when none is offered. The batch is what tells one run
-     * apart from another, so the id is built from it rather than from a counter that would not mean
-     * the same thing on two machines.
+     * The id given to the control recipe when none is offered.
      */
     public static final String ID_PREFIX = "CTL_";
 
@@ -61,12 +52,6 @@ public class SetControlRecipeUseCase {
 
     /**
      * Produces a control recipe for {@code batchId} out of a master recipe.
-     * <p>
-     * The master is read, not taken over: the control recipe is a separate recipe, because it is a
-     * separate thing with a separate life. It will have the batch bound to it, it will name the
-     * equipment that was chosen, and it will be saved and kept as the record of what that run did.
-     * Copying the master's structure and pointing it at the same objects would make an edit to one
-     * of them change the other.
      *
      * @param master  recipe to set, may be {@code null}
      * @param batchId batch this run is for
@@ -86,9 +71,7 @@ public class SetControlRecipeUseCase {
         control.setId(ID_PREFIX + batchId);
         control.setBatchId(batchId);
         control.setSourceRecipeId(master.getId());
-        // A recipe on its way to the plant is always set for particular equipment. The master may
-        // have been written by class; that is what the steps below have to be resolved against, and
-        // the control recipe records the answer rather than the question.
+
         control.setKind(S88RecipeKind.INSTANCE);
 
         S88Recipe structure = RecipeDeepCopy.copyRecipe(master);
@@ -97,9 +80,7 @@ public class SetControlRecipeUseCase {
         structure.getEquipmentRequirements().forEach(control::addEquipmentRequirement);
         structure.getFormula().forEach(control::addFormulaParameter);
         for (S88OtherInformation info : structure.getOtherInformation()) {
-            // The kind and the source master are the control recipe's own business, so the copy's
-            // versions of them are dropped rather than carried across and overwriting what was just
-            // decided above.
+
             if (!isOursToKeep(info.getId())) {
                 control.addOtherInformation(info);
             }
@@ -120,10 +101,6 @@ public class SetControlRecipeUseCase {
 
     /**
      * Copies a step, leaving the equipment it will run on to be decided against the plant.
-     * <p>
-     * A step of a master recipe written by class keeps its class here, and is reported as still
-     * needing to be bound rather than having a module invented for it. Guessing which tank is free
-     * would produce a control recipe that looks finished and would send the batch to the wrong place.
      */
     private S88RecipeElement setElement(S88RecipeElement element) {
         if (element.getEquipmentClassId() != null && element.getActualEquipmentIds().isEmpty()) {
@@ -145,12 +122,7 @@ public class SetControlRecipeUseCase {
     }
 
     /**
-     * Steps of the control recipe that still name a class of equipment rather than a module, and so
-     * are not yet runnable.
-     * <p>
-     * Reported rather than resolved, because resolving them means deciding which module of the plant
-     * is free, which is a question about the plant at a moment in time and not a step in setting a
-     * recipe for a batch.
+     * Steps of the control recipe that still name a class of equipment rather than a module.
      *
      * @return one line per step still waiting to be bound
      */

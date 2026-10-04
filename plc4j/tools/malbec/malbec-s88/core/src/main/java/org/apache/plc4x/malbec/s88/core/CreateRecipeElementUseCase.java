@@ -27,12 +27,8 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  * Use case for adding a step to a recipe.
  * <p>
  * A step that works on equipment is added by the name that equipment has in the plant, and that name
- * is taken from the plant rather than invented here. {@code parent} is {@code null} for a step of the
+ * is taken from the plant. {@code parent} is {@code null} for a step of the
  * recipe itself and the element above it for one nested inside another.
- * <p>
- * Nothing about the plant is checked. Whether the plant has an element of that name is a question
- * about the plant, and it is asked by {@code ResolveRecipeUseCase} when the recipe is bound, so that
- * a recipe can be written and half finished before there is anything to bind it to.
  */
 public class CreateRecipeElementUseCase {
 
@@ -45,8 +41,7 @@ public class CreateRecipeElementUseCase {
      *
      * @param recipe recipe to add to, may not be {@code null}
      * @param parent step to add it inside, {@code null} to make it a step of the recipe itself
-     * @param id     name of the step, which for one that works on equipment is the name the plant
-     *               gives that equipment
+     * @param id     name of the step
      * @param kind   what kind of step it is
      * @return the step that was added
      * @throws IllegalArgumentException when there is no recipe, or the name is not one it can use

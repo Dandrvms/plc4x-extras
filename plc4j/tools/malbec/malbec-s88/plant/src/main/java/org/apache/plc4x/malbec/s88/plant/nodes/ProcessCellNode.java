@@ -36,8 +36,9 @@ public class ProcessCellNode extends PlantElementNode {
         return "org/apache/plc4x/malbec/s88/plant/nodes/ProcessCell.png";
     }
 
+
     @Override
-    public Action[] getActions(boolean context) {
-        return super.getActions(context);
+    public Action getPreferredAction(){
+        return null;
     }
 }

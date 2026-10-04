@@ -82,8 +82,7 @@ public class CreatePlantElementAction extends AbstractAction implements ContextA
         }
 
 
-        // Classes are global to the plant, so ask the registry for the ones targeting the level
-        // being created instead of the parent's list, which only holds what the loader attached.
+
         S88Level childLevel = parentEq.getLevel() != null ? parentEq.getLevel().getChildLevel() : null;
         List<S88ElementClass> definedClasses = plantModel.getModel() != null
                 ? plantModel.getModel().getClassesForChildLevel(childLevel)

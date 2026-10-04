@@ -69,10 +69,6 @@ public final class ModelDefectsDialog {
                 + summary(report) + "</body></html>"), BorderLayout.NORTH);
         content.add(scrollPane, BorderLayout.CENTER);
 
-        // showOptionDialog rather than showConfirmDialog: only the former accepts custom button
-        // labels, and "Import anyway" is clearer than a bare "Yes" on a dialog whose whole point
-        // is that importing is allowed. Closing the window returns CLOSED_OPTION, which falls
-        // through to the cancel branch below.
         int choice = JOptionPane.showOptionDialog(parent, content,
                 "Imported Model Has Naming Problems",
                 JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null,
@@ -113,7 +109,7 @@ public final class ModelDefectsDialog {
             return items.get(0);
         }
         return String.join(", ", items.subList(0, items.size() - 1))
-                + " and " + items.get(items.size() - 1);
+                + " and " + items.getLast();
     }
 
     private static JTree buildTree(NamingAdvisor.ModelReport report) {

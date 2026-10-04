@@ -162,8 +162,7 @@ public class RecipeDeepCopy {
         }
         for (S88ProcedureLink link : source.getLinks()) {
             S88ProcedureLink linkCopy = new S88ProcedureLink(link.getId());
-            // The ends are copied by hand rather than shared. A link whose ends were still the
-            // original's would take a rename of one chart as a rename of the other.
+
             link.getFrom().forEach(ref -> linkCopy.addFrom(
                     new S88IdRef(ref.getValue(), ref.getType(), ref.getScope())));
             link.getTo().forEach(ref -> linkCopy.addTo(

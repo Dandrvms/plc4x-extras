@@ -263,11 +263,9 @@ public class AttributeDialogBuilder {
         addFullWidthRow(formPanel, gbc, row++, nameHintLabel);
         variableKeyPreview = new VariableKeyPreviewPanel();
         variableKeyPreview.bind(previewElement, previewModel != null ? previewModel.getModel() : null);
-        // The convention is offered, never imposed: pressing the button puts the conventional name
-        // in the field, and whatever is in the field is what gets stored.
+
         variableKeyPreview.setApplyName(txtName::setText);
-        // On an edit the property is already in the model publishing the very key being previewed,
-        // so it has to be named as the one under edit or it reads as a collision with itself.
+
         if (isEditMode) {
             variableKeyPreview.setEditingProperty(initialName);
         }
@@ -380,9 +378,7 @@ public class AttributeDialogBuilder {
 
     protected void applyInitialData() {
         if (isEditMode) {
-            // The name is the one field the user cannot type into, so it is filled in even when
-            // the property bag did not come along: an edit dialog opening blank reads as a broken
-            // dialog, and the name is what the property is stored under.
+
             txtName.setText(Objects.toString(initialName, ""));
             txtName.setEnabled(false);
         }

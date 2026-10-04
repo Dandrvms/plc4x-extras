@@ -26,6 +26,10 @@ import java.awt.event.ItemEvent;
 import java.io.IOException;
 
 public class PropertiesFactory {
+    private PropertiesFactory() {
+        /* This utility class should not be instantiated */
+    }
+
 
     public static JDialog createDialog(S88Element element, Plc4xPlantModel model) {
         String levelName = element.getLevel().name();
@@ -40,7 +44,7 @@ public class PropertiesFactory {
         };
     }
 
-    private static JCheckBox AddCheck(S88Element element){
+    private static JCheckBox addCheck(S88Element element){
         JCheckBox check = new JCheckBox();
         check.setSelected(element.isCheck());
 
@@ -138,7 +142,7 @@ public class PropertiesFactory {
                 .addPropertyRow("Name", nameField)
                 .addPropertyRow("Level", levelField)
                 .addPropertyRow("Equipment type", classField)
-                .addPropertyRow("Enable display creation", AddCheck(element))
+                .addPropertyRow("Enable display creation", addCheck(element))
                 .endTab();
 
         return builder;

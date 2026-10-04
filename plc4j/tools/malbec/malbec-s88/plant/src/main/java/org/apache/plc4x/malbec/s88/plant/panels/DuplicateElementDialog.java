@@ -111,9 +111,7 @@ gbc.gridx = 0;
         gbc.weightx = 1.0;
         gbc.anchor = GridBagConstraints.WEST;
         if (reusingClass) {
-            // The element already belongs to a class, and that class is what the copies will share,
-            // so the name is shown rather than offered: a name typed here would be ignored by the
-            // use case. Making it read-only says so instead of accepting the entry and dropping it.
+
             txtType = new JTextField(existingClass.getName(), 20);
             txtType.setEditable(false);
             txtType.setToolTipText("'" + source.getId() + "' already belongs to class '"
@@ -187,7 +185,7 @@ gbc.gridx = 0;
     /**
      * Shows the dialog and creates the copies when the user confirms.
      *
-     * @param owner  window to centre on, may be {@code null}
+     * @param owner  window to center on, may be {@code null}
      * @param model  plant holding the element
      * @param source element to turn into a type
      * @return {@code true} when the copies were actually created
@@ -198,10 +196,7 @@ public static boolean duplicate(Window owner, Plc4xPlantModel model, S88Element 
         return dialog.applied;
     }
 
-    /**
-     * The levels that hold the composition of the plant rather than the equipment the copies stand
-     * for are never turned into a type: only the units and the modules fitted into them get copies.
-     */
+
     private static void guardDuplicableLevel(S88Element source) {
         if (source.getParent() == null) {
             throw new IllegalArgumentException("The root of a plant cannot be turned into an equipment type.");
@@ -243,9 +238,7 @@ for (VariableRow variable : collectVariables(source)) {
 
 /**
      * Every variable published under the element and its descendants, so the user can see which
-     * base names the copies will be tied to and adjust them before confirming. Each variable is
-     * paired with the element that owns it, because a base name is derived by stripping the id of
-     * that very element.
+     * base names the copies will be tied to and adjust them before confirming.
      */
     private List<VariableRow> collectVariables(S88Element element) {
         List<VariableRow> result = new ArrayList<>();
