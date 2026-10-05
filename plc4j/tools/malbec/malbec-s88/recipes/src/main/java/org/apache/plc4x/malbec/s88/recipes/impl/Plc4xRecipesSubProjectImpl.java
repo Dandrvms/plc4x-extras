@@ -16,14 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.impl;
+package org.apache.plc4x.malbec.s88.recipes.impl;
 
+import java.awt.Image;
 import java.beans.PropertyChangeListener;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
-import org.apache.plc4x.malbec.s88.panels.Plc4xGeneralPropertiesImpl;
-import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
-import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectProviderImpl;
 import org.netbeans.api.annotations.common.StaticResource;
 import org.netbeans.api.project.Project;
 import org.netbeans.api.project.ProjectInformation;
@@ -33,45 +31,40 @@ import org.openide.util.ImageUtilities;
 import org.openide.util.Lookup;
 import org.openide.util.lookup.Lookups;
 
-public class Plc4xProjectImpl implements Project{
+/**
+ * Implementation of the Recipes subproject.
+ */
+public class Plc4xRecipesSubProjectImpl implements Project {
 
-    private final FileObject fo;
-    private final ProjectState ps;
+    private final FileObject projectDir;
+    private final ProjectState state;
     private Lookup lkp;    
-    
-    
-    public Plc4xProjectImpl(FileObject fo, ProjectState ps) {
-        this.fo = fo;
-        this.ps = ps;
+
+    public Plc4xRecipesSubProjectImpl(FileObject projectDir, ProjectState state) {
+        this.projectDir = projectDir;
+        this.state = state;
     }
 
     @Override
     public FileObject getProjectDirectory() {
-        return fo;
+        return projectDir;
     }
 
     @Override
     public Lookup getLookup() {
         if (lkp == null) {
             lkp = Lookups.fixed(new Object[]{
-                this,
-                new Plc4xProjectInfoImpl(),
-                new Plc4xProjectLogicalViewImpl(this),
-                new Plc4xCustomizerProviderImpl(this),
-                new Plc4xGeneralPropertiesImpl(),
-                new Plc4xPlantSubProjectProviderImpl(this),
-                new Plc4xRecipesSubProjectProviderImpl(this)
-                 
+                new Plc4xRecipesSubProjectInformation(),
+                new Plc4xRecipesSubProjectLogicalViewProviderImpl(this),
             });
         }
         return lkp;
     }
     
-    private class Plc4xProjectInfoImpl implements ProjectInformation {
-
+    private class Plc4xRecipesSubProjectInformation implements ProjectInformation {
 
         @StaticResource()
-        public static final String PROJECT_ICON = "org/apache/plc4x/malbec/s88/impl/Project.png";    
+        public static final String RECIPE_SET_ICON = "org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png";    
 
         @Override
         public String getName() {
@@ -85,26 +78,24 @@ public class Plc4xProjectImpl implements Project{
 
         @Override
         public Icon getIcon() {
-            return new ImageIcon(ImageUtilities.loadImage(PROJECT_ICON));
+            Image img = ImageUtilities.loadImage(RECIPE_SET_ICON);
+            if (img == null) {
+                return null; 
+            }
+            return new ImageIcon(img);
         }
 
         @Override
         public Project getProject() {
-            return Plc4xProjectImpl.this;
+            return Plc4xRecipesSubProjectImpl.this;
         }
 
         @Override
         public void addPropertyChangeListener(PropertyChangeListener pl) {
-            //
         }
 
         @Override
         public void removePropertyChangeListener(PropertyChangeListener pl) {
-            //
         }
-
     }
-
-    
-    
 }

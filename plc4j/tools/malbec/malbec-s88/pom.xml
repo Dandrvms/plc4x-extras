@@ -36,5 +36,6 @@
         <module>plant</module>
         <module>project</module>
         <module>batch</module>
+        <module>recipes</module>
     </modules>
 </project>

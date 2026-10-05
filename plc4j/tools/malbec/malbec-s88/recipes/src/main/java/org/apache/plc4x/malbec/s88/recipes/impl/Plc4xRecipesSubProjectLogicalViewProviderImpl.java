@@ -16,18 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.impl;
+package org.apache.plc4x.malbec.s88.recipes.impl;
 
 import java.awt.Image;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.Action;
-import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantProjectAction;
-
-import org.apache.plc4x.malbec.s88.plant.actions.ExportAction;
-import org.apache.plc4x.malbec.s88.plant.actions.ImportAction;
-import org.apache.plc4x.malbec.s88.recipes.actions.CreateRecipesProjectAction;
+import org.apache.plc4x.malbec.s88.recipes.actions.NewRecipeAction;
+//import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantElementAction;
 import org.netbeans.api.annotations.common.StaticResource;
+import org.netbeans.api.project.Project;
 import org.netbeans.spi.project.ui.LogicalViewProvider;
 import org.netbeans.spi.project.ui.support.CommonProjectActions;
 import org.netbeans.spi.project.ui.support.NodeFactorySupport;
@@ -40,25 +38,26 @@ import org.openide.nodes.FilterNode;
 import org.openide.nodes.Node;
 import org.openide.util.Exceptions;
 import org.openide.util.ImageUtilities;
-import org.openide.util.Lookup;
 import org.openide.util.Utilities;
 import org.openide.util.lookup.Lookups;
 import org.openide.util.lookup.ProxyLookup;
 
-public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
+/**
+ * LogicalViewProvider for the Recipes subproject.
+ */
+public class Plc4xRecipesSubProjectLogicalViewProviderImpl implements LogicalViewProvider {
 
-    
     @StaticResource()
-    public static final String PROJECT_ICON = "org/apache/plc4x/malbec/s88/impl/Project.png";       
+    public static final String RECIPE_SET_ICON = "org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png";
     
-    private final Plc4xProjectImpl project;
+    private final Project project;
 
-    public Plc4xProjectLogicalViewImpl(Plc4xProjectImpl project) {
+    public Plc4xRecipesSubProjectLogicalViewProviderImpl(Project project) {
         this.project = project;
     }
     
     @Override
-    public Node createLogicalView() {    
+    public Node createLogicalView() {
         try {
             FileObject projectDirectory = project.getProjectDirectory();
             DataFolder projectFolder = DataFolder.findFolder(projectDirectory);
@@ -75,29 +74,24 @@ public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
         return null;
     }
     
-    private final class ProjectNode extends FilterNode {
+    private static final class ProjectNode extends FilterNode {
 
-        final Plc4xProjectImpl project;
+        final Project project;
 
-        public ProjectNode(Node node, Plc4xProjectImpl project)
+        public ProjectNode(Node node, Project project)
             throws DataObjectNotFoundException {
             super(node,
-                  NodeFactorySupport.createCompositeChildren(project,
-                            "Projects/org-plc4x-s88-project/Nodes"),
-                  new ProxyLookup(
-                  new Lookup[]{
-                  Lookups.singleton(project),
-                  node.getLookup()
-            }));
+                    NodeFactorySupport.createCompositeChildren(project, "Projects/org-plc4x-recipes-project/Nodes"),
+                    new ProxyLookup(
+                            Lookups.singleton(project),
+                            node.getLookup()));
             this.project = project;
         }
 
         @Override
         public Action[] getActions(boolean arg0) {
             List<Action> actions = new ArrayList<>();
-            actions.add(new CreatePlantProjectAction().createContextAwareInstance(project.getLookup()));
-            actions.add(new CreateRecipesProjectAction().createContextAwareInstance(project.getLookup()));
-            actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-s88-project/Actions"));
+            actions.add(new NewRecipeAction().createContextAwareInstance(project.getLookup()));
             actions.add(null);
             actions.add(CommonProjectActions.copyProjectAction());
             actions.add(CommonProjectActions.deleteProjectAction());
@@ -106,10 +100,10 @@ public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
             actions.add(CommonProjectActions.customizeProjectAction());
             return actions.toArray(new Action[0]);
         }
-
+        
         @Override
         public Image getIcon(int type) {
-            return ImageUtilities.loadImage(PROJECT_ICON);
+            return ImageUtilities.loadImage(RECIPE_SET_ICON);
         }
 
         @Override
@@ -121,7 +115,15 @@ public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
         public String getDisplayName() {
             return project.getProjectDirectory().getName();
         }
-
-    }    
-    
+        
+        @Override
+        public boolean canDestroy(){
+            return true;
+        }
+        
+        @Override
+        public void destroy(){
+            
+        }
+    }
 }

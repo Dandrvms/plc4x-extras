@@ -16,40 +16,42 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.plant.actions;
+package org.apache.plc4x.malbec.s88.recipes.actions;
 
 import java.awt.event.ActionEvent;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+//import java.io.InputStream;
+//import java.io.OutputStream;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 
-import org.apache.plc4x.malbec.s88.api.*;
-import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
-import org.apache.plc4x.malbec.s88.plant.services.S88ProjectServices;
+//import org.apache.plc4x.malbec.s88.api.*;
+import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectProviderImpl;
 import org.netbeans.api.project.Project;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
+import org.openide.awt.ActionID;
+import org.openide.awt.ActionReference;
+import org.openide.awt.ActionRegistration;
 import org.openide.filesystems.FileObject;
 import org.openide.util.ContextAwareAction;
 import org.openide.util.Exceptions;
 import org.openide.util.Lookup;
 
 /**
- * Action to create a new Plant Sub-project.
+ * Action to create a new Recipe set as a Sub-project.
  */
 
-public class CreatePlantProjectAction extends AbstractAction implements ContextAwareAction {
+public class CreateRecipesProjectAction extends AbstractAction implements ContextAwareAction {
 
     private final Lookup context;
 
-    public CreatePlantProjectAction() {
+    public CreateRecipesProjectAction() {
         this(Lookup.EMPTY);
     }
 
-    private CreatePlantProjectAction(Lookup context) {
-        super("New Plant");
+    private CreateRecipesProjectAction(Lookup context) {
+        super("New Recipe Set");
         this.context = context;
     }
 
@@ -60,7 +62,7 @@ public class CreatePlantProjectAction extends AbstractAction implements ContextA
             return;
         }
 
-        NotifyDescriptor.InputLine input = new NotifyDescriptor.InputLine("Project Name:", "Create Plant Sub-Project");
+        NotifyDescriptor.InputLine input = new NotifyDescriptor.InputLine("Recipe set:", "Create a new Recipe sets");
         input.setInputText("");
         if (DialogDisplayer.getDefault().notify(input) != NotifyDescriptor.OK_OPTION) {
             return;
@@ -69,22 +71,14 @@ public class CreatePlantProjectAction extends AbstractAction implements ContextA
 
         try {
             FileObject dir = project.getProjectDirectory().createFolder(name);
-            FileObject plantXml = dir.createData("plant.xml");
-
-            S88PlantModel model = new S88PlantModel(new S88Element());
-            model.getRoot().setId(name);
-
-            model.getRoot().setLevel(S88Level.AREA);
-
-            S88Repository repo = S88ProjectServices.createRepository("xml", new FileObjectStorage(plantXml));
-            repo.savePlant(model);
+            FileObject recipesConfig = dir.createData("recipes.cfg");
 
             project.getProjectDirectory().refresh();
             dir.refresh();
 
             org.netbeans.api.project.ProjectManager.getDefault().findProject(dir);
 
-            Plc4xPlantSubProjectProviderImpl provider = project.getLookup().lookup(Plc4xPlantSubProjectProviderImpl.class);
+            Plc4xRecipesSubProjectProviderImpl provider = project.getLookup().lookup(Plc4xRecipesSubProjectProviderImpl.class);
             if (provider != null) {
                 java.awt.EventQueue.invokeLater(provider::fireChange);
             }
@@ -96,18 +90,18 @@ public class CreatePlantProjectAction extends AbstractAction implements ContextA
 
     @Override
     public Action createContextAwareInstance(Lookup lkp) {
-        return new CreatePlantProjectAction(lkp);
+        return new CreateRecipesProjectAction(lkp);
     }
 
-    private record FileObjectStorage(FileObject fo) implements S88Storage {
-        @Override
-        public InputStream openInput() throws IOException {
-            return fo.getInputStream();
-        }
-
-        @Override
-        public OutputStream openOutput() throws IOException {
-            return fo.getOutputStream();
-        }
-        }
+//    private record FileObjectStorage(FileObject fo) implements S88Storage {
+//        @Override
+//        public InputStream openInput() throws IOException {
+//            return fo.getInputStream();
+//        }
+//
+//        @Override
+//        public OutputStream openOutput() throws IOException {
+//            return fo.getOutputStream();
+//        }
+//        }
 }
