@@ -19,6 +19,8 @@
 package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.DataType;
+import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
+import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -30,6 +32,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
+import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -38,6 +41,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -292,12 +296,16 @@ class RecipeEditingTest {
 
         EditProcedureLogicUseCase.addStep(recipe, procedure, "BOX_HEAT", "HEAT");
         EditProcedureLogicUseCase.addStep(recipe, procedure, "BOX_END", "END");
+        EditProcedureLogicUseCase.addTransition(recipe, procedure, "T1");
         EditProcedureLogicUseCase.addLink(recipe, procedure, "L1", List.of("BOX_HEAT"),
+                List.of("T1"), null);
+        EditProcedureLogicUseCase.addLink(recipe, procedure, "L2", List.of("T1"),
                 List.of("BOX_END"), null);
 
         S88ProcedureLogic chart = procedure.getProcedureLogic();
         assertEquals(2, chart.getSteps().size());
-        assertEquals(1, chart.getLinks().size());
+        assertEquals(2, chart.getLinks().size());
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart));
         assertEquals("HEAT", chart.findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
                 "and the chart says which step each box works on, by the name the plant gave it");
         assertTrue(EditProcedureLogicUseCase.hasChart(procedure));
@@ -327,16 +335,52 @@ class RecipeEditingTest {
     }
 
     @Test
-    void aLineMayNameSomethingOutsideTheChart() {
+    void aLineCannotJoinTwoBoxesBecauseThereIsAlwaysABarBetweenThem() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
-        EditProcedureLogicUseCase.addLink(recipe, proc, "LEXT", List.of("!STEP_ELSEWHERE"),
-                List.of("BOX_END"), null);
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> EditProcedureLogicUseCase.addLink(recipe, proc, "LSTRAIGHT",
+                        List.of("BOX_HEAT"), List.of("BOX_END"), null));
+        assertTrue(refused.getMessage().contains("bar"),
+                "a line straight from one box to the next is a chart that never says what lets the"
+                        + " flow go on, so the refusal says where the bar goes instead");
+    }
 
-        var external = proc.getProcedureLogic().findLink("LEXT").orElseThrow().getFrom().get(0);
+    @Test
+    void aLineCannotJoinTwoBarsEither() {
+        S88Recipe recipe = completeChart();
+        S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
+        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_SECOND");
+
+        assertThrows(IllegalStateException.class, () -> EditProcedureLogicUseCase.addLink(
+                recipe, proc, "LBARBAR", List.of("T_TEMP_OK"), List.of("T_SECOND"), null));
+    }
+
+    @Test
+    void oneEndOfALineCannotBeABoxAndABarAtTheSameTime() {
+        S88Recipe recipe = completeChart();
+        S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
+
+        assertThrows(IllegalArgumentException.class, () -> EditProcedureLogicUseCase.addLink(
+                recipe, proc, "LMIXED", List.of("BOX_HEAT", "T_TEMP_OK"),
+                List.of("BOX_END"), null),
+                "a line that left one box and one bar would be two lines sharing a name, and would"
+                        + " draw as two lines the reader has to tell apart");
+    }
+
+    @Test
+    void aLineMayNameSomethingOutsideTheChart() {
+        S88Recipe recipe = completeChart();
+        S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
+        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_ELSEWHERE", "HEAT");
+
+        EditProcedureLogicUseCase.addLink(recipe, proc, "LEXT", List.of("!BOX_OUTSIDE"),
+                List.of("T_TEMP_OK"), null);
+
+        var external = chartOf(recipe).findLink("LEXT").orElseThrow().getFrom().get(0);
         assertFalse(external.isInternal(),
-                "which is how a line says it refers to a step of another part of the process rather"
+                "which is how a line says it refers to a box of another part of the process rather"
                         + " than one of its own");
     }
 
@@ -355,49 +399,84 @@ class RecipeEditingTest {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_MIX", "HEAT");
+        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_SPLIT");
 
         EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT", List.of("BOX_HEAT"),
+                List.of("T_SPLIT"), null);
+        EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT2", List.of("T_SPLIT"),
                 List.of("BOX_MIX", "BOX_END"), S88LinkType.PARALLEL_DIVERGENT);
 
-        var split = proc.getProcedureLogic().findLink("LSPLIT").orElseThrow();
+        var split = chartOf(recipe).findLink("LSPLIT2").orElseThrow();
         assertEquals(2, split.getTo().size());
         assertTrue(split.isDivergent());
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chartOf(recipe)),
+                "and a chart with a split in it is still a chart where every line crosses a bar");
     }
 
     @Test
-    void aBarWaitsOnAReportOfTheEquipment() {
+    void aBarWaitsOnAComparisonOfWhatTheEquipmentReports() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
+        var expression = S88ConditionExpression.of(
+                S88VariableAddress.parse("Reports/STATE"), S88ConditionOperator.EQUALS, "COMPLETE");
 
-        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_TEMP_OK", "Reports/STATE");
+        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_STATE", expression);
 
-        var bar = proc.getProcedureLogic().findTransition("T_TEMP_OK").orElseThrow();
+        var bar = chartOf(recipe).findTransition("T_STATE").orElseThrow();
         assertTrue(bar.isGuarded());
-        assertEquals("Reports/STATE", bar.conditionAddress().toText(),
-                "a bar is a report to read off the equipment, written the way a recipe written by"
-                        + " class names one");
+        assertFalse(bar.crossesAlways());
+        assertEquals(expression, bar.expression(),
+                "a bar is what the recipe reads off the equipment and what it compares it against,"
+                        + " written the way a recipe written by class names a variable");
+        assertEquals("COMPLETE", bar.expression().getLiteral());
     }
 
     @Test
-    void aBarWithNothingToWaitOnIsAllowed() {
+    void aBarWithNothingToWaitOnIsTheWayToSayItGoesStraightOn() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
-        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_TEMP_OK", null);
+        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_ALWAYS");
 
-        var bar = proc.getProcedureLogic().findTransition("T_TEMP_OK").orElseThrow();
+        var bar = chartOf(recipe).findTransition("T_ALWAYS").orElseThrow();
         assertFalse(bar.isGuarded());
-        assertSame(null, bar.conditionAddress(),
-                "a bar crossed because the step before it finished is a real thing to draw");
+        assertTrue(bar.crossesAlways(),
+                "an ordinary bar and not a missing one: a chart draws a bar between two steps that"
+                        + " simply follow one another, and reading it as absent would leave the"
+                        + " chart with no way to say go on");
+        assertNull(bar.expression());
     }
 
     @Test
-    void aBarThatNamesSomethingWhichIsNotAnAddressIsRefused() {
-        S88Recipe recipe = completeChart();
-        S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
+    void aComparisonSurvivesBeingWrittenAndReadAgain() {
+        var expression = S88ConditionExpression.of(S88VariableAddress.parse("Reports/STATE"),
+                S88ConditionOperator.NOT_EQUALS, "ABORTED");
 
-        assertThrows(IllegalArgumentException.class,
-                () -> EditProcedureLogicUseCase.addTransition(recipe, proc, "T_BAD", "Reports/"));
+        assertEquals(expression, S88ConditionExpression.parse(expression.toText()),
+                "the text a recipe carries is the only place the comparison lives, so it has to read"
+                        + " back the same or the bar would mean something else when reopened");
+        assertTrue(expression.reads(S88VariableAddress.parse("Reports/STATE")));
+        assertFalse(expression.reads(S88VariableAddress.parse("Reports/FAILURE")));
+    }
+
+    @Test
+    void textThatIsNotAComparisonIsLeftWhereItIsRatherThanThrowing() {
+        var bar = new org.apache.plc4x.malbec.s88.api.S88ProcedureTransition("T1", "SOMETHING_ELSE");
+
+        assertNull(bar.expression(),
+                "a bar written a way this does not read is a reason to show the reader what was"
+                        + " there, not a reason to refuse to open the recipe");
+        assertEquals("SOMETHING_ELSE", bar.getCondition(),
+                "and what was written stays on the bar");
+    }
+
+    @Test
+    void anOperatorOfTwoCharactersIsNotReadAsOne() {
+        assertSame(S88ConditionOperator.GREATER_OR_EQUAL, S88ConditionOperator.fromSymbol(">="),
+                "an at-least turned into a more-than by reading the first character would change what"
+                        + " the bar waits for without anybody seeing it happen");
+        assertSame(S88ConditionOperator.GREATER, S88ConditionOperator.fromSymbol(">"));
+        assertNull(S88ConditionOperator.fromSymbol("~"));
     }
 
     // ========== Being told what changed ==========
@@ -415,6 +494,7 @@ class RecipeEditingTest {
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_MIX", "HEAT");
         EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_MIX");
         EditProcedureLogicUseCase.removeLink(recipe, proc, "L1");
+        EditProcedureLogicUseCase.removeLink(recipe, proc, "L2");
         EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_HEAT");
         EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_END");
         DeleteRecipeElementUseCase.execute(recipe, heat);
@@ -497,7 +577,8 @@ class RecipeEditingTest {
 
     @Test
     void aCopyOfAControlRecipeIsStillAControlRecipe() {
-        var control = new org.apache.plc4x.malbec.s88.api.S88ControlRecipe("C1", "LOTE_014");
+        var control = new org.apache.plc4x.malbec.s88.api.S88ControlRecipe("C1", "LOTE_014",
+                S88RecipeKind.INSTANCE);
 
         S88Recipe copy = RecipeDeepCopy.copyRecipe(control);
 
@@ -553,11 +634,18 @@ class RecipeEditingTest {
 
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_HEAT", "HEAT");
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_END", "END");
+        // Between two boxes there is always a bar, so the flow goes box, bar, box and never box to
+        // box. This is the shape the chart has in every other tool that draws one.
+        EditProcedureLogicUseCase.addTransition(recipe, proc, "T_TEMP_OK",
+                S88ConditionExpression.of(
+                        S88VariableAddress.parse("Reports/STATE"), S88ConditionOperator.EQUALS, "COMPLETE"));
         EditProcedureLogicUseCase.addLink(recipe, proc, "L1", List.of("BOX_HEAT"),
+                List.of("T_TEMP_OK"), null);
+        EditProcedureLogicUseCase.addLink(recipe, proc, "L2", List.of("T_TEMP_OK"),
                 List.of("BOX_END"), null);
-        EditProcedureLogicUseCase.addTransition(recipe, proc, "T3", "Reports/STATE");
         return recipe;
     }
 }
+
 
 

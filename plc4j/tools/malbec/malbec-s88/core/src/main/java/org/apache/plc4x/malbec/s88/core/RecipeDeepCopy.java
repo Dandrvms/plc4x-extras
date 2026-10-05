@@ -133,7 +133,7 @@ public class RecipeDeepCopy {
      */
     public static S88Recipe newRecipeOfSameKind(S88Recipe source) {
         if (source instanceof S88ControlRecipe control) {
-            return new S88ControlRecipe(control.getId(), control.getBatchId());
+            return new S88ControlRecipe(control.getId(), control.getBatchId(), control.getKind());
         }
         if (source instanceof S88MasterRecipe master) {
             return new S88MasterRecipe(master.getId(), master.getKind());

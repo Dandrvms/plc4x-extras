@@ -79,7 +79,7 @@ class RecipeConformanceTest {
 
     @Test
     void aControlRecipeWithoutABatchIsReported() {
-        S88ControlRecipe control = new S88ControlRecipe("C1", null);
+        S88ControlRecipe control = new S88ControlRecipe("C1", null, S88RecipeKind.INSTANCE);
         S88RecipeElement element = step("HEAT", S88RecipeElementKind.OPERATION);
         element.addActualEquipmentId("CALENTAMIENTO_TANQUE_1");
         control.addRecipeElement(element);
@@ -282,4 +282,5 @@ class RecipeConformanceTest {
                 .anyMatch(line -> line.contains(needle));
     }
 }
+
 

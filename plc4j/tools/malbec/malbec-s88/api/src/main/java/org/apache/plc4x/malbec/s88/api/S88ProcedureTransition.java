@@ -23,17 +23,17 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The bar between two steps, and the report of the equipment that has to be read for the flow to
- * cross it.
+ * The bar between two steps, and what has to be true for the flow to cross it.
  * <p>
- * This is where a recipe reads the plant. A transition names a variable the module publishes under
- * its reports, such as {@code Reports/STATE}, and the flow crosses the bar when that variable says
- * what the recipe is waiting for. So a condition is an address in the same form a parameter of a
- * class recipe uses, and {@link S88VariableAddress} is what reads it.
+ * What the bar waits on is written as a comparison, and the recipe format stores it as a string in
+ * {@link #getCondition()}. {@link #expression()} reads it as an {@link S88ConditionExpression}, so
+ * that whoever draws the bar can show what it waits on, and {@link #setExpression} writes one back.
+ * The comparison is <b>not</b> worked out here: reading the value and deciding whether the process
+ * may continue is the business of whatever runs the recipe.
  * <p>
- * What the value is compared against is not in the recipe either. The recipe format carries a name
- * here, and the text of a comparison, when there is one, is kept as an
- * {@link S88OtherInformation#CONDITION} entry.
+ * The address is kept as written. Resolving it means finding the module the
+ * step is applied to, and which module that is depends on the batch, not on the recipe: the same
+ * recipe is set for a different tank on every run and has to mean the same thing each time.
  */
 public class S88ProcedureTransition {
 
@@ -47,7 +47,7 @@ public class S88ProcedureTransition {
 
     public S88ProcedureTransition(String id, String condition) {
         this.id = id;
-        setCondition(condition);
+        this.condition = condition;
     }
 
     public String getId() {
@@ -58,7 +58,7 @@ public class S88ProcedureTransition {
         this.id = id;
     }
 
-    /** The name of the report this bar waits on, kept exactly as the recipe wrote it. */
+    /** The comparison this bar waits on, exactly as the recipe wrote it. */
     public String getCondition() {
         return condition;
     }
@@ -68,15 +68,22 @@ public class S88ProcedureTransition {
     }
 
     /**
-     * The report this bar waits on, as an address.
-     * <p>
-     * Null when the bar names no report, which is a real thing a recipe can have: a bar that is
-     * crossed because the previous step finished, rather than because something was read.
+     * The comparison this bar waits on, read as one.
      *
-     * @return the address of the report, or {@code null} when there is none to read
+     * @return the comparison, or {@code null} when the bar waits on nothing, or when the text was
+     *         written in a way this does not read
      */
-    public S88VariableAddress conditionAddress() {
-        return S88VariableAddress.parse(condition);
+    public S88ConditionExpression expression() {
+        return S88ConditionExpression.parse(condition);
+    }
+
+    /**
+     * Writes a comparison onto this bar, in the text the recipe carries.
+     *
+     * @param expression comparison to wait on, {@code null} for a bar that waits on nothing
+     */
+    public void setExpression(S88ConditionExpression expression) {
+        this.condition = expression != null ? expression.toText() : null;
     }
 
     /**
@@ -101,13 +108,22 @@ public class S88ProcedureTransition {
         }
     }
 
-    /** True when the bar names a condition at all. A recipe may draw one that guards nothing. */
+    /** True when the bar has to wait for something before the flow may cross it. */
     public boolean isGuarded() {
         return condition != null && !condition.isBlank();
     }
 
+    /**
+     * True when the flow crosses this bar as soon as the step before it has finished.
+     *
+     * @return true when nothing has to be true before this bar is crossed
+     */
+    public boolean crossesAlways() {
+        return !isGuarded();
+    }
+
     @Override
     public String toString() {
-        return "S88ProcedureTransition[" + id + (isGuarded() ? " when " + condition : ", unguarded") + "]";
+        return "S88ProcedureTransition[" + id + (isGuarded() ? " when " + condition : ", always") + "]";
     }
 }

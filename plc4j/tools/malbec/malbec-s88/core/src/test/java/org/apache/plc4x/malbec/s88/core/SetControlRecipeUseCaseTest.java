@@ -22,14 +22,12 @@ import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,15 +39,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Setting a master recipe for one batch.
  * <p>
- * The two things worth pinning here are that the result is a separate recipe rather than the master
- * wearing a batch number, and that a step still naming a class of equipment is reported as waiting
- * rather than quietly pointed at a tank that happens to exist.
+ * The one that matters here is the first test: a master written by class has to produce a control
+ * recipe still written by class. Turning it into a per-instance recipe would mean inventing an answer
+ * about which unit this batch gets, and putting it in the file would mean the file claims something
+ * about the plant that is not true until the batch is running.
  */
 class SetControlRecipeUseCaseTest {
 
     @Test
+    void aMasterWrittenByClassGivesAControlRecipeStillWrittenByClass() {
+        S88MasterRecipe master = master(S88RecipeKind.CLASS);
+        assertTrue(master.getAllElements().get(0).getActualEquipmentIds().isEmpty());
+
+        S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "LOTE_2026_014");
+
+        assertSame(S88RecipeKind.CLASS, control.getKind(),
+                "a plant may have a thousand identical tanks and the recipe that names the class is"
+                        + " the recipe that lets any of them do the work; choosing one here would be"
+                        + " inventing an answer nobody gave");
+        assertTrue(control.addressesByClass());
+        assertEquals("HEATER", control.getAllElements().get(0).getEquipmentClassId(),
+                "and the class comes through, so the recipe still says which class of equipment it"
+                        + " needs");
+        assertTrue(control.getAllElements().get(0).getActualEquipmentIds().isEmpty(),
+                "with nothing turned into a particular module behind the reader's back");
+    }
+
+    @Test
+    void aMasterWrittenForParticularEquipmentGivesAControlRecipeForParticularEquipment() {
+        S88MasterRecipe master = master(S88RecipeKind.INSTANCE);
+        master.getAllElements().get(0).addActualEquipmentId("CALENTAMIENTO_TANQUE_1");
+
+        S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "LOTE_2026_014");
+
+        assertSame(S88RecipeKind.INSTANCE, control.getKind());
+        assertEquals(java.util.List.of("CALENTAMIENTO_TANQUE_1"),
+                control.getAllElements().get(0).getActualEquipmentIds(),
+                "and the module it names comes through untouched, because this one the recipe does"
+                        + " know which unit it means");
+    }
+
+    @Test
     void aControlRecipeIsSetForTheBatchItIsGiven() {
-        S88ControlRecipe control = new SetControlRecipeUseCase().from(master(), "LOTE_2026_014");
+        S88ControlRecipe control = new SetControlRecipeUseCase().from(master(S88RecipeKind.CLASS),
+                "LOTE_2026_014");
 
         assertEquals("LOTE_2026_014", control.getBatchId());
         assertEquals("CTL_LOTE_2026_014", control.getId());
@@ -57,71 +90,76 @@ class SetControlRecipeUseCaseTest {
     }
 
     @Test
-    void theControlRecipeIsForParticularEquipmentWhateverTheMasterSaid() {
-        S88MasterRecipe byClass = master();
-        assertSame(S88RecipeKind.CLASS, byClass.getKind());
-
-        S88ControlRecipe control = new SetControlRecipeUseCase().from(byClass, "L1");
-
-        assertSame(S88RecipeKind.INSTANCE, control.getKind(),
-                "a recipe on its way to the plant always is, and this is the decision rather than a"
-                        + " rule on the data class, so a control recipe that arrives from elsewhere"
-                        + " saying otherwise is not silently corrected into something that looks"
-                        + " fine");
-    }
-
-    @Test
-    void aStepStillNamingAClassIsReportedRatherThanPointedAtAModule() {
-        SetControlRecipeUseCase useCase = new SetControlRecipeUseCase();
-
-        S88ControlRecipe control = useCase.from(master(), "L1");
-
-        assertFalse(useCase.isFullyBound());
-        assertEquals(1, useCase.getUnresolvedSteps().size());
-        assertTrue(useCase.getUnresolvedSteps().getFirst().contains("HEATER"),
-                "the step says what it still needs, so whoever binds it can be asked which module is"
-                        + " free, instead of the recipe arriving at the plant pointing at a guess");
-        assertEquals("HEATER", control.getAllElements().getFirst().getEquipmentClassId(),
-                "and the class is kept rather than replaced, so the question is still answerable");
-    }
-
-    @Test
-    void aMasterAlreadyNamingAModulesNeedsNothingDecidingForIt() {
-        S88MasterRecipe master = new S88MasterRecipe("REC_MAESTRA", S88RecipeKind.INSTANCE);
-        S88RecipeElement element = new S88RecipeElement("HEAT", S88RecipeElementKind.OPERATION);
-        element.addActualEquipmentId("CALENTAMIENTO_TANQUE_1");
-        master.addRecipeElement(element);
-        SetControlRecipeUseCase useCase = new SetControlRecipeUseCase();
-
-        useCase.from(master, "L1");
-
-        assertTrue(useCase.isFullyBound());
-        assertEquals(List.of("CALENTAMIENTO_TANQUE_1"),
-                useCase.getControlRecipe().getAllElements().getFirst().getActualEquipmentIds());
-    }
-
-    @Test
     void theControlRecipeIsACopyAndNotTheMasterItself() {
-        S88MasterRecipe master = master();
+        S88MasterRecipe master = master(S88RecipeKind.CLASS);
 
         S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "L1");
 
         assertNotSame(master, control);
-        assertNotSame(master.getAllElements().getFirst(), control.getAllElements().getFirst(),
+        assertNotSame(master.getAllElements().get(0), control.getAllElements().get(0),
                 "a control recipe is kept as the record of what one run did, so sharing the steps"
                         + " with the master would let an edit to one of them rewrite the other");
-        assertNotSame(master.getAllElements().getFirst().getParameters().getFirst(),
-                control.getAllElements().getFirst().getParameters().getFirst());
+        assertNotSame(master.getAllElements().get(0).getParameters().get(0),
+                control.getAllElements().get(0).getParameters().get(0));
+    }
+
+    @Test
+    void theStepsOfTheMasterComeAcrossWhole() {
+        S88ControlRecipe control = new SetControlRecipeUseCase()
+                .from(master(S88RecipeKind.CLASS), "L1");
+
+        S88RecipeElement element = control.getAllElements().get(0);
+        assertEquals(S88RecipeElementKind.OPERATION, element.getKind());
+        assertEquals(1, element.getParameters().size());
+        S88RecipeParameter parameter = element.getParameters().get(0);
+        assertEquals("Reports/STATE", parameter.getId());
+        assertEquals("IDLE", parameter.getFirstValue().getFirstValueString());
+        assertEquals(DataType.ENUMERATION, parameter.getFirstValue().getDataType());
+    }
+
+    @Test
+    void theChartOfTheMasterIsCarriedOver() {
+        S88MasterRecipe master = master(S88RecipeKind.CLASS);
+        master.setProcedureLogic(new S88ProcedureLogic());
+        master.getProcedureLogic().addStep(
+                new org.apache.plc4x.malbec.s88.api.S88ProcedureStep("BOX", "HEAT"));
+
+        S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "L1");
+
+        assertTrue(control.hasProcedureLogic());
+        assertEquals(1, control.getProcedureLogic().getSteps().size());
+    }
+
+    @Test
+    void theControlRecipeKeepsItsOwnKindAndMasterRatherThanTheCopyOfThem() {
+        S88MasterRecipe master = master(S88RecipeKind.CLASS);
+
+        S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "L1");
+
+        long kindEntries = control.getOtherInformation().stream()
+                .filter(info -> org.apache.plc4x.malbec.s88.api.S88OtherInformation.RECIPE_KIND
+                        .equalsIgnoreCase(info.getId()))
+                .count();
+        long sourceEntries = control.getOtherInformation().stream()
+                .filter(info -> S88ControlRecipe.SOURCE_RECIPE_ID.equalsIgnoreCase(info.getId()))
+                .count();
+        assertEquals(1, kindEntries,
+                "the kind is written down once, as the control recipe's own answer, rather than"
+                        + " carried over from the copy and overwriting it");
+        assertEquals(1, sourceEntries);
+        assertSame(S88RecipeKind.CLASS, org.apache.plc4x.malbec.s88.api.S88MasterRecipe
+                .readStoredKind(control));
     }
 
     @Test
     void aRecipeWithNoBatchToSetItForIsRefused() {
         SetControlRecipeUseCase useCase = new SetControlRecipeUseCase();
+        S88MasterRecipe master = master(S88RecipeKind.CLASS);
 
-        assertThrows(IllegalArgumentException.class, () -> useCase.from(master(), null));
-        assertThrows(IllegalArgumentException.class, () -> useCase.from(master(), "  "),
+        assertThrows(IllegalArgumentException.class, () -> useCase.from(master, null));
+        assertThrows(IllegalArgumentException.class, () -> useCase.from(master, "  "),
                 "a control recipe with no batch is indistinguishable from any other run, and"
-                        + " refusing it here is the one point where the batch is genuinely required");
+                        + " refusing it here is the one point where the batch is genuinely needed");
     }
 
     @Test
@@ -130,38 +168,15 @@ class SetControlRecipeUseCaseTest {
                 () -> new SetControlRecipeUseCase().from(null, "L1"));
     }
 
-    @Test
-    void theStepsOfTheMasterComeAcrossWhole() {
-        S88ControlRecipe control = new SetControlRecipeUseCase().from(master(), "L1");
-
-        S88RecipeElement element = control.getAllElements().getFirst();
-        assertEquals(S88RecipeElementKind.OPERATION, element.getKind());
-        assertEquals(1, element.getParameters().size());
-        S88RecipeParameter parameter = element.getParameters().getFirst();
-        assertEquals("Reports/STATE", parameter.getId());
-        assertEquals("IDLE", parameter.getFirstValue().getFirstValueString());
-        assertEquals(DataType.ENUMERATION, parameter.getFirstValue().getDataType());
-    }
-
-    @Test
-    void theChartOfTheMasterIsCarriedOver() {
-        S88MasterRecipe master = master();
-        master.setProcedureLogic(new S88ProcedureLogic());
-        master.getProcedureLogic().addStep(new S88ProcedureStep("S1", "HEAT"));
-
-        S88ControlRecipe control = new SetControlRecipeUseCase().from(master, "L1");
-
-        assertTrue(control.hasProcedureLogic());
-        assertEquals(1, control.getProcedureLogic().getSteps().size());
-    }
-
-    private static S88MasterRecipe master() {
-        S88MasterRecipe master = new S88MasterRecipe("REC_MAESTRA", S88RecipeKind.CLASS);
+    private static S88MasterRecipe master(S88RecipeKind kind) {
+        S88MasterRecipe master = new S88MasterRecipe("REC_MAESTRA", kind);
         S88RecipeElement element = new S88RecipeElement("HEAT", S88RecipeElementKind.OPERATION);
-        element.setEquipmentClassId("HEATER");
-        element.addParameter(S88RecipeParameter.of("Reports/STATE", "IDLE", DataType.ENUMERATION, null));
+        if (kind == S88RecipeKind.CLASS) {
+            element.setEquipmentClassId("HEATER");
+        }
+        element.addParameter(
+                S88RecipeParameter.of("Reports/STATE", "IDLE", DataType.ENUMERATION, null));
         master.addRecipeElement(element);
         return master;
     }
 }
-

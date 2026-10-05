@@ -212,14 +212,22 @@ class S88RecipeModelTest {
     }
 
     @Test
-    void aControlRecipeIsForParticularEquipmentByDefault() {
-        assertSame(S88RecipeKind.INSTANCE, new S88ControlRecipe().getKind());
-        assertSame(S88RecipeKind.INSTANCE, new S88ControlRecipe("C1", "LOTE_2026_014").getKind());
+    void aControlRecipeKeepsTheWayOfNamingItsEquipmentThatItWasGiven() {
+        S88ControlRecipe byInstance = new S88ControlRecipe("C1", "LOTE_2026_014", S88RecipeKind.INSTANCE);
+        S88ControlRecipe byClass = new S88ControlRecipe("C2", "LOTE_2026_015", S88RecipeKind.CLASS);
+
+        assertSame(S88RecipeKind.INSTANCE, byInstance.getKind());
+        assertSame(S88RecipeKind.CLASS, byClass.getKind(),
+                "a control recipe that came from a master written by class still names the class,"
+                        + " because which of the hundred free units this batch gets is decided"
+                        + " while the batch runs and not while the recipe is being written");
+        assertTrue(byClass.addressesByClass());
+        assertFalse(byInstance.addressesByClass());
     }
 
     @Test
     void aControlRecipeRemembersTheMasterItWasSetFrom() {
-        S88ControlRecipe control = new S88ControlRecipe("C1", "LOTE_2026_014");
+        S88ControlRecipe control = new S88ControlRecipe("C1", "LOTE_2026_014", S88RecipeKind.CLASS);
 
         assertNull(control.getSourceRecipeId());
         control.setSourceRecipeId("REC_MAESTRA");

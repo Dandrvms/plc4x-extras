@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
+import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -206,8 +207,15 @@ public final class RecipeConformance {
     }
 
     /**
-     * The chart has to start somewhere, and everything on it has to be reachable from where it
-     * starts.
+     * The chart has to start somewhere, and every box has to be reachable from where it starts.
+     * <p>
+     * The walk alternates between boxes and bars. The flow leaves a box, crosses a bar, and arrives
+     * at a box. A line drawn straight from one box to another has nothing to follow, which is
+     * why {@link #checkBranches} reports one.
+     * <p>
+     * A bar that waits on nothing is crossed as soon as the box before it has finished, so it is
+     * walked through like any other. A chart may loop back to an earlier box retrying. Entering
+     * a box twice ends the walk avoiding a forever loop.
      */
     private static void checkReachability(S88Recipe recipe, S88ProcedureLogic logic,
                                           List<String> excess, List<String> deficit) {
@@ -240,29 +248,36 @@ public final class RecipeConformance {
     }
 
     /**
-     * Walks the chart from one step, following the lines out of whatever it reaches. Links are
-     * followed in the order the recipe lists them and a step is only ever entered once, so a cycle
-     * ends the walk instead of going round forever.
+     * Walks the chart from one box, following the lines out of whatever it reaches and back
+     * again where it reaches a bar.
+     * <p>
+     * Only the end a node is at is followed, so walking from a box leaves along the lines that
+     * leave from it and walking from a bar leaves along the lines that leave from it. A box is only
+     * ever entered once, so a cycle ends the walk instead of going round forever.
      */
     private static void walkFrom(String startStepId, S88ProcedureLogic logic, Set<String> reached) {
-        Deque<String> pending = new ArrayDeque<>();
-        pending.push(startStepId);
+        Deque<S88IdRef> pending = new ArrayDeque<>();
+        pending.push(S88IdRef.step(startStepId));
         while (!pending.isEmpty()) {
-            String current = pending.pop();
-            if (current == null || !reached.add(current)) {
+            S88IdRef here = pending.pop();
+            if (here == null || here.getValue() == null) {
                 continue;
             }
-            for (S88ProcedureLink link : logic.linksFrom(current)) {
-                for (S88IdRef ref : link.getTo()) {
-                    if (ref.getType() == org.apache.plc4x.malbec.s88.api.S88IdRefType.STEP) {
-                        pending.push(ref.getValue());
-                    }
+            boolean isBox = here.getType() == S88IdRefType.STEP;
+            if (isBox && !reached.add(here.getValue())) {
+                continue;
+            }
+            for (S88ProcedureLink link : logic.linksTouching(here)) {
+                if (!link.getFrom().contains(here)) {
+                    continue;
+                }
+                for (S88IdRef next : link.getTo()) {
+                    pending.push(next);
                 }
             }
         }
     }
-
-    /**
+     /**
      * The first step of the chart whose element is of the given kind, which is how the start and the
      * end of the flow are found.
      */

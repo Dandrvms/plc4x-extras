@@ -25,6 +25,12 @@ package org.apache.plc4x.malbec.s88.api;
  * makes it different from every other recipe on disk: a master recipe may be edited and reused as
  * often as the process needs, while a control recipe belongs to one run and is what the plant is
  * working on right now.
+ * <p>
+ * <b>How it names its equipment is not decided here.</b> A control recipe that came from a master
+ * written by class still names the class, because that is the whole point of a class recipe: it says
+ * "a unit of this class", and which unit of the hundred that is gets decided while the batch is
+ * running, not while the recipe is being written. Nothing in the recipe file says which unit it was,
+ * and turning the recipe into a per-instance one here would mean inventing an answer nobody gave.
  */
 public class S88ControlRecipe extends S88MasterRecipe {
 
@@ -37,16 +43,25 @@ public class S88ControlRecipe extends S88MasterRecipe {
 
     private String batchId;
 
-    /**
-     * A control recipe is set for particular equipment.
-     */
     public S88ControlRecipe() {
-        this(null, null);
+        this(null, null, null);
     }
 
-    public S88ControlRecipe(String id, String batchId) {
-        super(id, S88RecipeKind.INSTANCE);
+    /**
+     * @param id     id of the control recipe
+     * @param batchId batch this run is for
+     * @param kind   how the recipe names its equipment, which is the kind the master recipe used and
+     *               is not chosen here
+     */
+    public S88ControlRecipe(String id, String batchId, S88RecipeKind kind) {
+        super(id, kind);
         this.batchId = batchId;
+    }
+
+    /** True when this recipe names a class of equipment rather than particular modules. */
+    @Override
+    public boolean addressesByClass() {
+        return getKind() == S88RecipeKind.CLASS;
     }
 
     /** The batch this recipe was set for. This is what ties the recipe to one run. */

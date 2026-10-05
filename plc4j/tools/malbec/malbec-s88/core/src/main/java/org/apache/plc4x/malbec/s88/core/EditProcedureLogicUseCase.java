@@ -18,6 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.core;
 
+import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88IdScope;
@@ -133,16 +134,20 @@ public class EditProcedureLogicUseCase {
 
     /**
      * Draws a line between two things on the chart.
+     * <p>
+     * One end has to be a box and the other a bar. A line straight from box to box is refused.
      *
      * @param recipe  recipe the step belongs to, may be {@code null}
      * @param step    step whose chart is being drawn on
      * @param lineId  name of the line, unique within this chart
-     * @param fromIds what the line leaves, at least one
-     * @param toIds   what it arrives at, at least one
+     * @param fromIds what the line leaves, at least one, all the same kind
+     * @param toIds   what it arrives at, at least one, all the same kind
      * @param type    what it means, {@code null} for an ordinary flow of control
      * @return the line
      * @throws IllegalArgumentException when the name is empty, already used, an end is missing, or
      *                                  an end names something the chart does not carry
+     * @throws IllegalStateException    when both ends are of the same kind, which is a chart with
+     *                                  no bar between two steps
      */
     public static S88ProcedureLink addLink(S88Recipe recipe, S88RecipeElement step, String lineId,
                                            List<String> fromIds, List<String> toIds, S88LinkType type) {
@@ -163,6 +168,13 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("A line has to arrive somewhere.");
         }
 
+        boolean fromAreBars = kindOf(chart, fromIds) == S88IdRefType.TRANSITION;
+        boolean toAreBars = kindOf(chart, toIds) == S88IdRefType.TRANSITION;
+        if (fromAreBars == toAreBars) {
+            throw new IllegalStateException("A line cannot join two boxes or two bars. Between one"
+                    + " box and the next there is always a bar, and a bar with nothing to wait on is"
+                    + " how a chart says it goes straight on.");
+        }
         S88ProcedureLink line = new S88ProcedureLink(lineId);
         for (String from : fromIds) {
             line.addFrom(existingEnd(chart, from, "leaves"));
@@ -176,6 +188,68 @@ public class EditProcedureLogicUseCase {
         chart.addLink(line);
         announce(recipe);
         return line;
+    }
+
+    /**
+     * Whether a chart can be drawn as it stands: every line joining a box to a bar.
+     *
+     * @param chart chart to look at, may be {@code null}
+     * @return true when there is no line straight from one box to another
+     */
+    public static boolean isChartBipartite(S88ProcedureLogic chart) {
+        if (chart == null) {
+            return true;
+        }
+        for (S88ProcedureLink link : chart.getLinks()) {
+            List<S88IdRef> from = link.getFrom();
+            List<S88IdRef> to = link.getTo();
+            if (!from.isEmpty() && !to.isEmpty() && from.get(0).getType() == to.get(0).getType()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * What all the names of one end of a line are, which has to agree: a line either leaves several
+     * boxes or leaves several bars, and a line that left both would have two ends of every kind and
+     * would draw as two lines sharing a name.
+     * <p>
+     * Every name is checked against the chart first, so that a name nobody has is reported as the
+     * typo it is instead of being taken for a box.
+     *
+     * @param chart chart the names are on
+     * @param names names of one end
+     * @return what they all are
+     * @throws IllegalArgumentException when a name is not on the chart, or the names are not all the
+     *                                  same kind of thing
+     */
+    private static S88IdRefType kindOf(S88ProcedureLogic chart, List<String> names) {
+        for (String name : names) {
+            if (name == null || name.isBlank() || isOutside(name)) {
+                continue;
+            }
+            if (chart.findStep(name).isEmpty() && chart.findTransition(name).isEmpty()) {
+                throw new IllegalArgumentException("The chart has no box or bar called '" + name
+                        + "' for a line to point at.");
+            }
+        }
+        S88IdRefType kind = chart.findTransition(names.get(0)).isPresent()
+                ? S88IdRefType.TRANSITION : S88IdRefType.STEP;
+        for (String name : names) {
+            S88IdRefType one = chart.findTransition(name).isPresent()
+                    ? S88IdRefType.TRANSITION : S88IdRefType.STEP;
+            if (one != kind) {
+                throw new IllegalArgumentException("The names '" + String.join("', '", names)
+                        + "' are not all the same kind of thing on this chart, so they cannot all be"
+                        + " one end of the same line.");
+            }
+        }
+        return kind;
+    }
+
+    private static boolean isOutside(String name) {
+        return name.startsWith("!") || name.startsWith("#");
     }
 
     /**
@@ -238,17 +312,33 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Puts a bar on the chart, waiting on a report of the element the box works on.
+     * Puts a bar on the chart that waits on nothing, which is the bar a chart draws between two
+     * steps that simply follow one another. There is always a bar between two boxes; a bar that
+     * waits on nothing is how it says it goes straight on.
      *
-     * @param recipe    recipe the step belongs to, may be {@code null}
-     * @param step      step whose chart is being drawn on
-     * @param barId     name of the bar, unique within this chart
-     * @param reportAddress address of the report to wait on, such as {@code Reports/STATE}, or
-     *                     {@code null} for a bar crossed because the step before it finished
+     * @param recipe recipe the step belongs to, may be {@code null}
+     * @param step   step whose chart is being drawn on
+     * @param barId  name of the bar, unique within this chart
      * @return the bar
      */
+    public static S88ProcedureTransition addTransition(S88Recipe recipe, S88RecipeElement step,
+                                                      String barId) {
+        return addTransition(recipe, step, barId, null);
+    }
+
+    /**
+     * Puts a bar on the chart that waits on something, which is where the recipe reads the plant.
+     *
+     * @param recipe     recipe the step belongs to, may be {@code null}
+     * @param step       step whose chart is being drawn on
+     * @param barId      name of the bar, unique within this chart
+     * @param expression what to read and what to compare it against, {@code null} for a bar that
+     *                   waits on nothing
+     * @return the bar
+     * @throws IllegalArgumentException when there is no step, or the name is empty or already used
+     */
     public static S88ProcedureTransition addTransition(
-            S88Recipe recipe, S88RecipeElement step, String barId, String reportAddress) {
+            S88Recipe recipe, S88RecipeElement step, String barId, S88ConditionExpression expression) {
         S88ProcedureLogic chart = chartOf(step);
         if (chart == null) {
             throw new IllegalArgumentException("Step cannot be null");
@@ -259,12 +349,9 @@ public class EditProcedureLogicUseCase {
         if (chart.findTransition(barId).isPresent()) {
             throw new IllegalArgumentException("The chart already has a bar called '" + barId + "'.");
         }
-        if (reportAddress != null && !reportAddress.isBlank()
-                && S88VariableAddress.parse(reportAddress) == null) {
-            throw new IllegalArgumentException("'" + reportAddress + "' is not an address of a"
-                    + " report, so there is nothing for the bar to wait on.");
-        }
-        var bar = new S88ProcedureTransition(barId, reportAddress);
+        S88ProcedureTransition bar = new S88ProcedureTransition();
+        bar.setId(barId);
+        bar.setExpression(expression);
         chart.addTransition(bar);
         announce(recipe);
         return bar;
@@ -291,6 +378,11 @@ public class EditProcedureLogicUseCase {
 
     /**
      * One end of a line, which has to name something this chart carries.
+     * <p>
+     * A name beginning with a mark points outside this chart, and is left alone by everything that
+     * renames or takes away boxes and bars here. That is the difference between the two kinds of
+     * reference a chart has, and it is why a name the chart cannot resolve is a mistake rather than
+     * something to resolve later.
      */
     private static S88IdRef existingEnd(S88ProcedureLogic chart, String name, String doing) {
         if (name == null || name.isBlank()) {
@@ -299,11 +391,13 @@ public class EditProcedureLogicUseCase {
         if (name.startsWith("!") || name.startsWith("#")) {
             return new S88IdRef(name.substring(1), S88IdRefType.STEP, S88IdScope.EXTERNAL);
         }
-        if (chart.findStep(name).isEmpty()) {
-            throw new IllegalArgumentException("The chart has no box called '" + name + "' for a line"
-                    + " that " + doing + ".");
+        if (chart.findStep(name).isPresent()) {
+            return S88IdRef.step(name);
+        }        if (chart.findTransition(name).isPresent()) {
+            return S88IdRef.transition(name);
         }
-        return S88IdRef.step(name);
+        throw new IllegalArgumentException("The chart has no box or bar called '" + name + "' for a"
+                + " line that " + doing + ".");
     }
 
     /**
