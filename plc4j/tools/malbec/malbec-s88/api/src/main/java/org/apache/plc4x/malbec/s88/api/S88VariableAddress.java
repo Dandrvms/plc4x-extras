@@ -60,8 +60,6 @@ public final class S88VariableAddress {
         }
         int split = trimmed.indexOf(SEPARATOR);
         if (split < 0) {
-            // No container written down, so the name stands on its own. Which container it is in is
-            // then a question for the plant, which is the only thing that knows.
             return new S88VariableAddress(null, trimmed);
         }
         String container = trimmed.substring(0, split).trim();

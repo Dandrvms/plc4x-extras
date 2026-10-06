@@ -54,12 +54,6 @@ public class S88OtherInformation {
      */
     public static final String LAYOUT = "Layout";
 
-    /**
-     * The text of a condition that the recipe names but does not express, held as the value of an
-     * entry with this id.
-     */
-    public static final String CONDITION = "Condition";
-
     private String id;
     private final List<S88ParameterValue> values = new ArrayList<>();
     private final List<String> descriptions = new ArrayList<>();

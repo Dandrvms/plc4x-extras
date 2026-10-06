@@ -199,8 +199,6 @@ class S88RecipeModelTest {
 
     @Test
     void aRecipeThatSaysHowItAddressesNothingIsReadAsOneThatHasToBeBoundFirst() {
-        // The no-argument constructor never states a kind, which is the state a file that does not
-        // mention one arrives in.
         S88MasterRecipe silent = new S88MasterRecipe();
 
         assertTrue(silent.getOtherInformation().isEmpty());
@@ -261,8 +259,6 @@ class S88RecipeModelTest {
     @Test
     void aLineReportsWhatTheRecipeSaysItMeansRatherThanWhatItsShapeLooksLike() {
         S88ProcedureLogic logic = new S88ProcedureLogic();
-        // Marked as splitting, but written with a single destination. The recipe is wrong, and the
-        // honest thing is to say so rather than to correct it into something that looks sensible.
         S88ProcedureLink split = S88ProcedureLink.betweenSteps("L1", "START", "HEAT");
         split.setLinkType(S88LinkType.PARALLEL_DIVERGENT);
         logic.addLink(split);

@@ -23,6 +23,15 @@ import java.util.List;
 /**
  * Interface for load and save recipes.
  * <p>
+ * What this reads and writes is a {@link S88MasterRecipe} and nothing else, and that is a statement
+ * about what a recipe file is rather than a convenience. A recipe file holds authoring data: what
+ * the engineer decided, before anyone picked a batch or a tank. The
+ * {@link S88ControlRecipe the control recipe} that later comes out of it is runtime state, built by
+ * binding a master to a plant for one run, and what is kept of that run once it has happened is a
+ * production record rather than a recipe. Writing a control recipe into a recipe file would put a
+ * derived artefact where the source lives, and the next read would treat it as if an engineer had
+ * written it by hand.
+ * <p>
  * One storage holds one recipe, the same way one storage holds one plant. A project holds many
  * recipes as many files, and the storage given to this interface is the one for whichever recipe is
  * being opened.
@@ -38,21 +47,21 @@ public interface S88RecipeRepository {
     /**
      * Reads the recipe from its storage.
      * <p>
-     * A recipe that is incomplete, or that names things it does not carry, is still returned:
-     * {@link S88Recipe#findStructuralProblems()} says what is wrong with it. Failing the load
-     * instead would leave a recipe that needs fixing impossible to open, and a recipe is usually
-     * opened in order to fix it.
+     * A recipe that is incomplete, or that names things it does not carry, is still returned.
+     * Whether it holds together is reported afterwards by the conformance rules, which live in the
+     * core module rather than here. Failing the load instead would leave a recipe that needs fixing
+     * impossible to open, and a recipe is usually opened in order to fix it.
      *
      * @return the recipe read, {@code null} when the storage is empty
      */
-    S88Recipe loadRecipe();
+    S88MasterRecipe loadRecipe();
 
     /**
      * Writes the recipe to its storage.
      *
      * @param recipe recipe to write, ignored when {@code null}
      */
-    void saveRecipe(S88Recipe recipe);
+    void saveRecipe(S88MasterRecipe recipe);
 
     /**
      * Every recipe in the storage given to this repository.
@@ -63,8 +72,8 @@ public interface S88RecipeRepository {
      *
      * @return the recipes held, empty when the storage is empty
      */
-    default List<S88Recipe> loadAllRecipes() {
-        S88Recipe recipe = loadRecipe();
+    default List<S88MasterRecipe> loadAllRecipes() {
+        S88MasterRecipe recipe = loadRecipe();
         return recipe != null ? List.of(recipe) : List.of();
     }
 }

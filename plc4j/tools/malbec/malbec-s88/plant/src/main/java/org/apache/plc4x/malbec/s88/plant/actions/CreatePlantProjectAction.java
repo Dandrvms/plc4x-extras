@@ -20,12 +20,11 @@ package org.apache.plc4x.malbec.s88.plant.actions;
 
 import java.awt.event.ActionEvent;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 
 import org.apache.plc4x.malbec.s88.api.*;
+import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
 import org.apache.plc4x.malbec.s88.plant.services.S88ProjectServices;
 import org.netbeans.api.project.Project;
@@ -98,16 +97,4 @@ public class CreatePlantProjectAction extends AbstractAction implements ContextA
     public Action createContextAwareInstance(Lookup lkp) {
         return new CreatePlantProjectAction(lkp);
     }
-
-    private record FileObjectStorage(FileObject fo) implements S88Storage {
-        @Override
-        public InputStream openInput() throws IOException {
-            return fo.getInputStream();
-        }
-
-        @Override
-        public OutputStream openOutput() throws IOException {
-            return fo.getOutputStream();
-        }
-        }
 }

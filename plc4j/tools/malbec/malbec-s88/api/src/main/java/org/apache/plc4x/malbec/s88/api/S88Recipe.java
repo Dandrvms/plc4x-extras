@@ -49,21 +49,24 @@ public abstract class S88Recipe {
     /**
      * The calculation the recipe carries on its own, kept as the recipe wrote it.
      * <p>
-     * Nothing here works the expression out. A recipe is written once, so a model that agreed
-     * on a meaning for the expression would commit every recipe already saved to whatever the
-     * first reader of it thought.
+     * Held as parameters, not as bare values, because a calculation is a set of named things: the
+     * name is what another part of the recipe refers to it by, and a list of values with no names is
+     * not a formula.
      * <p>
-     * The parameters are held as text, and reading them is the business of whatever runs the recipe.
+     * Nothing here works the expression out. A recipe is written once and read by something that
+     * was not there when it was written, so a model that agreed on a meaning for the expression
+     * would commit every recipe already saved to whatever the first reader of it thought. The text
+     * is kept as written, and reading it is the business of whatever runs the recipe.
      */
-    private final List<S88ParameterValue> formula = new ArrayList<>();
+    private final List<S88RecipeParameter> formula = new ArrayList<>();
 
-    public List<S88ParameterValue> getFormula() {
+    public List<S88RecipeParameter> getFormula() {
         return Collections.unmodifiableList(formula);
     }
 
-    public void addFormulaParameter(S88ParameterValue value) {
-        if (value != null) {
-            formula.add(value);
+    public void addFormulaParameter(S88RecipeParameter parameter) {
+        if (parameter != null) {
+            formula.add(parameter);
         }
     }
 
@@ -221,6 +224,39 @@ public abstract class S88Recipe {
     }
 
     /**
+     * Where the boxes and bars of the recipe's own chart are drawn.
+     * <p>
+     * A recipe can carry a chart of its own, and that chart is where the process as a whole is
+     * drawn. The layout lives here rather than on the chart because the recipe format gives a chart
+     * no room for it: a chart has no free-form entry, and a recipe and a step both do. Read as an
+     * empty layout rather than {@code null}, because a chart that has not been drawn on and a chart
+     * that has no layout are the same situation.
+     *
+     * @return the layout of the recipe's own chart, empty when there is none, never {@code null}
+     */
+    public S88ChartLayout getLayout() {
+        return S88ChartLayout.readFrom(otherInformation);
+    }
+
+    /**
+     * Records where the boxes and bars of the recipe's own chart are drawn, replacing what it
+     * carried before.
+     *
+     * @param layout where things are drawn, {@code null} or empty meaning no layout at all
+     */
+    public void setLayout(S88ChartLayout layout) {
+        S88OtherInformation existing =
+                S88OtherInformation.find(otherInformation, S88OtherInformation.LAYOUT);
+        if (existing != null) {
+            removeOtherInformation(existing);
+        }
+        S88OtherInformation replacement = S88ChartLayout.entryFor(layout);
+        if (replacement != null) {
+            addOtherInformation(replacement);
+        }
+    }
+
+    /**
      * The step with the given id, at any depth of this recipe.
      *
      * @param wanted id to look for
@@ -299,7 +335,6 @@ public abstract class S88Recipe {
             try {
                 listener.onRecipeChange(event);
             } catch (RuntimeException ignored) {
-                // A listener failing must not stop the rest from being told.
             }
         }
     }

@@ -34,6 +34,11 @@
                 <extensions>true</extensions>
                 <configuration>
                     <moduleType>eager</moduleType>
+                    <publicPackages>
+                        <!-- FileObjectStorage, which is what lets a repository be pointed at a
+                             file in a project without the module using it having to know how. -->
+                        <publicPackage>org.apache.plc4x.malbec.s88.data</publicPackage>
+                    </publicPackages>
                 </configuration>
             </plugin>
             <plugin>
@@ -61,6 +66,12 @@
         <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-openide-util-lookup</artifactId>
+            <version>${netbeans.version}</version>
+        </dependency>
+        <!-- For FileObjectStorage, which is the bridge between a repository and a project file. -->
+        <dependency>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-openide-filesystems</artifactId>
             <version>${netbeans.version}</version>
         </dependency>
         <dependency>

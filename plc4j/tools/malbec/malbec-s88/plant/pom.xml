@@ -155,6 +155,12 @@
             <artifactId>core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- For FileObjectStorage, shared with the recipes module so that neither has its own. -->
+        <dependency>
+            <groupId>org.apache.plc4x.malbec.s88</groupId>
+            <artifactId>data</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.plc4x.malbec.core</groupId>
             <artifactId>libs</artifactId>

@@ -256,6 +256,37 @@ public class S88RecipeElement {
     }
 
     /**
+     * Where the boxes and bars of the chart under this step are drawn.
+     * <p>
+     * Kept here and not on the chart because the recipe format gives a chart no room for it. A step
+     * has a free-form entry and a chart does not, and this is the one thing in the format that can
+     * hold it and be saved.
+     *
+     * @return the layout of this step's chart, empty when there is none, never {@code null}
+     */
+    public S88ChartLayout getLayout() {
+        return S88ChartLayout.readFrom(otherInformation);
+    }
+
+    /**
+     * Records where the boxes and bars of the chart under this step are drawn, replacing what it
+     * carried before.
+     *
+     * @param layout where things are drawn, {@code null} or empty meaning no layout at all
+     */
+    public void setLayout(S88ChartLayout layout) {
+        S88OtherInformation existing =
+                S88OtherInformation.find(otherInformation, S88OtherInformation.LAYOUT);
+        if (existing != null) {
+            removeOtherInformation(existing);
+        }
+        S88OtherInformation replacement = S88ChartLayout.entryFor(layout);
+        if (replacement != null) {
+            addOtherInformation(replacement);
+        }
+    }
+
+    /**
      * The class of the equipment this element applies to, which is how a
      * {@link S88RecipeKind#CLASS} recipe names it.
      *
