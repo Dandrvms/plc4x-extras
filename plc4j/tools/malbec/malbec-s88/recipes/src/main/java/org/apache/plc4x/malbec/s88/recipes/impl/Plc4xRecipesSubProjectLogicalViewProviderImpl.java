@@ -23,12 +23,12 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.recipes.actions.NewRecipeAction;
+import org.apache.plc4x.malbec.s88.recipes.nodes.RecipeNodeFactory;
 //import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantElementAction;
 import org.netbeans.api.annotations.common.StaticResource;
 import org.netbeans.api.project.Project;
 import org.netbeans.spi.project.ui.LogicalViewProvider;
 import org.netbeans.spi.project.ui.support.CommonProjectActions;
-import org.netbeans.spi.project.ui.support.NodeFactorySupport;
 import org.openide.filesystems.FileObject;
 import org.openide.loaders.DataFolder;
 import org.openide.loaders.DataObjectNotFoundException;
@@ -80,8 +80,12 @@ public class Plc4xRecipesSubProjectLogicalViewProviderImpl implements LogicalVie
 
         public ProjectNode(Node node, Project project)
             throws DataObjectNotFoundException {
+            // The children are built here rather than by the composite provider, because a recipe
+            // is shown as our own node instead of as a plain file. That is the whole point of the
+            // node: it carries the action that opens the recipe and it says what a recipe looks
+            // like, and neither of those comes with a file that has no type registered for it.
             super(node,
-                    NodeFactorySupport.createCompositeChildren(project, "Projects/org-plc4x-recipes-project/Nodes"),
+                    Children.create(new RecipeNodeFactory(project), true),
                     new ProxyLookup(
                             Lookups.singleton(project),
                             node.getLookup()));

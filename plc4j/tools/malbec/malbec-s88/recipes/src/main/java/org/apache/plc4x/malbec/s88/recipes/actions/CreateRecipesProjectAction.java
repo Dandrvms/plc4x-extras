@@ -92,16 +92,4 @@ public class CreateRecipesProjectAction extends AbstractAction implements Contex
     public Action createContextAwareInstance(Lookup lkp) {
         return new CreateRecipesProjectAction(lkp);
     }
-
-//    private record FileObjectStorage(FileObject fo) implements S88Storage {
-//        @Override
-//        public InputStream openInput() throws IOException {
-//            return fo.getInputStream();
-//        }
-//
-//        @Override
-//        public OutputStream openOutput() throws IOException {
-//            return fo.getOutputStream();
-//        }
-//        }
 }
