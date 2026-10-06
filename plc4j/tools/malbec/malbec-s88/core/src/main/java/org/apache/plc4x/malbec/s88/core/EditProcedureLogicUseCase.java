@@ -62,13 +62,50 @@ public class EditProcedureLogicUseCase {
      * @return the chart, or {@code null} when there was no step
      */
     public static S88ProcedureLogic chartOf(S88RecipeElement step) {
+        return chartOf(null, step);
+    }
+
+    /**
+     * The chart being drawn on, made if it is not there yet.
+     * <p>
+     * A recipe can carry a chart of its own, and that chart is where the process as a whole is
+     * drawn. It is reached by passing no step at all, so that the methods below work the same on
+     * it as on the chart of any step, instead of the recipe's own chart being the one thing in the
+     * model that can be read but not drawn on.
+     *
+     * @param recipe recipe the chart would belong to, may be {@code null}
+     * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
+     * @return the chart, or {@code null} when neither a recipe nor a step was given
+     */
+    public static S88ProcedureLogic chartOf(S88Recipe recipe, S88RecipeElement step) {
         if (step == null) {
-            return null;
+            if (recipe == null) {
+                return null;
+            }
+            if (!recipe.hasProcedureLogic()) {
+                recipe.setProcedureLogic(new S88ProcedureLogic());
+            }
+            return recipe.getProcedureLogic();
         }
         if (!step.hasProcedureLogic()) {
             step.setProcedureLogic(new S88ProcedureLogic());
         }
         return step.getProcedureLogic();
+    }
+
+    /**
+     * The chart being read, without making one.
+     * <p>
+     * Reading and writing are kept apart on purpose. Anything that reads has to be able to find
+     * nothing, because the thing it was looking for may not be there, and a method that made a
+     * chart to search would leave an empty one behind every time it found nothing.
+     *
+     * @param recipe recipe the chart would belong to, may be {@code null}
+     * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
+     * @return the chart if there is one, otherwise {@code null}
+     */
+    private static S88ProcedureLogic existingChart(S88Recipe recipe, S88RecipeElement step) {
+        return step != null ? step.getProcedureLogic() : (recipe != null ? recipe.getProcedureLogic() : null);
     }
 
     /**
@@ -84,7 +121,7 @@ public class EditProcedureLogicUseCase {
      */
     public static S88ProcedureStep addStep(S88Recipe recipe, S88RecipeElement step,
                                            String boxId, String elementId) {
-        S88ProcedureLogic chart = chartOf(step);
+        S88ProcedureLogic chart = chartOf(recipe, step);
         if (chart == null) {
             throw new IllegalArgumentException("Step cannot be null");
         }
@@ -116,7 +153,7 @@ public class EditProcedureLogicUseCase {
      * @throws IllegalStateException when a line still runs into the box
      */
     public static void removeStep(S88Recipe recipe, S88RecipeElement step, String boxId) {
-        S88ProcedureLogic chart = step != null ? step.getProcedureLogic() : null;
+        S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureStep box = chart != null ? chart.findStep(boxId).orElse(null) : null;
         if (box == null) {
             return;
@@ -151,7 +188,7 @@ public class EditProcedureLogicUseCase {
      */
     public static S88ProcedureLink addLink(S88Recipe recipe, S88RecipeElement step, String lineId,
                                            List<String> fromIds, List<String> toIds, S88LinkType type) {
-        S88ProcedureLogic chart = chartOf(step);
+        S88ProcedureLogic chart = chartOf(recipe, step);
         if (chart == null) {
             throw new IllegalArgumentException("Step cannot be null");
         }
@@ -261,7 +298,7 @@ public class EditProcedureLogicUseCase {
      * @return true when there was such a line and it is gone
      */
     public static boolean removeLink(S88Recipe recipe, S88RecipeElement step, String lineId) {
-        S88ProcedureLogic chart = step != null ? step.getProcedureLogic() : null;
+        S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureLink line = chart != null ? chart.findLink(lineId).orElse(null) : null;
         if (line == null) {
             return false;
@@ -283,7 +320,7 @@ public class EditProcedureLogicUseCase {
      */
     public static void moveLinkEnd(S88Recipe recipe, S88RecipeElement step, String lineId,
                                    boolean atEnd, String newId) {
-        S88ProcedureLogic chart = step != null ? step.getProcedureLogic() : null;
+        S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureLink line = chart != null ? chart.findLink(lineId).orElse(null) : null;
         if (line == null) {
             throw new IllegalArgumentException("The chart has no line called '" + lineId + "'.");
@@ -339,7 +376,7 @@ public class EditProcedureLogicUseCase {
      */
     public static S88ProcedureTransition addTransition(
             S88Recipe recipe, S88RecipeElement step, String barId, S88ConditionExpression expression) {
-        S88ProcedureLogic chart = chartOf(step);
+        S88ProcedureLogic chart = chartOf(recipe, step);
         if (chart == null) {
             throw new IllegalArgumentException("Step cannot be null");
         }
@@ -366,7 +403,7 @@ public class EditProcedureLogicUseCase {
      * @return true when there was such a bar and it is gone
      */
     public static boolean removeTransition(S88Recipe recipe, S88RecipeElement step, String barId) {
-        S88ProcedureLogic chart = step != null ? step.getProcedureLogic() : null;
+        S88ProcedureLogic chart = existingChart(recipe, step);
         var bar = chart != null ? chart.findTransition(barId).orElse(null) : null;
         if (bar == null) {
             return false;
@@ -412,6 +449,19 @@ public class EditProcedureLogicUseCase {
     /** Whether a step of a recipe has a chart drawn under it, which is how the tree knows to offer one. */
     public static boolean hasChart(S88RecipeElement step) {
         return step != null && step.hasProcedureLogic();
+    }
+
+    /**
+     * Whether a recipe carries a chart of its own, which is where its process as a whole is drawn.
+     * <p>
+     * Every recipe created through this module has one, so a tree that offers a chart is offering
+     * something that is usually already there.
+     *
+     * @param recipe recipe to look at, may be {@code null}
+     * @return true when the recipe itself carries a chart
+     */
+    public static boolean hasOwnChart(S88Recipe recipe) {
+        return recipe != null && recipe.hasProcedureLogic();
     }
 }
 

@@ -68,9 +68,6 @@ public class CreateElementUseCase {
         }
 
         S88ElementClass elementClass = resolveClass(model, targetParent, id, childLevel, s88ElementClass);
-        // The type states what every module of it publishes, so the ISA-88 variables are declared
-        // on it before the element is built from it: the module then receives them the same way it
-        // receives the rest of the type, and its siblings are not left without them.
         if (model != null) {
             PlatformVariables.ensureEnumerations(model);
         }
@@ -82,9 +79,6 @@ public class CreateElementUseCase {
                 .setLevel(childLevel)
                 .setClass(elementClass);
 
-        // A class holds the base names of its variables; the element publishes them re-suffixed
-        // with its own id and remembers the base name each was derived from, mirroring how the
-        // copies of a duplicated type publish their variables. Everything else is copied as it is.
         if (elementClass != null) {
             for (Map.Entry<String, Object> entry : elementClass.getProperties().entrySet()) {
                 String name = entry.getKey();

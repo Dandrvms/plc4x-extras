@@ -179,7 +179,6 @@ class PlatformVariablesConformanceTest {
         S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
         S88Element unit = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
         root.addChild(unit);
-        // A module as it was written before these variables existed: no type, no variables.
         S88Element source = module("CALENTAMIENTO_TANQUE_1");
         source.setProperty("Parameters", Map.of("NIVEL_CALENTAMIENTO_TANQUE_1", Map.of("Type", "REAL")));
         unit.addChild(source);

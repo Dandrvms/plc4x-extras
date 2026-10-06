@@ -96,7 +96,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void testACopyCanBeDuplicatedInTurn() {
-        // The user duplicates a unit, then tries to duplicate the copy he just made.
         List<S88Element> copies = DuplicateElementUseCase.execute(model, olla1, 1, null, Map.of());
 
         List<S88Element> second = DuplicateElementUseCase.execute(model, copies.get(0), 1, null, Map.of());
@@ -176,8 +175,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void aCopyKeepsTheBaseNameTheSourceRecorded() {
-        // A variable whose name does not tell where it came from: the recipe knows it as ALTURA,
-        // so the copy has to answer to ALTURA too even though its name now ends with the copy id.
         Map<String, Object> sourceParameters = new LinkedHashMap<>();
         sourceParameters.put("NIVEL_OLLA_1", bag("NIVEL_OLLA_1", 3.2f));
         olla1.setProperty("Parameters", sourceParameters);
@@ -191,8 +188,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void aCopyWhoseVariablesShareABaseNameIsRefused() {
-        // Two variables of the same element answer ALTURA: a recipe addressing it could not tell
-        // which one it meant, so the copy is refused before it joins the plant.
         Map<String, Object> sourceParameters = new LinkedHashMap<>();
         sourceParameters.put("NIVEL_OLLA_1", bag("NIVEL_OLLA_1", 3.2f));
         sourceParameters.put("ALTURA_OLLA_1", bag("ALTURA_OLLA_1", 1.5));
@@ -309,7 +304,6 @@ class DuplicateElementUseCaseTest {
     @Test
     void testMissingBaseNamesAreMergedIntoAReusedClass() {
         DuplicateElementUseCase.execute(model, olla1, 0, null, Map.of());
-        // the instance grows a variable the class did not know when it was derived
         Map<String, Object> sourceParameters = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : ((Map<String, Object>) olla1.getProperty("Parameters")).entrySet()) {
             sourceParameters.put(entry.getKey(), entry.getValue());
@@ -333,8 +327,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void testAVariableRefusingToReSuffixUniquelyBlocksTheCopy() {
-        // Two variables of the source re-suffix to the same published name in the copy: one that
-        // carries the old id and one already carrying the new id.
         Map<String, Object> sourceParameters = new LinkedHashMap<>();
         sourceParameters.put("NIVEL_OLLA_1", bag("NIVEL_OLLA_1", 3.2f));
         sourceParameters.put("NIVEL_OLLA_2", bag("NIVEL_OLLA_2", 9.0));
@@ -348,8 +340,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void testTopLevelAttributesAreReSuffixedWithTheCopyId() {
-        // A unit publishes scalar attributes at its top level named after itself, and a copy must
-        // not inherit the source's instance name: TEMPERATURA_OLLA_1 becomes TEMPERATURA_OLLA_2.
         olla1.setProperty("TEMPERATURA_OLLA_1", 60.0);
 
         List<S88Element> copies = DuplicateElementUseCase.execute(model, olla1, 1, null, Map.of());
@@ -365,8 +355,6 @@ class DuplicateElementUseCaseTest {
 
     @Test
     void testATopLevelAttributeRefusingToReSuffixUniquelyBlocksTheCopy() {
-        // Two top level attributes of the source would land on the same name in the copy: one that
-        // carries the old id and one already carrying the new id.
         olla1.setProperty("TEMPERATURA_OLLA_1", 60.0);
         olla1.setProperty("TEMPERATURA_OLLA_2", 70.0);
 

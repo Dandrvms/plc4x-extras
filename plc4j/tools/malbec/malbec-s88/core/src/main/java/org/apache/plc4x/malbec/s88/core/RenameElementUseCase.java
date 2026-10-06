@@ -87,8 +87,6 @@ public class RenameElementUseCase {
             String oldDiscriminator = "_" + oldId.trim().toUpperCase(Locale.ROOT);
             String newDiscriminator = "_" + newId.trim().toUpperCase(Locale.ROOT);
 
-            // The whole rename is planned and checked before a single value moves, so a rename
-            // refused halfway through leaves the plant exactly as it was, ids and variables alike.
             List<ChildRename> childRenames = planChildRenames(element, oldId, newId);
             validateNoIdCollisions(model, element, newId, childRenames);
 

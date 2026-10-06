@@ -165,7 +165,7 @@ class RenameElementUseCaseTest {
 
         RenameElementUseCase.execute(model, element, "NEW_NAME");
 
-        // the child is renamed chained off its parent, and its variable follows the new id
+
         assertEquals("CALENTAMIENTO_NEW_NAME", child.getId());
         Map<?, ?> parameters = (Map<?, ?>) child.getProperties().get("Parameters");
         assertTrue(parameters.containsKey("TEMPERATURA_SP_CALENTAMIENTO_NEW_NAME"), parameters.toString());
@@ -178,8 +178,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testRenameCascadesToFreeShapedDescendantsOnlyAlongTheirIds() {
-        // A descendant with a hand-typed id keeps it, and its variables keep their own names when
-        // they do not carry the id of the element being renamed.
         S88Element free = new S88Element().setId("BOMBA").setLevel(S88Level.EQUIPMENTMODULE);
         free.setProperty("Parameters", Map.of("FLUJO_BOMBA", 10));
         element.addChild(free);
@@ -203,8 +201,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testRenameMovesTheBaseNameOfATopLevelAttribute() {
-        // A recipe addresses the attribute by base name, so the pointer has to travel with the
-        // attribute to its new name instead of being left behind on the old one.
         element.setProperty("PRESION_OLDNAME", 1.5f);
         element.setBaseName(null, "PRESION_OLDNAME", "Parameters/PRESION");
 
@@ -218,7 +214,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testRenameRefusesWhenAVariableWouldCollide() {
-        // One variable re-suffixes onto a name another variable of the same container already uses.
         element.setProperty("Parameters", Map.of("NIVEL_OLDNAME", 1, "NIVEL_NEW_NAME", 2));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
@@ -240,7 +235,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testRenameRefusesWhenARenamedDescendantWouldClash() {
-        // The renamed child lands on an id that a sibling element of the plant already has.
         S88Element child = new S88Element().setId("CALENTAMIENTO_OLDNAME").setLevel(S88Level.EQUIPMENTMODULE);
         element.addChild(child);
         S88Element sibling = new S88Element().setId("CALENTAMIENTO_NEW_NAME").setLevel(S88Level.EQUIPMENTMODULE);
@@ -257,8 +251,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testARefusedRenameLeavesTheVariablesOfTheSubtreeUntouched() {
-        // The id clash below is only discovered after the variables have been worked out, so this
-        // pins that a refused rename leaves every variable under its old published name.
         S88Element child = new S88Element().setId("CALENTAMIENTO_OLDNAME").setLevel(S88Level.EQUIPMENTMODULE);
         child.setProperty("Parameters", Map.of("TEMPERATURA_SP_CALENTAMIENTO_OLDNAME", 50));
         element.addChild(child);
@@ -281,7 +273,6 @@ class RenameElementUseCaseTest {
 
     @Test
     void testARefusedRenameLeavesEarlierElementsOfTheSubtreeUntouched() {
-        // A collision deep in the subtree must not leave the elements above it already renamed.
         S88Element child = new S88Element().setId("CALENTAMIENTO_OLDNAME").setLevel(S88Level.EQUIPMENTMODULE);
         child.setProperty("Parameters", Map.of("NIVEL_OLDNAME", 1, "NIVEL_NEW_NAME", 2));
         element.addChild(child);

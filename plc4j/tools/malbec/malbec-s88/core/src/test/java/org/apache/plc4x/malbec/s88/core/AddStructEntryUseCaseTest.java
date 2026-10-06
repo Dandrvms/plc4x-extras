@@ -63,7 +63,6 @@ class AddStructEntryUseCaseTest {
 
         Map<String, Object> parameters = element.getStructuredProperty("Parameters");
         assertNotNull(parameters);
-        // Stored exactly as given: the name typed is the name published.
         assertEquals("v1", parameters.get("P1"));
 
         ArgumentCaptor<S88ChangeEvent> captor = ArgumentCaptor.forClass(S88ChangeEvent.class);

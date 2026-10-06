@@ -52,7 +52,6 @@ class NamingAdvisorTest {
         heatingClass.setName("CALENTAMIENTO");
         heating = element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE, heatingClass);
         unit.addChild(heating);
-        // Names are stored exactly as typed, and are the only name the variable carries.
         heating.setProperty("Parameters", parameters("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1", 50));
 
         unit.setProperty("NIVEL_TANQUE_1", 3.2f);
@@ -150,10 +149,6 @@ class NamingAdvisorTest {
 
     @Test
     void testTheEquipmentModuleSuffixIsTheElementIdNotClassAndUnitTwice() {
-        // A type-driven module carries a class derived from its own id (CALENTAMIENTO_TANQUE). A
-        // suggestion made of class plus unit would append the id twice over, producing the
-        // TEMPERATURA_SP_CALENTAMIENTO_TANQUE_TANQUE_1 the fix removes: the element id alone is the
-        // whole qualification.
         S88ElementClass derivedClass = new S88ElementClass();
         derivedClass.setName("CALENTAMIENTO_TANQUE");
         S88Element heater = element("CALENTAMIENTO_TANQUE_1", S88Level.EQUIPMENTMODULE, derivedClass);
@@ -174,8 +169,7 @@ class NamingAdvisorTest {
 
     @Test
     void testASuggestionIsOnlyOfferedNeverApplied() {
-        // The advisor returns a string and nothing else: no entry, no event, no model change. The
-        // user presses the button or leaves the name alone, and the tool keeps quiet either way.
+
         S88Element before = heating;
 
         assertNotNull(NamingAdvisor.suggestConventionalVariableName(heating, "TEMPERATURA_SP"));
@@ -296,8 +290,6 @@ class NamingAdvisorTest {
         NamingAdvisor.Advice advice = NamingAdvisor.describeRenameImpact(unit);
 
         assertNotNull(advice);
-        // the unit publishes NIVEL_TANQUE_1 itself and the module below it publishes a variable
-        // that also carries the unit id, so the rename re-suffixes both
         assertTrue(advice.message().contains("2 variable"), advice.message());
         assertTrue(advice.message().contains("NIVEL"), advice.message());
         assertTrue(advice.message().contains("children"), advice.message());
@@ -362,8 +354,6 @@ class NamingAdvisorTest {
 
         NamingAdvisor.ModelReport report = NamingAdvisor.describeModel(new S88PlantModel(plant));
 
-        // Both modules store the name the user typed, and both typed the same one. Nothing is
-        // qualified on the way in, so the report is what makes the clash visible.
         assertEquals(1, report.conflicts().size());
         assertEquals("TEMPERATURA_SP", report.conflicts().get(0).key());
         assertEquals(2, report.conflicts().get(0).owners().size());
@@ -374,8 +364,6 @@ class NamingAdvisorTest {
         S88Element plant = element("PLANTA", S88Level.AREA, null);
         S88Element tank = element("TANQUE_PRINCIPAL", S88Level.UNIT, null);
         plant.addChild(tank);
-        // A name over the limit, as a model built outside the editor can carry. Creation advises
-        // against it but does not block, so the report is where it still gets caught.
         String overlong = "NIVEL_TANQUE_AGITACION_CENTRIFUGA_ZONA_NORTE_DEL_PROCESO_SUR_TANQUE_PRINCIPAL";
         assertTrue(overlong.length() > NameValidator.MAX_LENGTH, overlong);
         tank.setProperty(overlong, 1.0f);
@@ -398,8 +386,6 @@ class NamingAdvisorTest {
 
         NamingAdvisor.ModelReport report = NamingAdvisor.describeModel(new S88PlantModel(plant));
 
-        // One id, one colliding key. Showing both lets the user fix the id instead of chasing
-        // what looks like an unrelated naming problem.
         assertTrue(report.duplicateIds().contains("TANQUE_1"), report.duplicateIds().toString());
         assertEquals(1, report.conflicts().size());
         assertEquals("NIVEL_TANQUE_1", report.conflicts().get(0).key());

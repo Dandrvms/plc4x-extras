@@ -262,8 +262,6 @@ public final class DuplicateElementUseCase {
                 continue;
             }
             if (!CONTAINER_KEYS.contains(container)) {
-                // A unit attribute joins the contract as a whole: the class gets the attribute the
-                // unit publishes unless the class already declares one by that base name.
                 if (!(elementClass.getProperty(container) instanceof Map)) {
                     elementClass.setProperty(container, bases);
                 }

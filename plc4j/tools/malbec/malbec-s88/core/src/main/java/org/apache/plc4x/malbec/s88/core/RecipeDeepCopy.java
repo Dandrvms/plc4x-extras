@@ -107,7 +107,7 @@ public class RecipeDeepCopy {
         for (S88EquipmentRequirement requirement : source.getEquipmentRequirements()) {
             copy.addEquipmentRequirement(copyRequirement(requirement));
         }
-        source.getFormula().forEach(value -> copy.addFormulaParameter(copyValue(value)));
+        source.getFormula().forEach(parameter -> copy.addFormulaParameter(copyParameter(parameter)));
         for (S88OtherInformation info : source.getOtherInformation()) {
             copy.addOtherInformation(copyOtherInformation(info));
         }

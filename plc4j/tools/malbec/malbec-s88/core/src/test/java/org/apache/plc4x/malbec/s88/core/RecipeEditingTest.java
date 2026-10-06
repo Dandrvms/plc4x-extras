@@ -634,8 +634,6 @@ class RecipeEditingTest {
 
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_HEAT", "HEAT");
         EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_END", "END");
-        // Between two boxes there is always a bar, so the flow goes box, bar, box and never box to
-        // box. This is the shape the chart has in every other tool that draws one.
         EditProcedureLogicUseCase.addTransition(recipe, proc, "T_TEMP_OK",
                 S88ConditionExpression.of(
                         S88VariableAddress.parse("Reports/STATE"), S88ConditionOperator.EQUALS, "COMPLETE"));

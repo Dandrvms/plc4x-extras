@@ -134,9 +134,18 @@ public final class RecipeConformance {
      * The three ways a step can be wrong here are kept apart because they are three different
      * mistakes. Naming neither leaves nothing to run on, which is a missing thing. Naming both means
      * the recipe is not consistent with itself, which is a thing in the way.
+     * <p>
+     * The start and the stop of the process are not held to this at all. They say where the flow
+     * begins and ends and nothing about a plant, so a recipe in which they name equipment would be
+     * claiming something they do not. {@link #checkReachability} is what holds them to being there.
      */
-    private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, String label,
-                                        List<String> excess, List<String> deficit) {
+private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, String label,
+                                            List<String> excess, List<String> deficit) {
+        if (element.getKind() == S88RecipeElementKind.BEGIN
+                || element.getKind() == S88RecipeElementKind.END) {
+            return;
+        }
+
         boolean hasClass = element.getEquipmentClassId() != null;
         int instances = element.getActualEquipmentIds().size();
         boolean addressesByClass = !(recipe instanceof S88MasterRecipe master) || master.addressesByClass();

@@ -138,7 +138,6 @@ class S88PlantModelTest {
         root.addChild(second);
         S88PlantModel model = new S88PlantModel(root);
 
-        // removing the element the index does not point at must not evict the one it does
         model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.REMOVED, second));
 
         assertSame(first, model.findById("TANQUE_1").orElseThrow());
@@ -166,7 +165,6 @@ class S88PlantModelTest {
         root.addChild(first);
         root.addChild(second);
 
-        // created while building the first unit only
         S88ElementClass heating = new S88ElementClass();
         heating.setName("CALENTAMIENTO");
         first.addElementClass(heating);
@@ -224,9 +222,6 @@ class S88PlantModelTest {
 
     @Test
     void aClassOnlyAttachedToTheTreeIsStillOfferedEverywhere() {
-        // The loader hands the pool of a level to every element it walks, so a class can be reachable
-        // only through those lists. Reading the registry alone used to hide it, which is what made a
-        // class created under one unit disappear when creating a module under another.
         S88Element root = new S88Element().setId("PLANTA").setLevel(S88Level.AREA);
         S88Element first = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
         S88Element second = new S88Element().setId("TANQUE_2").setLevel(S88Level.UNIT);
@@ -265,7 +260,6 @@ class S88PlantModelTest {
         S88Element unit = new S88Element().setId("TANQUE_1").setLevel(S88Level.UNIT);
         root.addChild(unit);
 
-        // attached to the unit, but it is a class of areas, not of equipment modules
         unit.addElementClass(classFor("PLANTA_TIPO", S88Level.AREA));
 
         S88PlantModel model = new S88PlantModel(root);
@@ -307,7 +301,6 @@ class S88PlantModelTest {
         S88Element child = new S88Element().setId("TANQUE_1").setLevel(S88Level.PROCESSCELL);
 
         model.addChild(root, child);
-        // the ADDED event the use cases fire after attaching re-indexes the very same element
         model.fireChangeEvent(new S88ChangeEvent(S88ChangeEvent.Type.ADDED, child));
 
         assertTrue(model.getDuplicateIds().isEmpty(),

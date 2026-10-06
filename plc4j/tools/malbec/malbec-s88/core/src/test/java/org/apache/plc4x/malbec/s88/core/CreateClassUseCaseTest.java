@@ -71,9 +71,6 @@ class CreateClassUseCaseTest {
 
     @Test
     void testLandsOnTheRootAndTargetsTheRootChildLevelWhenParentIsNull() {
-        // Without a parent the class lands on the root, so it is a class of the root's children.
-        // Leaving the target level unset would file a class no element could ever pick: it would
-        // appear in no list and be unusable forever, which is how a class went missing.
         CreateClassUseCase.execute(model, null, "ROOT_CLASS", null);
 
         ArgumentCaptor<S88ElementClass> captor = ArgumentCaptor.forClass(S88ElementClass.class);

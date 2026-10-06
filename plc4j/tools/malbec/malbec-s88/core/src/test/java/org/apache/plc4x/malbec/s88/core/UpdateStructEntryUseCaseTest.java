@@ -78,7 +78,6 @@ class UpdateStructEntryUseCaseTest {
 
     @Test
     void testEditingAValueNeverTouchesTheName() {
-        // The name is the one the user typed, so editing a value cannot change it.
         AddStructEntryUseCase.execute(model, element, "Parameters", "P1", "v1");
 
         UpdateStructEntryUseCase.execute(model, element, "Parameters", "P1", "v2");

@@ -206,9 +206,6 @@ class RecipeConformanceTest {
 
         RecipeConformance report = RecipeConformance.of(recipe);
 
-        // A loop back to an earlier step is how a recipe retries, so it is not reported. What matters
-        // is that following the links round the cycle terminates rather than walking it forever,
-        // and that the steps on the way are still seen as reachable.
         assertTrue(report.isConforming(),
                 "a loop back to an earlier step is a retry, not a defect: "
                         + report.excess() + " / " + report.deficit());

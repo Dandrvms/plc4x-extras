@@ -47,8 +47,6 @@ public class CreateElementUseCaseTest {
         
         when(model.getRoot()).thenReturn(root);
         when(model.findById(anyString())).thenReturn(Optional.empty());
-        // A real plant attaches the child under its parent while indexing it; the mock does the
-        // attaching part so the tests can read the tree they just created.
         doAnswer(invocation -> {
             S88Element parent = invocation.getArgument(0);
             S88Element child = invocation.getArgument(1);
@@ -152,9 +150,6 @@ public class CreateElementUseCaseTest {
 
     @Test
     void testCreatingAnElementGivesItTheVariableNamesOfTheClass() {
-        // An instance names its variables after itself, exactly like a duplicated copy: the class
-        // base TEMPERATURA_SP is published as TEMPERATURA_SP_TANQUE_1 and tied back to its base
-        // name, so the recipe keeps addressing the same setpoint in every instance of the type.
         S88Element unit = new S88Element()
                 .setId("TANQUE_1")
                 .setLevel(S88Level.UNIT);
@@ -255,8 +250,6 @@ public class CreateElementUseCaseTest {
 
     @Test
     void testAnEnumeratedClassCannotBePickedForAnElement() {
-        // A class named with the reserved prefix is an enumeration by convention, so it can neither
-        // serve a freshly derived type nor be chosen directly.
         S88ElementClass enumerated = new S88ElementClass();
         enumerated.setName("ENUM_CLASE_PROPIA");
         enumerated.setTargetLevel(S88Level.PROCESSCELL);

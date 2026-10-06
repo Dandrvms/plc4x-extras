@@ -103,8 +103,6 @@ public final class NamingAdvisor {
         public ModelReport {
             conflicts = List.copyOf(conflicts);
             overlong = List.copyOf(overlong);
-            // A LinkedHashSet so that the report lists the ids in the order the model holds them,
-            // which Set.copyOf would not guarantee.
             duplicateIds = Collections.unmodifiableSet(new LinkedHashSet<>(duplicateIds));
         }
 

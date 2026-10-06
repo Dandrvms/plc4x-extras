@@ -23,6 +23,7 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,6 +70,11 @@ public class DeleteRecipeElementUseCase {
             throw new IllegalArgumentException("The step '" + step.getId() + "' is not part of this"
                     + " recipe.");
         }
+        if (step.getKind() == S88RecipeElementKind.BEGIN || step.getKind() == S88RecipeElementKind.END) {
+            throw new IllegalStateException("Step '" + step.getId() + "' is the "
+                    + (step.getKind() == S88RecipeElementKind.BEGIN ? "start" : "stop")
+                    + " of the process, so it cannot be removed. Every recipe has one of each.");
+        }
 
         List<String> pointing = pointAt(recipe, step);
         if (!pointing.isEmpty()) {
@@ -101,21 +107,37 @@ public class DeleteRecipeElementUseCase {
     private static List<String> pointAt(S88Recipe recipe, S88RecipeElement step) {
         List<String> pointing = new ArrayList<>();
         String id = step.getId();
+
+        collectBoxes(pointing, id, recipe.getProcedureLogic(), null);
+
         for (S88RecipeElement element : recipe.getAllElements()) {
             if (id != null && id.equals(element.getId()) && element != step) {
                 pointing.add("the step '" + id + "' that has the same name");
             }
-            S88ProcedureLogic chart = element.getProcedureLogic();
-            if (chart == null) {
-                continue;
-            }
-            for (S88ProcedureStep box : chart.getSteps()) {
-                if (id != null && id.equals(box.getRecipeElementId())) {
-                    pointing.add("box '" + box.getId() + "' of the chart of '"
-                            + element.getId() + "', which works on it");
-                }
-            }
+            collectBoxes(pointing, id, element.getProcedureLogic(), element.getId());
         }
         return pointing;
+    }
+
+    /**
+     * The boxes of one chart that work on the step, named after whatever holds that chart.
+     *
+     * @param pointing list to add to
+     * @param id       id of the step being asked about, may be {@code null}
+     * @param chart    chart to walk, may be {@code null}
+     * @param owner    id of the step or recipe that holds the chart, {@code null} for the recipe
+     */
+    private static void collectBoxes(List<String> pointing, String id,
+                                     S88ProcedureLogic chart, String owner) {
+        if (chart == null || id == null) {
+            return;
+        }
+        for (S88ProcedureStep box : chart.getSteps()) {
+            if (id.equals(box.getRecipeElementId())) {
+                pointing.add("box '" + box.getId() + "' of the chart of "
+                        + (owner != null ? "'" + owner + "'" : "the recipe")
+                        + ", which works on it");
+            }
+        }
     }
 }

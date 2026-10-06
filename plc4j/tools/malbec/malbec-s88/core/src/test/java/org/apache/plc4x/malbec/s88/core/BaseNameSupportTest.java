@@ -136,8 +136,6 @@ class BaseNameSupportTest {
         olla.setProperty("PRESION_OLLA_1", Map.of("Type", "double", "StaticValue", "1.5"));
         olla.setProperty("NIVEL_OLLA_1", Map.of("Type", "double", "Reference", "7"));
 
-        // The class declares an attribute at the top level of its schema, so the pointer carries no
-        // container segment: the two kinds of attribute are told apart for the user, not in the name.
         assertEquals("PRESION", BaseNameSupport.attributePointer(olla, "PRESION_OLLA_1"));
         assertEquals("NIVEL", BaseNameSupport.attributePointer(olla, "NIVEL_OLLA_1"));
     }

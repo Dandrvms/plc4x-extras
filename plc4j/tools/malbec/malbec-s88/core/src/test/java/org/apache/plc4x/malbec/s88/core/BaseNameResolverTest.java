@@ -111,8 +111,6 @@ class BaseNameResolverTest {
 
     @Test
     void everyVariableOfThePlantAnswersItsBaseName() {
-        // A class recipe names the type, not the instance: the same base name is answered by the
-        // temperature of every unit of the class, which is what lets the recipe be bound later.
         S88Element olla1 = new S88Element("uid-1").setId("OLLA_1");
         olla1.setProperty("Parameters", variables("TEMPERATURA_SP_OLLA_1"));
         olla1.setBaseName("Parameters", "TEMPERATURA_SP_OLLA_1", "Parameters/TEMPERATURA_SP");

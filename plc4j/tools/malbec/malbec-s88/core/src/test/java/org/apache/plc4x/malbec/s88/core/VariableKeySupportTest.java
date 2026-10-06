@@ -85,8 +85,6 @@ class VariableKeySupportTest {
 
     @Test
     void testResolveAddsNoSuffixToAShortName() {
-        // The whole point of the tool: what is in the field is what is stored and what the batch
-        // layer and PVA address. Qualifying it here would hand them a second name.
         assertEquals("TEMPERATURA_SP", VariableKeySupport.resolve(heating, "TEMPERATURA_SP"));
         assertEquals("NIVEL", VariableKeySupport.resolve(unit, "NIVEL"));
     }
@@ -143,10 +141,6 @@ class VariableKeySupportTest {
 
     @Test
     void testTwoModulesOfTheSameUnitSharingANameAreReportedAsAConflict() {
-        // Names are stored as typed, so two modules of the same unit that both call a variable
-        // TEMPERATURA_SP are published under one name and the downstream mapping cannot tell them
-        // apart. This is why the editor warns, and why it offers the conventional name: nothing
-        // renames it on its own, but the clash cannot reach the plant unnoticed either.
         heating.setProperty("Parameters", parameters("TEMPERATURA_SP", "50"));
         cooling.setProperty("Parameters", parameters("TEMPERATURA_SP", "5"));
 
@@ -200,8 +194,6 @@ class VariableKeySupportTest {
 
     @Test
     void testANameThatOnlyGetsTooLongWhenQualifiedIsNotReported() {
-        // Without qualification there is nothing to grow: the tool measures the name as stored, so
-        // it never invents an overlong name out of a legal one.
         unit.setProperty("P".repeat(NameValidator.MAX_LENGTH), "1");
 
         assertTrue(VariableKeySupport.findOverlongKeys(model).isEmpty());
@@ -298,9 +290,6 @@ class VariableKeySupportTest {
 
     @Test
     void editingAPropertyIsNotAClashWithItself() {
-        // An existing property already publishes the very name being previewed, so it has to be
-        // named as the one under edit or opening it to change its limits reports a clash with
-        // itself. It is named as stored, which is what the form hands over.
         String stored = "TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1";
 
         assertEquals(1, VariableKeySupport.findOwnersOf(model, stored).size());
