@@ -70,7 +70,8 @@ public class RecipeDeepCopy {
         copy.setBuildingBlockElementId(source.getBuildingBlockElementId());
         copy.setBuildingBlockElementVersion(source.getBuildingBlockElementVersion());
         source.getActualEquipmentIds().forEach(copy::addActualEquipmentId);
-        copy.setEquipmentClassId(source.getEquipmentClassId());
+        // The class of the equipment is one of the entries of the other information, so setting it
+        // here as well would leave the copy holding it twice.
         for (S88EquipmentRequirement requirement : source.getEquipmentRequirements()) {
             copy.addEquipmentRequirement(copyRequirement(requirement));
         }
@@ -96,10 +97,15 @@ public class RecipeDeepCopy {
      * @return a recipe of the same kind as the source, or {@code null} when there was nothing to copy
      */
     public static S88Recipe copyRecipe(S88Recipe source) {
-        if (source == null) {
-            return null;
-        }
         S88Recipe copy = newRecipeOfSameKind(source);
+        copyRecipeInto(source, copy);
+        return copy;
+    }
+
+    private static void copyRecipeInto(S88Recipe source, S88Recipe copy) {
+        if (source == null) {
+            return;
+        }
         copy.setId(source.getId());
         copy.setVersion(source.getVersion());
         copy.setVersionDate(source.getVersionDate());
@@ -117,7 +123,33 @@ public class RecipeDeepCopy {
         for (S88RecipeElement element : source.getRecipeElements()) {
             copy.addRecipeElement(copyElement(element));
         }
-        return copy;
+    }
+
+    /**
+     * A copy of a master recipe, typed as one.
+     * <p>
+     * {@link #copyRecipe} hands back a {@code S88Recipe} even when what it copied was a master,
+     * because the return type covers both kinds. A caller that has a master and knows it needs a
+     * master back uses this instead of casting a copy that would have thrown if the kind were
+     * anything else.
+     *
+     * @param source recipe to copy, may be {@code null}
+     * @return the copy, or {@code null} when there was nothing to copy
+     * @throws IllegalArgumentException when the source is not a master recipe
+     */
+    public static S88MasterRecipe copyMasterRecipe(S88MasterRecipe source) {
+        if (source == null) {
+            return null;
+        }
+        if (!(newRecipeOfSameKind(source) instanceof S88MasterRecipe empty)) {
+            throw new IllegalArgumentException("A master recipe can only be copied as a master, and '"
+                    + source.getId() + "' is a " + source.getClass().getSimpleName() + ".");
+        }
+        copyRecipeInto(source, empty);
+        // Set after the other information is across, because the kind is one of its entries and
+        // setting it first would leave the copy holding the answer twice.
+        empty.setKind(source.getKind());
+        return empty;
     }
 
     /**

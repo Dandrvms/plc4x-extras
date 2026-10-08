@@ -18,6 +18,8 @@
  */
 package org.apache.plc4x.malbec.s88.api;
 
+import java.util.ArrayList;
+
 /**
  * A recipe that is not bound to one batch: the thing an engineer writes and keeps.
  * <p>
@@ -57,10 +59,13 @@ public class S88MasterRecipe extends S88Recipe {
 
     public void setKind(S88RecipeKind kind) {
         this.kind = kind != null ? kind : S88RecipeKind.CLASS;
-        S88OtherInformation existing = S88OtherInformation.find(
-                getOtherInformation(), S88OtherInformation.RECIPE_KIND);
-        if (existing != null) {
-            removeOtherInformation(existing);
+        // Every entry that says it, not the first: a recipe already carrying two of them has to
+        // end up with one, and removing one leaves the other to be written as a second answer to a
+        // question the file only asks once.
+        for (S88OtherInformation info : new ArrayList<>(getOtherInformation())) {
+            if (S88OtherInformation.RECIPE_KIND.equalsIgnoreCase(info.getId())) {
+                removeOtherInformation(info);
+            }
         }
         addOtherInformation(S88OtherInformation.of(
                 S88OtherInformation.RECIPE_KIND, this.kind.name()));
