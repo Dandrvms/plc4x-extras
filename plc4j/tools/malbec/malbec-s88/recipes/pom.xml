@@ -52,6 +52,19 @@
     </build>
         <dependencies>
         <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-netbeans-api-annotations-common</artifactId>
             <version>${netbeans.version}</version>
@@ -119,6 +132,19 @@
         <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-netbeans-core-multiview</artifactId>
+            <version>${netbeans.version}</version>
+        </dependency>
+        <!-- The chart is drawn with the Visual Library rather than painted by hand, which is what
+             brings nodes, connections, anchors, pan, zoom and dragging without writing them. -->
+        <dependency>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-netbeans-api-visual</artifactId>
+            <version>${netbeans.version}</version>
+        </dependency>
+        <!-- Downloaded so that the palette API can be read before a palette is built. Not used yet. -->
+        <dependency>
+            <groupId>org.netbeans.api</groupId>
+            <artifactId>org-netbeans-spi-palette</artifactId>
             <version>${netbeans.version}</version>
         </dependency>
         <dependency>
