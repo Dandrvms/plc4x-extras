@@ -1,4 +1,5 @@
 Manifest-Version: 1.0
 OpenIDE-Module-Localizing-Bundle: org/apache/plc4x/malbec/s88/recipes/Bundle.properties
 OpenIDE-Module-Requires: org.openide.windows.WindowManager
+OpenIDE-Module-Requires: org.netbeans.api.visual
 

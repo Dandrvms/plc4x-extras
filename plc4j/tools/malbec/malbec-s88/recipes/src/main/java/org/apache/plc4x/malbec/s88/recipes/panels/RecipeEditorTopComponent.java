@@ -83,11 +83,17 @@ public final class RecipeEditorTopComponent {
      * <p>
      * The tab list is the place a second view of the same recipe goes. Every tab is handed the same
      * editor state, which is what makes the views of one recipe agree with each other.
+     * <p>
+     * <b>The chart is a tab, not a window of its own.</b> The steps of a recipe and the chart of
+     * those steps are one thing seen twice, and a second window would be two windows over one file
+     * writing to one file.
      */
     private static TopComponent build(String key, RecipeEditorModel model) {
         RecipeMultiViewDescription steps = RecipeMultiViewDescription.steps(key);
+        RecipeMultiViewDescription chart = RecipeMultiViewDescription.chart(key);
         steps.setModel(model);
-        RecipeMultiViewDescription[] tabs = {steps};
+        chart.setModel(model);
+        RecipeMultiViewDescription[] tabs = {steps, chart};
 
         TopComponent window = MultiViewFactory.createMultiView(tabs, steps);
         String label = model.getRecipe().getId() != null

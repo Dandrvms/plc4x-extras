@@ -52,7 +52,7 @@ public final class RecipeNode extends AbstractNode {
      * picture is a thing to notice and replace.
      */
     public static final String RECIPE_ICON =
-            "org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png";
+            "org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png";
 
     private final FileObject recipeFile;
 

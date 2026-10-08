@@ -62,10 +62,20 @@ final class RecipeMultiViewDescription implements MultiViewDescription {
     }
 
     /**
+     * Describes the chart of a recipe.
+     *
+     * @param key whatever tells this window apart from another, such as the recipe file path
+     * @return the description
+     */
+    static RecipeMultiViewDescription chart(String key) {
+        return new RecipeMultiViewDescription("Chart", "RecipeChart/" + key, RecipeChartView::new);
+    }
+
+    /**
      * Hands this description the editor state its view is built on.
      * <p>
      * The platform creates views itself and passes nothing to them, so the state has to arrive after
-     * the description is made but before the window is opened. Doing it in that order is what lets
+     * the description is made and before the window is opened. Doing it in that order is what lets
      * every tab of a window be given the same recipe, which is what keeps them in step.
      *
      * @param editorModel the recipe this tab is looking at
