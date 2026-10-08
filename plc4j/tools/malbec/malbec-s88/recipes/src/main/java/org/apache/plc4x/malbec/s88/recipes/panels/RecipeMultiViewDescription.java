@@ -98,7 +98,7 @@ final class RecipeMultiViewDescription implements MultiViewDescription {
 
     @Override
     public Image getIcon() {
-        return ImageUtilities.loadImage("org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png");
+        return ImageUtilities.loadImage("org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png");
     }
 
     @Override

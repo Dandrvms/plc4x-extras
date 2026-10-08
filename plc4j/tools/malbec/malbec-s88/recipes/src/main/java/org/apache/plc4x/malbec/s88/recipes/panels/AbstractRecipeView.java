@@ -77,7 +77,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /** The icon of this view in its tab. */
     protected Image viewIcon() {
-        return ImageUtilities.loadImage("org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png");
+        return ImageUtilities.loadImage("org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png");
     }
 
     /** The bar of buttons along the top of this view, for a view that has more. */

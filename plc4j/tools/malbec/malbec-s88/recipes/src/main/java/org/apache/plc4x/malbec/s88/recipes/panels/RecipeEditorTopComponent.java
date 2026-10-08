@@ -103,7 +103,7 @@ public final class RecipeEditorTopComponent {
         window.setName("Recipe");
         window.setToolTipText(model.getRecipeFile().getPath());
         window.setIcon(ImageUtilities.loadImage(
-                "org/apache/plc4x/malbec/s88/recipes/nodes/recipeset.png"));
+                "org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png"));
         return window;
     }
 
