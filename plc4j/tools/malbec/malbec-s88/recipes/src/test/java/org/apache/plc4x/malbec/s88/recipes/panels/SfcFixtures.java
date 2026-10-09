@@ -34,6 +34,8 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
+import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
+import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 
 /**
@@ -55,7 +57,14 @@ final class SfcFixtures {
                 "divergencia-selectiva",
                 "divergencia-paralela",
                 "paralela-dentro-de-selectiva",
-                "referencias-externas");
+                "referencias-externas",
+                "botones-lineal",
+                "botones-paralela",
+                "botones-paralela-tres-ramas",
+                "botones-paralela-paso-en-una-rama",
+                "botones-bifurcacion",
+                "botones-bifurcacion-tres-ramas",
+                "botones-bifurcacion-paso-en-una-rama");
     }
 
     /** Every fixture, in the order {@link #names()} lists them. */
@@ -66,10 +75,88 @@ final class SfcFixtures {
                 selectiveDivergence(),
                 parallelDivergence(),
                 nestedParallelInsideSelective(),
-                withExternalReferences());
+                withExternalReferences(),
+                Buttons.lineal("BOTONES_LINEAL"),
+                Buttons.parallel(),
+                Buttons.parallelThreeBranches(),
+                Buttons.parallelStepInsideABranch(),
+                Buttons.bifurcation(),
+                Buttons.bifurcationThreeBranches(),
+                Buttons.bifurcationStepInsideABranch());
     }
 
-    /** BEGIN, HEAT, MIX, PACK, END, with a bar between every two of them. */
+    /**
+ * The charts the toolbar buttons build, one press at a time.
+ *
+ * <p>Every one of these calls the same use cases a button press calls, so each picture is the
+ * recipe for the presses that make it, written down rather than described.
+ */
+static final class Buttons {
+
+    private Buttons() {
+    }
+
+    static S88MasterRecipe newRecipe(String id) {
+        return CreateMasterRecipeUseCase.execute(id, org.apache.plc4x.malbec.s88.api.S88RecipeKind.CLASS);
+    }
+
+    /** Pick the start, press Add step three times. */
+    static S88MasterRecipe lineal(String id) {
+        S88MasterRecipe recipe = newRecipe(id);
+        String last = "BEGIN";
+        for (int n = 0; n < 3; n++) {
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, last);
+            last = "BOX_STEP" + (n == 0 ? "" : "_" + n);
+        }
+        return recipe;
+    }
+
+    /** Two steps, then a parallel branch on the second one. */
+    static S88MasterRecipe parallel() {
+        S88MasterRecipe recipe = lineal("BOTONES_PARALELA");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        return recipe;
+    }
+
+    /** The same, pressing Add parallel branch once more. */
+    static S88MasterRecipe parallelThreeBranches() {
+        S88MasterRecipe recipe = lineal("BOTONES_PARALELA_TRES");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_2");
+        return recipe;
+    }
+
+    /** Pick a step inside one branch and press Add step, which grows that branch. */
+    static S88MasterRecipe parallelStepInsideABranch() {
+        S88MasterRecipe recipe = parallel();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        return recipe;
+    }
+
+    /** Two steps, then a branch on the second one. */
+    static S88MasterRecipe bifurcation() {
+        S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
+        return recipe;
+    }
+
+    /** The same, pressing Add branch once more. */
+    static S88MasterRecipe bifurcationThreeBranches() {
+        S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION_TRES");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_2");
+        return recipe;
+    }
+
+    /** Pick a step inside one branch and press Add step, which grows that branch. */
+    static S88MasterRecipe bifurcationStepInsideABranch() {
+        S88MasterRecipe recipe = bifurcation();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        return recipe;
+    }
+}
+
+/** BEGIN, HEAT, MIX, PACK, END, with a bar between every two of them. */
     static S88MasterRecipe lineal() {
         Chart chart = new Chart("LINEAL");
         chart.bar("T_HEAT");

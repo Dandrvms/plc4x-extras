@@ -209,4 +209,20 @@ public enum PlatformVariable {
         }
         return Optional.empty();
     }
+
+    /**
+     * Whether the batch writes this variable while the recipe runs, rather than the author writing it
+     * in the editor.
+     * <p>
+     * Only a variable that is a parameter can be written at all, and of those the platform declares
+     * one: the order. The rest are read back from the module and no author ever sets them.
+     *
+     * @param publishedName name as published on a module, may be {@code null}
+     * @return {@code true} when the value belongs to the run and not to the recipe being written
+     */
+    public static boolean isWrittenByTheBatch(String publishedName) {
+        return findByPublishedName(publishedName)
+                .filter(variable -> !variable.isReport())
+                .isPresent();
+    }
 }

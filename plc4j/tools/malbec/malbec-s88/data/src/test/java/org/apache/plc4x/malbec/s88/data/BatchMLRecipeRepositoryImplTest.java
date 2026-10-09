@@ -29,6 +29,7 @@ import org.apache.plc4x.malbec.s88.api.S88IdScope;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88OtherInformation;
+import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
@@ -197,6 +198,30 @@ InMemory storage = new InMemory();
                 .getFirstValue().getFirstValueString());
         assertEquals("degC", read.findParameter("Parameters/TARGET_TEMPERATURE").orElseThrow()
                 .getFirstValue().getUnitOfMeasure());
+    }
+
+    @Test
+    void anEnumerationIsCarriedAsTheSetItComesFromAndNotAsAUnitOfMeasure() {
+        S88MasterRecipe master = new S88MasterRecipe("REC", S88RecipeKind.CLASS);
+        S88RecipeElement order = new S88RecipeElement("ORDER", S88RecipeElementKind.OPERATION);
+        order.setEquipmentClassId("PUMP");
+        S88RecipeParameter command =
+                S88RecipeParameter.of("Parameters/COMMAND", "START", DataType.ENUMERATION, null);
+        command.getFirstValue().addEnumerationSetId("COMMAND");
+        order.addParameter(command);
+        master.addRecipeElement(order);
+
+        InMemory storage = new InMemory();
+        repository(storage).saveRecipe(master);
+        S88ParameterValue read = repository(storage).loadRecipe()
+                .findElement("ORDER").orElseThrow()
+                .findParameter("Parameters/COMMAND").orElseThrow().getFirstValue();
+
+        assertEquals(List.of("COMMAND"), read.getEnumerationSetIds(),
+                "and the set comes back named, because that is where the values it allows are");
+        assertNull(read.getUnitOfMeasure(),
+                "and there is no unit of measure, because a name of a set is not a measure and a"
+                        + " document claiming one is a document another tool reads wrongly");
     }
 
     @Test

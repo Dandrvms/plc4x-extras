@@ -268,6 +268,7 @@ public class EditProcedureLogicUseCase {
         if (!chart.findStep(afterBoxId).isPresent()) {
             throw new IllegalArgumentException("This chart has no box called '" + afterBoxId + "'.");
         }
+        requireRoomAfter(recipe, chart, afterBoxId);
 
         List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
         if (onward.size() > 1) {
@@ -282,6 +283,15 @@ public class EditProcedureLogicUseCase {
         if (onward.size() == 1 && onward.get(0).getTo().size() == 1) {
             whatFollowed = List.of(onward.get(0).getTo().get(0).getValue());
         }
+        if (onward.size() == 1 && onward.get(0).getTo().size() > 1) {
+            // One line leaving this box with more than one arrival is a bifurcation that sits on
+            // this box, and there is no single flow to put a step in the middle of. Carrying on as
+            // if there were one arrival would take the other branch off the chart without saying so.
+            throw new IllegalStateException("Box '" + afterBoxId + "' goes to "
+                    + onward.get(0).getTo().size() + " bars, so it is a branch point and there is no"
+                    + " single flow to put a step in. Pick a step inside one of the branches."
+                    + " The branches are " + namesOf(onward.get(0).getTo()) + ".");
+        }
 
         // Everything that can be refused is refused before anything is touched. Taking the line off
         // first is what leaves a chart holding a line to nothing when the step that was going to
@@ -290,7 +300,11 @@ public class EditProcedureLogicUseCase {
         requireFreeName(chart, newBoxId, "box");
         requireFreeName(chart, barId, "bar");
 
-        onward.forEach(chart::removeLink);
+        S88LinkType onwardType = onward.isEmpty() ? null : onward.get(0).getLinkType();
+        // Only this box is taken off the line, not the whole line. A line leaving several boxes is
+        // the convergence of a branch, and taking it off whole would take the other branches with
+        // it. The line goes only when this box was the only one leaving it.
+        S88ProcedureLink shared = detachEnd(chart, onward.isEmpty() ? null : onward.get(0), afterBoxId);
 
         S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
                 recipe, step, newStepId, S88RecipeElementKind.OPERATION, classId);
@@ -298,12 +312,81 @@ public class EditProcedureLogicUseCase {
         addTransition(recipe, step, barId);
         addLink(recipe, step, afterBoxId + "_TO_" + barId,
                 List.of(afterBoxId), List.of(barId), null);
+        // The bar the flow waits at has to lead into the new step. Without this line the flow stops
+        // at a bar with nothing after it, and the step that was just added is a box nothing reaches.
+        addLink(recipe, step, barId + "_TO_" + newBoxId,
+                List.of(barId), List.of(newBoxId), null);
         if (!whatFollowed.isEmpty()) {
-            addLink(recipe, step, newBoxId + "_TO_" + whatFollowed.get(0),
-                    List.of(newBoxId), whatFollowed, null);
+            // The new step joins the convergence the other branches arrive on, rather than getting a
+            // line of its own into the same bar, which would draw the same thing as two separate
+            // things arriving there.
+            if (shared != null) {
+                putWidened(chart, shared, newBoxId);
+            } else {
+                addLink(recipe, step, newBoxId + "_TO_" + whatFollowed.get(0),
+                        List.of(newBoxId), whatFollowed, onwardType);
+            }
         }
         announce(recipe);
         return added;
+    }
+
+    /** Puts one more departure on a line the other branches of a branch are already arriving on. */
+    private static void putWidened(S88ProcedureLogic chart, S88ProcedureLink line, String boxId) {
+        S88ProcedureLink wider = new S88ProcedureLink(line.getId());
+        line.getFrom().forEach(wider::addFrom);
+        line.getTo().forEach(wider::addTo);
+        wider.addFrom(S88IdRef.step(boxId));
+        wider.setLinkType(line.getLinkType());
+        chart.removeLink(line);
+        chart.addLink(wider);
+    }
+
+    /**
+     * Takes one end off a line and puts the line back, or takes the line off when nothing else is
+     * leaving or arriving at the same thing.
+     *
+     * @return the line left on the chart with this end taken off, or {@code null} when the line went
+     */
+    private static S88ProcedureLink detachEnd(S88ProcedureLogic chart, S88ProcedureLink line,
+                                              String name) {
+        if (line == null) {
+            return null;
+        }
+        if (line.getFrom().size() <= 1) {
+            chart.removeLink(line);
+            return null;
+        }
+        List<S88IdRef> remaining = new ArrayList<>();
+        line.getFrom().stream().filter(end -> !name.equals(end.getValue())).forEach(remaining::add);
+        S88ProcedureLink kept = new S88ProcedureLink(line.getId());
+        remaining.forEach(kept::addFrom);
+        line.getTo().forEach(kept::addTo);
+        kept.setLinkType(line.getLinkType());
+        chart.removeLink(line);
+        chart.addLink(kept);
+        return kept;
+    }
+
+    /**
+ * Whether another step can go after a box.
+ *
+ * <p>
+ * <b>The stop of the process has nothing after it.</b> A step after the end is a process that carries
+ * on after it has stopped, and the chart would show a flow leaving a ground symbol. The start is the
+ * opposite case and is left alone: a step after the start is the ordinary first step of a recipe.
+ *
+ * @throws IllegalStateException when the box is where the flow stops
+ */
+    private static void requireRoomAfter(S88Recipe recipe, S88ProcedureLogic chart, String boxId) {
+        String elementId = chart.findStep(boxId).orElseThrow().getRecipeElementId();
+        boolean stops = recipe.findElement(elementId)
+                .map(element -> element.getKind() == S88RecipeElementKind.END)
+                .orElse(Boolean.FALSE);
+        if (stops) {
+            throw new IllegalStateException("Step '" + boxId + "' is where the flow stops, so there is"
+                    + " nothing to put after it.");
+        }
     }
 
     /**
@@ -345,6 +428,10 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("This chart has no " + what + " called '" + name
                     + "'.");
         }
+    }
+
+private static String namesOf(List<S88IdRef> ends) {
+        return ends.stream().map(S88IdRef::getValue).toList().toString();
     }
 
     /**
@@ -730,7 +817,7 @@ public class EditProcedureLogicUseCase {
         }
         S88IdRef target = ends.get(0);
         int at = ends.indexOf(target);
-        if (atEnd) {
+if (atEnd) {
             line.removeTo(target);
             List<S88IdRef> to = new ArrayList<>(line.getTo());
             to.add(at, moved);
@@ -743,6 +830,10 @@ public class EditProcedureLogicUseCase {
             line.clearFrom();
             line.addFrom(from.toArray(new S88IdRef[0]));
         }
+        // Back through the chart, because moving an end is a change the chart cannot see otherwise
+        // and it works out which ends name nothing from them.
+        chart.removeLink(line);
+        chart.addLink(line);
         announce(recipe);
     }
 
@@ -878,16 +969,41 @@ public class EditProcedureLogicUseCase {
 
     /**
      * Points every end of every line at a renamed box or bar.
+     *
      * <p>
      * Ends pointing outside this chart are left alone, because their names belong to another chart.
+     *
+     * <p>
+     * <b>Each line that changed is put back through the chart.</b> A line is changed by renaming the
+     * ends it holds, and the chart does not see that happen: it works out which ends name nothing
+     * whenever the set of lines changes, and a line renamed in place leaves that list still saying
+     * the old name is dangling. Taking the line out and putting it back is how the chart is told.
      */
     private static void renameLinkEnds(S88ProcedureLogic chart, String oldId, String newId) {
-        for (S88ProcedureLink link : chart.getLinks()) {
-            link.getFrom().stream().filter(end -> oldId.equals(end.getValue()))
-                    .forEach(end -> end.setValue(newId));
-            link.getTo().stream().filter(end -> oldId.equals(end.getValue()))
-                    .forEach(end -> end.setValue(newId));
+        for (S88ProcedureLink link : new ArrayList<>(chart.getLinks())) {
+            boolean changed = renameEnd(link.getFrom(), oldId, newId)
+                    | renameEnd(link.getTo(), oldId, newId);
+            if (changed) {
+                chart.removeLink(link);
+                chart.addLink(link);
+            }
         }
+    }
+
+    /**
+     * Renames the ends of one side of a line that carry the old name.
+     *
+     * @return true when at least one end was renamed
+     */
+    private static boolean renameEnd(List<S88IdRef> ends, String oldId, String newId) {
+        boolean changed = false;
+        for (S88IdRef end : ends) {
+            if (end != null && oldId.equals(end.getValue())) {
+                end.setValue(newId);
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     /**

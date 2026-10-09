@@ -24,12 +24,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import javax.swing.undo.AbstractUndoableEdit;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
+import org.apache.plc4x.malbec.s88.recipes.services.RecipeSetPlantSnapshot;
 import org.apache.plc4x.malbec.s88.recipes.services.S88RecipeProjectServices;
+import org.netbeans.api.project.Project;
+import org.netbeans.api.project.ProjectManager;
 import org.openide.awt.UndoRedo;
 import org.openide.filesystems.FileObject;
 
@@ -57,17 +61,28 @@ public final class RecipeEditorModel {
 
     private final FileObject recipeFile;
     private final S88RecipeRepository repository;
+    private final S88PlantSnapshot plant;
     private final List<Consumer<RecipeEditorModel>> listeners = new CopyOnWriteArrayList<>();
     private final RecipeUndoRedo undoRedo = new RecipeUndoRedo();
     private S88MasterRecipe recipe;
     private int savedPosition;
 
     private RecipeEditorModel(FileObject recipeFile, S88MasterRecipe recipe,
-                              S88RecipeRepository repository) {
+                              S88RecipeRepository repository, S88PlantSnapshot plant) {
         this.recipeFile = recipeFile;
         this.recipe = recipe;
         this.repository = repository;
+        this.plant = plant;
         undoRedo.onApplied(this::fireChanged);
+    }
+
+    /**
+     * The plant this recipe is written against, as it was when the recipe set was created.
+     *
+     * @return the frozen plant, {@code null} for a recipe that is not in a recipe set
+     */
+    public S88PlantSnapshot plant() {
+        return plant;
     }
 
     /**
@@ -82,7 +97,30 @@ public final class RecipeEditorModel {
      * @throws IOException when the file does not hold a recipe that can be read
      */
     public static RecipeEditorModel open(FileObject recipeFile) throws IOException {
-        return open(recipeFile, new FileObjectStorage(recipeFile));
+        return open(recipeFile, new FileObjectStorage(recipeFile), plantUnder(recipeFile));
+    }
+
+    /**
+     * The frozen plant of the recipe set a recipe file belongs to.
+     *
+     * @param recipeFile the recipe being opened
+     * @return the plant, {@code null} when there is no file to find a recipe set with
+     * @throws IOException when the recipe set has no plant frozen into it
+     */
+    private static S88PlantSnapshot plantUnder(FileObject recipeFile) throws IOException {
+        if (recipeFile == null) {
+            // A recipe read from somewhere that is not a project of its own, which is what a test
+            // and a runtime reading recipes off a piece of equipment do.
+            return null;
+        }
+        FileObject folder = recipeFile.getParent();
+        Project recipeSet = folder == null ? null : ProjectManager.getDefault().findProject(folder);
+        if (recipeSet == null || !RecipeSetPlantSnapshot.isTaken(recipeSet)) {
+            throw new IOException("'" + recipeFile.getNameExt() + "' belongs to a recipe set with no"
+                    + " plant frozen into it, so what its steps are attached to cannot be said."
+                    + " Create the recipe set again with a plant to write against.");
+        }
+        return RecipeSetPlantSnapshot.required(recipeSet);
     }
 
     /**
@@ -91,7 +129,7 @@ public final class RecipeEditorModel {
      * The storage is what the recipe is read from and written to, and in the editor it is one file
      * in a project. Taking it as an argument rather than assuming one is what lets the editor be
      * opened on a recipe that is not in a project at all, which is what a test needs and what a
-     * runtime reading recipes off a machine would need.
+     * runtime reading recipes off a piece of equipment would need.
      *
      * @param recipeFile the file being edited, {@code null} when there is no file
      * @param storage    where the recipe is read from and written to
@@ -99,13 +137,27 @@ public final class RecipeEditorModel {
      * @throws IOException when the storage does not hold a recipe that can be read
      */
     static RecipeEditorModel open(FileObject recipeFile, S88Storage storage) throws IOException {
+        return open(recipeFile, storage, null);
+    }
+
+    /**
+     * Reads a recipe and the plant it is written against.
+     *
+     * @param recipeFile the file being edited, {@code null} when there is no file
+     * @param storage    where the recipe is read from and written to
+     * @param plant      the plant frozen into the recipe set, {@code null} when there is none
+     * @return the editor state for it
+     * @throws IOException when the storage does not hold a recipe that can be read
+     */
+    static RecipeEditorModel open(FileObject recipeFile, S88Storage storage,
+                                  S88PlantSnapshot plant) throws IOException {
         S88RecipeRepository repository =
                 S88RecipeProjectServices.createRepository("xml", storage);
         S88MasterRecipe recipe = repository.loadRecipe();
         if (recipe == null) {
             throw new IOException("'" + name(recipeFile) + "' does not hold a recipe, or is empty.");
         }
-        return new RecipeEditorModel(recipeFile, recipe, repository);
+        return new RecipeEditorModel(recipeFile, recipe, repository, plant);
     }
 
     private static String name(FileObject recipeFile) {
@@ -128,9 +180,15 @@ public final class RecipeEditorModel {
         return recipe;
     }
 
-    /** What is wrong with the recipe right now, empty when it holds together. */
+    /**
+ * What is wrong with the recipe right now, empty when it holds together.
+ *
+ * <p>
+ * Measured against the plant frozen into the recipe set when it was made, because a recipe is about
+ * the plant it was written against and not about whatever the plant file says today.
+ */
     public RecipeConformance conformance() {
-        return RecipeConformance.of(recipe);
+        return RecipeConformance.of(recipe, plant);
     }
 
     /** Whether there is anything to save. */
@@ -200,6 +258,40 @@ public final class RecipeEditorModel {
         @Override
         public String getPresentationName() {
             return "Change";
+        }
+    }
+
+    /**
+     * Takes back the last change.
+     *
+     * @return true when there was one to take back
+     */
+    public boolean undo() {
+        if (!undoRedo.canUndo()) {
+            return false;
+        }
+        try {
+            undoRedo.undo();
+            return true;
+        } catch (javax.swing.undo.CannotUndoException nothingToUndo) {
+            return false;
+        }
+    }
+
+    /**
+     * Puts back the change that was taken back.
+     *
+     * @return true when there was one to put back
+     */
+    public boolean redo() {
+        if (!undoRedo.canRedo()) {
+            return false;
+        }
+        try {
+            undoRedo.redo();
+            return true;
+        } catch (javax.swing.undo.CannotRedoException nothingToRedo) {
+            return false;
         }
     }
 

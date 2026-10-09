@@ -405,11 +405,7 @@ class SfcLayoutEngineTest {
     }
 
     private static S88MasterRecipe byName(String name) {
-        return List.of(SfcFixtures.lineal(), SfcFixtures.withBackwardsLoop(),
-                        SfcFixtures.selectiveDivergence(), SfcFixtures.parallelDivergence(),
-                        SfcFixtures.nestedParallelInsideSelective(),
-                        SfcFixtures.withExternalReferences())
-                .get(SfcFixtures.names().indexOf(name));
+        return SfcFixtures.all().get(SfcFixtures.names().indexOf(name));
     }
 
     @Test
