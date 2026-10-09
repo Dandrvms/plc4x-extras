@@ -88,6 +88,19 @@ final class SfcLayoutEngine {
     }
 
     /**
+     * How much room a node needs down.
+     *
+     * <p>A box is a fixed height, and a step with more to say than its name writes only what fits.
+     * What does not fit is not lost: it is under the pointer.
+     *
+     * @param node name of the node
+     * @return the height, in units of the chart
+     */
+    private int heightOf(String node) {
+        return SfcMetrics.heightOf(shapes.get(node));
+    }
+
+    /**
      * How far from its line the left of a node sits.
      * <p>
      * A transition is a bar with the comparison written beside it, and the bar is what the flow
@@ -104,6 +117,10 @@ final class SfcLayoutEngine {
     /**
      * How much room a node needs across.
      *
+     * <p>
+     * A bar is as wide as its own text and a step as wide as its own name, because a symbol narrower
+     * than what it has to say cuts the text off and the text is the part an engineer reads.
+     *
      * @param node name of the node
      * @return the width, in units of the chart
      */
@@ -113,7 +130,10 @@ final class SfcLayoutEngine {
         if (shape == RecipeShapes.Shape.TRANSITION) {
             return SfcMetrics.transitionWidth(labelWidth);
         }
-                return SfcMetrics.widthOf(shape);
+        if (shape == RecipeShapes.Shape.BOX) {
+            return SfcMetrics.stepWidth(labelWidth);
+        }
+        return SfcMetrics.widthOf(shape);
     }
 
     /**
@@ -532,7 +552,7 @@ final class SfcLayoutEngine {
                     at.getValue() - halfWidthOf(id),
                     SfcMetrics.MARGIN + row.getOrDefault(id, 0) * SfcMetrics.ROW,
                     widthOf(id),
-                    SfcMetrics.heightOf(shapes.get(id)));
+                    heightOf(id));
             corners.put(id, box);
             deepest = Math.max(deepest, box.y + box.height);
         }
@@ -645,6 +665,10 @@ final class SfcLayoutEngine {
      * Down the chart it is one straight run, or a dogleg through a bar when the branches have to
      * meet. Up the chart it is taken out to a lane on the right, because a line that goes back up has
      * nowhere to go on the way that is not through something else.
+     * <p>
+     * One line of the recipe with two ends on each side is drawn as one piece per pair of ends, and
+     * each of those needs its own name inside the scene. The name of the line it came from is carried
+     * as well, because picking a drawn piece and taking the line off are two different things.
      */
     private Link route(String linkId, String from, String to, Map<String, Rectangle> corners,
                        Rectangle syncBar) {
@@ -656,7 +680,7 @@ final class SfcLayoutEngine {
         if (goingBackwards.contains(edge(from, to))) {
             int lane = rightmostOf(corners) + SfcMetrics.BACK_EDGE_LANE;
             int dip = Math.max(leaving.y + SfcMetrics.ROW / 3, arriving.y - SfcMetrics.ROW / 3);
-            return new Link(linkId + ">" + from + ">" + to, true, List.of(
+            return new Link(linkId + ">" + from + ">" + to, linkId, true, List.of(
                     leaving,
                     new Point(leaving.x, dip),
                     new Point(lane, dip),
@@ -664,10 +688,11 @@ final class SfcLayoutEngine {
                     arriving));
         }
         if (syncBar == null) {
-            return new Link(linkId + ">" + from + ">" + to, false, List.of(leaving, arriving));
+            return new Link(linkId + ">" + from + ">" + to, linkId, false,
+                    List.of(leaving, arriving));
         }
         int barY = syncBar.y + SfcMetrics.SYNC_BAR_HEIGHT / 2;
-        return new Link(linkId + ">" + from + ">" + to, false, List.of(
+        return new Link(linkId + ">" + from + ">" + to, linkId, false, List.of(
                 leaving,
                 new Point(leaving.x, barY),
                 new Point(arriving.x, barY),
@@ -745,10 +770,11 @@ private Point leavesAt(String node, Rectangle box) {
     /**
      * One drawn line.
      *
-     * @param id        what it is known by inside the scene
+     * @param id        what it is known by inside the scene, which is not the line it came from
+     * @param lineId    the line of the recipe this is a piece of
      * @param backwards whether it goes back up the chart, which is what asks for an arrow
      * @param path      the points to draw through, in order
      */
-    record Link(String id, boolean backwards, List<Point> path) {
+    record Link(String id, String lineId, boolean backwards, List<Point> path) {
     }
 }

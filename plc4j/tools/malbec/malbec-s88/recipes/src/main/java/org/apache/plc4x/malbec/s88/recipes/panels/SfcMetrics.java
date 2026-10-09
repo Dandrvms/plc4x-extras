@@ -46,6 +46,14 @@ final class SfcMetrics {
     /** Room between the bar and the condition written beside it. */
     static final int LABEL_GAP = 10;
 
+    /**
+     * Room between the border of a box and the text inside it.
+     *
+     * <p>Kept small on purpose. A box is a fixed size and a step has more to say than its name, so
+     * every pixel taken by a margin is a pixel a value does not get drawn in.
+     */
+    static final int BOX_PADDING = 2;
+
         /** The bar that joins the branches of a split or a join. */
     static final int SYNC_BAR_WIDTH = 28;
     static final int SYNC_BAR_HEIGHT = 6;
@@ -97,17 +105,32 @@ final class SfcMetrics {
         }
     }
 
-    /**
-     * How wide a transition has to be for its bar and the condition beside it.
-     * <p>
-     * The condition is measured rather than guessed at, because a bar narrower than its own text
-     * clips the text, and a bar wider than it needs to be pushes the branches apart for nothing.
-     *
-     * @param labelWidth how wide the condition is, 0 when the bar waits on nothing
-     * @return the width, never less than what the bar itself needs
-     */
+/**
+ * How wide a transition has to be for its bar and the condition beside it.
+ * <p>
+ * The condition is measured rather than guessed at, because a bar narrower than its own text
+ * clips the text, and a bar wider than it needs to be pushes the branches apart for nothing. The
+ * margin at the far end is what keeps the text off the edge of the chart.
+ *
+ * @param labelWidth how wide the condition is, 0 when the bar waits on nothing
+ * @return the width, never less than what the bar itself needs
+ */
     static int transitionWidth(int labelWidth) {
         return Math.max(TRANSITION_HIT_WIDTH,
-                TRANSITION_WIDTH + (labelWidth > 0 ? LABEL_GAP + labelWidth : 0));
+                TRANSITION_WIDTH + (labelWidth > 0 ? 2 * LABEL_GAP + labelWidth : 0));
+    }
+
+/**
+ * How wide a step has to be for the name it carries and the equipment under it.
+ * <p>
+ * Measured rather than guessed at, for the same reason a transition is: a box narrower than its
+ * own text cuts the text off, and the name of the equipment is what tells an engineer which
+ * equipment the step works on. The room on each side is what keeps the text off the border.
+ *
+ * @param labelWidth how wide the widest line of its text is, 0 when it has none
+ * @return the width, never less than what a step normally needs
+ */
+    static int stepWidth(int labelWidth) {
+        return Math.max(STEP_WIDTH, labelWidth + 2 * BOX_PADDING);
     }
 }
