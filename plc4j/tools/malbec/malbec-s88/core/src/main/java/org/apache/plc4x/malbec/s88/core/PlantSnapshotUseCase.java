@@ -20,7 +20,6 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
-import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 
@@ -62,11 +61,14 @@ public class PlantSnapshotUseCase {
      */
     public static S88PlantModel copy(S88PlantModel source) {
         S88PlantModel copy = new S88PlantModel(copyElement(source.getRoot(), null));
+        // One pass over the declared classes, and that is all.
+        // <b>Enumerations come along with it.</b> The plant keeps them among the classes, under an
+        // ENUM_ name, so a second pass that registered them again would be registering the same
+        // class twice and refusing to do it. Copying them here also keeps their properties as they
+        // were written, rather than taking them apart and putting them back together from what a
+        // reader of the plant understands an enumeration to be.
         for (S88ElementClass elementClass : source.getClasses().values()) {
             copy.registerClass(copyClass(elementClass));
-        }
-        for (S88Enumeration enumeration : source.getEnumerations()) {
-            copy.registerEnumeration(copyEnumeration(enumeration));
         }
         return copy;
     }
@@ -81,7 +83,9 @@ public class PlantSnapshotUseCase {
         for (S88ElementClass elementClass : source.getElementClasses()) {
             copy.addElementClass(copyClass(elementClass));
         }
-        copy.getProperties().putAll(copyProperties(source.getProperties()));
+        for (Map.Entry<String, Object> property : copyProperties(source.getProperties()).entrySet()) {
+            copy.setProperty(property.getKey(), property.getValue());
+        }
         for (Map.Entry<String, Map<String, String>> container
                 : source.getBaseNameRegistry().all().entrySet()) {
             for (Map.Entry<String, String> entry : container.getValue().entrySet()) {
@@ -98,29 +102,36 @@ public class PlantSnapshotUseCase {
         S88ElementClass copy = new S88ElementClass();
         copy.setName(source.getName());
         copy.setTargetLevel(source.getTargetLevel());
-        copy.getProperties().putAll(copyProperties(source.getProperties()));
-        return copy;
-    }
-
-    private static S88Enumeration copyEnumeration(S88Enumeration source) {
-        S88Enumeration copy = new S88Enumeration(source.getName());
-        for (Map.Entry<String, Integer> entry : source.getValues().entrySet()) {
-            copy.setValue(entry.getKey(), entry.getValue());
+        for (Map.Entry<String, Object> property : copyProperties(source.getProperties()).entrySet()) {
+            copy.setProperty(property.getKey(), property.getValue());
         }
         return copy;
     }
 
+    /**
+     * The properties of an element or a class, with nothing shared with the original.
+     * <p>
+     * The variables of a piece of equipment sit two maps deep: {@code Reports} holds one entry per
+     * variable, and each of those holds the type, the units and the limits. Copying only the outer
+     * map would leave the inner ones in both plants, so a change made to the plant afterwards would
+     * show up in a recipe that was approved against the plant as it was before that change. That is
+     * the whole point of the copy, so the nesting is followed all the way down.
+     */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> copyProperties(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : source.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof Map<?, ?> nested) {
-                copy.put(entry.getKey(), new LinkedHashMap<>((Map<String, Object>) nested));
-            } else {
-                copy.put(entry.getKey(), value);
-            }
+            copy.put(entry.getKey(), copyValue(entry.getValue()));
         }
         return copy;
+    }
+
+    /** A property value, copied when it is a map so that the copy owns it. */
+    @SuppressWarnings("unchecked")
+    private static Object copyValue(Object value) {
+        if (value instanceof Map<?, ?> nested) {
+            return copyProperties((Map<String, Object>) nested);
+        }
+        return value;
     }
 }

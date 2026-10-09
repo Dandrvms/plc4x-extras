@@ -97,8 +97,9 @@ public class S88PlantSnapshot {
         return plant.findClass(name);
     }
 
+    /** The classes an element can be. Enumerations are left out, because one is not a piece of equipment. */
     public Map<String, S88ElementClass> getClasses() {
-        return Collections.unmodifiableMap(plant.getClasses());
+        return Collections.unmodifiableMap(plant.getEquipmentClasses());
     }
 
     public List<S88ElementClass> getClassesForChildLevel(S88Level childLevel) {

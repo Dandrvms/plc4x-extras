@@ -97,7 +97,7 @@ class S88ChartLayoutTest {
     }
 
     @Test
-    void aPositionIsWrittenInTheSameWayWhateverTheLanguageOfTheMachine() {
+    void aPositionIsWrittenInTheSameWayWhateverTheLanguageOfTheEquipment() {
         S88ChartLayout layout = new S88ChartLayout();
         layout.place("BOX", 1200.5, 80);
 

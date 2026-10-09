@@ -162,6 +162,39 @@ class RecipeConformanceTest {
     }
 
     @Test
+    void aChartWithTwoStartsIsReported() {
+        S88MasterRecipe recipe = completeChartRecipe();
+        recipe.addRecipeElement(step("AGAIN", S88RecipeElementKind.BEGIN));
+        recipe.getProcedureLogic().addStep(new S88ProcedureStep("S_AGAIN", "AGAIN"));
+
+        assertTrue(excessMentions(recipe, "more than one place the flow starts"),
+                "a recipe with two starts has no single answer to where the flow begins, so a runtime"
+                        + " has to pick one and the recipe does not say which");
+    }
+
+    @Test
+    void aChartWithTwoStopsIsReported() {
+        S88MasterRecipe recipe = completeChartRecipe();
+        recipe.addRecipeElement(step("FINISH", S88RecipeElementKind.END));
+        recipe.getProcedureLogic().addStep(new S88ProcedureStep("S_FINISH", "FINISH"));
+
+        assertTrue(excessMentions(recipe, "more than one place the flow stops"),
+                "and the same goes for two stops");
+    }
+
+    @Test
+    void aChartThatGoesBackToItsStartIsNotReportedForIt() {
+        S88MasterRecipe recipe = completeChartRecipe();
+        recipe.getProcedureLogic().addLink(
+                S88ProcedureLink.betweenSteps("LB", "HEAT", "BEGIN"));
+
+        assertFalse(RecipeConformance.of(recipe).excess().stream()
+                        .anyMatch(saying -> saying.contains("where the flow starts")),
+                "a retry back to the start is what ISA-88 asks for, so a line that does it is not a"
+                        + " mistake");
+    }
+
+    @Test
     void aStepTheFlowNeverReachesIsReported() {
         S88MasterRecipe recipe = completeChartRecipe();
         recipe.addRecipeElement(step("ORPHAN", S88RecipeElementKind.OPERATION));

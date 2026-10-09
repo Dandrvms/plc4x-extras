@@ -76,6 +76,16 @@
             <artifactId>plc4x-services</artifactId>
             <version>${project.version}</version>          
         </dependency>        -->
+      <dependency>
+        <groupId>org.netbeans.api</groupId>
+        <artifactId>org-netbeans-api-visual</artifactId>
+        <version>${netbeans.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.netbeans.api</groupId>
+        <artifactId>org-openide-awt</artifactId>
+        <version>${netbeans.version}</version>
+      </dependency>
         <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-netbeans-modules-jemmy</artifactId>
@@ -236,6 +246,11 @@
             <artifactId>project</artifactId>
             <version>${project.version}</version>
         </dependency>
+      <dependency>
+        <groupId>org.apache.plc4x.malbec.s88</groupId>
+        <artifactId>plant</artifactId>
+        <version>${project.version}</version>
+      </dependency>
         <dependency>
             <groupId>org.apache.plc4x.malbec.s88</groupId>
             <artifactId>data</artifactId>
@@ -246,6 +261,11 @@
             <artifactId>batch</artifactId>
             <version>${project.version}</version>
         </dependency>
+      <dependency>
+        <groupId>org.apache.plc4x.malbec.s88</groupId>
+        <artifactId>recipes</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
 
     <build>
@@ -255,18 +275,19 @@
                 <artifactId>nbm-maven-plugin</artifactId>
                 <extensions>true</extensions>
                 <configuration>
-                    <etcConfFile>src/main/resources/malbec.conf</etcConfFile>                     
+                    <etcConfFile>src/main/resources/malbec.conf</etcConfFile>
+                    <verifyIntegrity>true</verifyIntegrity>
                     <moduleDependencies>
                         <dependency>
                             <id>org.apache.plc4x.malbec.core:libs</id>
                             <type>impl</type>
-                        </dependency>                                                                       
-                    </moduleDependencies>                    
+                        </dependency>
+                    </moduleDependencies>
                     <publicPackages>
                         <publicPackage>org.openide.util.lookup.Lookup</publicPackage>
                         <publicPackage>org.openide.util.lookup.AbstractLookup</publicPackage>
                     </publicPackages>
-                </configuration>                
+                </configuration>
             </plugin>
             <!-- Permits NbModuleSuite to be run in integration-test phase: -->
             <plugin>

@@ -95,7 +95,7 @@ public final class RecipeEditorTopComponent {
         chart.setModel(model);
         RecipeMultiViewDescription[] tabs = {steps, chart};
 
-        TopComponent window = MultiViewFactory.createMultiView(tabs, steps);
+        TopComponent window = MultiViewFactory.createMultiView(tabs, steps, new RecipeCloseHandler());
         String label = model.getRecipe().getId() != null
                 ? model.getRecipe().getId()
                 : model.getRecipeFile().getNameExt();

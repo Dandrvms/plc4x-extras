@@ -57,6 +57,21 @@ public final class RecipeSaveAction extends AbstractAction implements ContextAwa
         if (model == null) {
             return;
         }
+        save(model, null);
+    }
+
+    /**
+     * Writes a recipe out, and says so out loud when it cannot be written.
+     *
+     * <p>
+     * Shared with the window that asks about closing, because a recipe that could not be written on
+     * purpose and one that could not be written by accident are the same problem for the operator and
+     * have to be said about the same way.
+     *
+     * @param model  the recipe to write
+     * @param parent the window the complaint belongs to, {@code null} for none
+     */
+    public static void save(RecipeEditorModel model, java.awt.Component parent) {
         try {
             model.save();
         } catch (IOException e) {

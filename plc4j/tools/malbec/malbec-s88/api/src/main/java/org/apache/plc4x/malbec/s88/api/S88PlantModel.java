@@ -132,8 +132,37 @@ public class S88PlantModel {
         classes.put(name, ec);
     }
 
+    /**
+     * The classes an element can be, and nothing else.
+     * <p>
+     * <b>Enumerations are not equipment classes.</b> An enumeration is a set of values a variable
+     * can take, and it lives in the same place as the equipment classes because that is where the
+     * plant keeps everything it declares. It is never something an element can be, so it is left
+     * out here. Reading {@link #getClasses()} instead brings the two together, and anything that
+     * offers classes to choose from has to know about the {@code ENUM_} prefix to get this right.
+     *
+     * @return the equipment classes, keyed by name, never {@code null}
+     */
+    public Map<String, S88ElementClass> getEquipmentClasses() {
+        Map<String, S88ElementClass> equipment = new LinkedHashMap<>();
+        for (Map.Entry<String, S88ElementClass> entry : classes.entrySet()) {
+            if (!isEnumerationClass(entry.getValue())) {
+                equipment.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return equipment;
+    }
+
     public S88ElementClass findClass(String name) { return classes.get(name); }
 
+    /**
+     * Every class the plant declares, enumerations included.
+     * <p>
+     * They share one place, and that is why this is not what an element can be. Use
+     * {@link #getEquipmentClasses()} for that.
+     *
+     * @return the declared classes, keyed by name, never {@code null}
+     */
     public Map<String, S88ElementClass> getClasses(){
         return classes;
     }

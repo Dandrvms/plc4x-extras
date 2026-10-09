@@ -350,7 +350,55 @@ public abstract class S88Recipe {
         }
     }
 
-    private void unindex(S88RecipeElement element) {
+    /**
+ * Gives a step another name and puts the index back in step with it.
+ *
+ * <p>
+ * <b>Renaming through the index and not only on the step.</b> Steps are found by name through this
+ * index, so a step whose name changed while the index kept the old one is a step nothing can find,
+ * and a chart that points at it cannot be read. That is what makes this the only way to rename one.
+ *
+ * @param element step being renamed
+ * @param newId   name it is to have
+ * @throws IllegalArgumentException when the name is empty or another step already has it
+ */
+public void renameRecipeElement(S88RecipeElement element, String newId) {
+    if (element == null) {
+        return;
+    }
+    if (newId == null || newId.isBlank()) {
+        throw new IllegalArgumentException("A step needs a name, and this one would have none.");
+    }
+    String oldId = element.getId();
+    if (java.util.Objects.equals(oldId, newId)) {
+        return;
+    }
+    S88RecipeElement taken = elementById.get(newId);
+    if (taken != null && taken != element) {
+        throw new IllegalArgumentException("This recipe already has a step called '" + newId + "'.");
+    }
+    unindex(element);
+    element.setId(newId);
+    // A nested step is indexed once for the whole recipe, not once per step above it, so going
+    // back in through the tree would put it in the index as many times as it is deep.
+    indexFrom(element);
+}
+
+/**
+ * Puts a step and everything under it into the index of the recipe.
+ */
+private void indexFrom(S88RecipeElement element) {
+    if (element.getId() != null && !element.getId().isBlank()) {
+        if (elementById.putIfAbsent(element.getId(), element) != null) {
+            duplicateIds.add(element.getId());
+        }
+    }
+    for (S88RecipeElement child : element.getRecipeElements()) {
+        indexFrom(child);
+    }
+}
+
+private void unindex(S88RecipeElement element) {
         if (element.getId() != null && elementById.get(element.getId()) == element) {
             elementById.remove(element.getId());
         }

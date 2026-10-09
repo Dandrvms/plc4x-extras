@@ -21,6 +21,7 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 import java.awt.BorderLayout;
 import java.util.List;
 import javax.swing.JComponent;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -47,13 +48,37 @@ public final class RecipeChartView extends AbstractRecipeView {
         super(model);
         scene.setOnConnected(this::onConnected);
         view = scene.createView();
+        pickWithThePointer();
         zoomWithControlAndWheel(view, scene);
         new RecipeChartToolbar(this, scene).addTo(toolBar());
         add(new JScrollPane(view), BorderLayout.CENTER);
+
+        problems = new RecipeProblems();
+        JPanel below = new JPanel(new BorderLayout());
+        below.add(problems, BorderLayout.CENTER);
+        add(below, BorderLayout.SOUTH);
     }
 
     /** The component the library draws in. It is also what turns a pointer into a chart position. */
     private final JComponent view;
+
+    /** What is wrong with the recipe, which only takes up room when there is something to say. */
+    private final RecipeProblems problems;
+
+    /**
+     * Picks a box, a bar or a line when the operator clicks on it.
+     * <p>
+     * Without a click doing this, nothing on the chart says which thing the buttons are about, and
+     * they can only act on whatever the last button happened to pick.
+     */
+    private void pickWithThePointer() {
+        view.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent event) {
+                scene.pickAtInView(view, event.getPoint());
+            }
+        });
+    }
 
     /**
      * Zooms with the wheel while the control key is held, and leaves the wheel to the scroll
@@ -107,6 +132,40 @@ public final class RecipeChartView extends AbstractRecipeView {
     @Override
     protected void redraw() {
         scene.draw(model.getRecipe());
+        problems.show(model.conformance());
+    }
+
+    /**
+ * Remembers that the step just added has no equipment yet, so the chart marks it.
+ *
+ * <p>
+ * <b>An empty box says so on the chart.</b> A step with nothing behind it is where the flow goes
+ * and does nothing, and on a chart full of named equipment a box that cannot be told apart from a
+ * step that is done is a box an author cannot find again.
+ *
+ * @param elementId id of the step that was added
+ */
+    void markEmptyStep(String elementId) {
+        emptyStep = elementId;
+        scene.markEmpty(elementId);
+    }
+
+    /** Forgets which step was empty, once it has been given something to do. */
+    void forgetEmptyStep() {
+        emptyStep = null;
+        scene.markEmpty(null);
+    }
+
+    /** The step that was added and has nothing behind it yet, {@code null} when there is none. */
+    private String emptyStep;
+
+    /**
+     * The problems panel of this view, for a test that reads what it is saying.
+     *
+     * @return the panel
+     */
+    RecipeProblems problems() {
+        return problems;
     }
 
     /**

@@ -22,7 +22,7 @@ package org.apache.plc4x.malbec.s88.api;
  * What a bar reads, how it compares it, and what it compares it against.
  * <p>
  * A bar between two steps exists to answer one question: may the flow cross? To answer it something
- * has to be read off the equipment and compared against something.
+ * has to be read off a piece of equipment and compared against something.
  * <p>
  * The text lives in {@link S88ProcedureTransition#getCondition()}. The condition of a transition is a
  * string, which is enough to hold a comparison. This is the form that string is taken apart into, so
@@ -31,25 +31,33 @@ package org.apache.plc4x.malbec.s88.api;
  * <p>
  * <b>Only one comparison.</b> Two things that have to happen at once are two bars and a join, not two
  * comparisons joined by an "and" inside one bar.
+ * <p>
+ * <b>The equipment is written in front of the address, and only a recipe for particular equipment
+ * writes one.</b> A recipe written by class names base names, which some piece of equipment is
+ * resolved against later, and there is nothing to name yet. A recipe written for particular equipment
+ * reads a particular piece of equipment, so the text says which one: two of them can publish a
+ * variable of the same name, and reading the one off the other is a recipe that does the wrong thing.
  */
 public final class S88ConditionExpression {
 
-    /** What separates the address, the operator and the literal when the three are written together. */
+    /** What separates the equipment, the address, the operator and the literal. */
     public static final char SEPARATOR = '#';
 
+    private final String equipment;
     private final S88VariableAddress variable;
     private final S88ConditionOperator operator;
     private final String literal;
 
-    private S88ConditionExpression(S88VariableAddress variable, S88ConditionOperator operator,
-                                   String literal) {
+    private S88ConditionExpression(String equipment, S88VariableAddress variable,
+                                   S88ConditionOperator operator, String literal) {
+        this.equipment = equipment;
         this.variable = variable;
         this.operator = operator;
         this.literal = literal;
     }
 
     /**
-     * A comparison of one variable against a literal.
+     * A comparison of one variable against a literal, naming no equipment.
      *
      * @param variable what to read, may not be {@code null}
      * @param operator how to compare, may not be {@code null}
@@ -57,7 +65,22 @@ public final class S88ConditionExpression {
      * @return the comparison
      */
     public static S88ConditionExpression of(S88VariableAddress variable, S88ConditionOperator operator,
-                                           String literal) {
+                                            String literal) {
+        return on(null, variable, operator, literal);
+    }
+
+    /**
+     * A comparison of one variable of one piece of equipment against a literal.
+     *
+     * @param equipment the equipment the variable is read off, {@code null} or empty for a base name
+     *                  that will be resolved against equipment later
+     * @param variable  what to read, may not be {@code null}
+     * @param operator  how to compare, may not be {@code null}
+     * @param literal   what to compare it against, may not be {@code null}
+     * @return the comparison
+     */
+    public static S88ConditionExpression on(String equipment, S88VariableAddress variable,
+                                            S88ConditionOperator operator, String literal) {
         if (variable == null) {
             throw new IllegalArgumentException("A comparison has to say what it reads.");
         }
@@ -67,13 +90,14 @@ public final class S88ConditionExpression {
         if (literal == null) {
             throw new IllegalArgumentException("A comparison has to say what it compares against.");
         }
-        return new S88ConditionExpression(variable, operator, literal);
+        String named = equipment == null || equipment.isBlank() ? null : equipment.trim();
+        return new S88ConditionExpression(named, variable, operator, literal);
     }
 
     /**
      * Reads a comparison out of the text a recipe carries.
      * <p>
-     * Returns {@code null} for text that is not a comparison. It shows the reader what was there.
+     * The text is three parts, or four when it names the equipment it reads off.
      *
      * @param text the text, may be {@code null}
      * @return the comparison, or {@code null} when the text is not one
@@ -82,30 +106,58 @@ public final class S88ConditionExpression {
         if (text == null || text.isBlank()) {
             return null;
         }
-        int at = text.indexOf(SEPARATOR);
-        if (at < 0) {
+        String[] parts = split(text);
+        if (parts.length < 3 || parts.length > 4) {
             return null;
         }
-        S88VariableAddress variable = S88VariableAddress.parse(text.substring(0, at).trim());
+        String equipment = null;
+        String addressText = parts[0];
+        String operatorText = parts[parts.length - 2];
+        String literal = parts[parts.length - 1];
+        if (parts.length == 4) {
+            equipment = parts[0].trim();
+            addressText = parts[1];
+            if (equipment.isEmpty()) {
+                return null;
+            }
+        }
+
+        S88VariableAddress variable = S88VariableAddress.parse(addressText.trim());
         if (variable == null) {
             return null;
         }
-        String rest = text.substring(at + 1);
-        if (rest.isEmpty()) {
-            return null;
-        }
-
-        int second = rest.indexOf(SEPARATOR);
-        String operatorText = second < 0 ? rest : rest.substring(0, second);
         S88ConditionOperator operator = S88ConditionOperator.fromSymbol(operatorText);
-        if (operator == null) {
+        if (operator == null || literal.isEmpty()) {
             return null;
         }
-        String literal = second < 0 ? "" : rest.substring(second + 1);
-        if (literal.isEmpty()) {
-            return null;
+        return new S88ConditionExpression(equipment, variable, operator, literal);
+    }
+
+    /**
+     * The text taken apart at the separators, keeping anything after the fourth as it was.
+     * <p>
+     * A literal is written by a person and may hold a separator, so the parts after the one that
+     * says which piece of equipment are not divided any further.
+     */
+    private static String[] split(String text) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        StringBuilder rest = new StringBuilder(text);
+        int at = rest.indexOf(String.valueOf(SEPARATOR));
+        while (at >= 0 && parts.size() < 3) {
+            parts.add(rest.substring(0, at));
+            rest.delete(0, at + 1);
+            at = rest.indexOf(String.valueOf(SEPARATOR));
         }
-        return new S88ConditionExpression(variable, operator, literal);
+        parts.add(rest.toString());
+        return parts.toArray(new String[0]);
+    }
+
+    /**
+     * The equipment the variable is read off, {@code null} for a base name that will be resolved
+     * against equipment later.
+     */
+    public String getEquipment() {
+        return equipment;
     }
 
     /** What the comparison reads. Never {@code null}. */
@@ -125,7 +177,10 @@ public final class S88ConditionExpression {
 
     /** The comparison as the text a recipe carries. */
     public String toText() {
-        return variable.toText() + SEPARATOR + operator.getSymbol() + SEPARATOR + literal;
+        String read = equipment == null
+                ? variable.toText()
+                : equipment + SEPARATOR + variable.toText();
+        return read + SEPARATOR + operator.getSymbol() + SEPARATOR + literal;
     }
 
     /**
@@ -146,13 +201,15 @@ public final class S88ConditionExpression {
         if (!(other instanceof S88ConditionExpression that)) {
             return false;
         }
-        return variable.equals(that.variable) && operator == that.operator
+        return java.util.Objects.equals(equipment, that.equipment)
+                && variable.equals(that.variable)
+                && operator == that.operator
                 && literal.equals(that.literal);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(variable, operator, literal);
+        return java.util.Objects.hash(equipment, variable, operator, literal);
     }
 
     @Override

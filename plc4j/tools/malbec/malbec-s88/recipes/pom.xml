@@ -134,17 +134,17 @@
             <artifactId>org-netbeans-core-multiview</artifactId>
             <version>${netbeans.version}</version>
         </dependency>
-        <!-- The chart is drawn with the Visual Library rather than painted by hand, which is what
-             brings nodes, connections, anchors, pan, zoom and dragging without writing them. -->
+        <!-- The chart is built on the Visual Library: the scene, the layers, the connections, the
+             anchors and the router come from there rather than being written here. Each symbol is
+             still painted by hand with Java2D, because a step, a bar and the bar across a split are
+             not the same picture and none of them is an icon.
+
+             The classes come from here so the chart compiles. The modules themselves travel with the
+             application in the chart-modules cluster, because an application cannot install a module
+             that asks for a token no module of the application provides. -->
         <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-netbeans-api-visual</artifactId>
-            <version>${netbeans.version}</version>
-        </dependency>
-        <!-- Downloaded so that the palette API can be read before a palette is built. Not used yet. -->
-        <dependency>
-            <groupId>org.netbeans.api</groupId>
-            <artifactId>org-netbeans-spi-palette</artifactId>
             <version>${netbeans.version}</version>
         </dependency>
         <dependency>
@@ -152,6 +152,9 @@
             <artifactId>org-openide-actions</artifactId>
             <version>${netbeans.version}</version>
         </dependency>
+        <!-- The undo history a view hands to its window, which the platform draws its buttons from.
+             A NetBeans module has to declare the modules whose classes it uses, or they are not
+             there when the module is installed. -->
         <dependency>
             <groupId>org.netbeans.api</groupId>
             <artifactId>org-openide-awt</artifactId>

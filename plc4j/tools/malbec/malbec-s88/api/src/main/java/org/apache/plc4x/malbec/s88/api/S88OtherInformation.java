@@ -40,6 +40,16 @@ public class S88OtherInformation {
      */
     public static final String EQUIPMENT_CLASS_ID = "EquipmentClassID";
 
+/**
+ * The identity of the piece of equipment this element works on.
+ *
+ * <p>
+ * Not a name. A piece of equipment that is renamed in the plant is still the same equipment, and a recipe that
+ * named it by its name would stop meaning that equipment the day somebody renamed it. This is the uid
+ * that {@link S88Element#getUid()} hands out, which does not change.
+ */
+public static final String EQUIPMENT_UID = "EquipmentUID";
+
     /**
      * Whether the recipe addresses its equipment by class or by instance, held as the value of an
      * entry with this id.

@@ -312,6 +312,36 @@ public class S88RecipeElement {
     }
 
     /**
+ * The identity of the equipment this element works on.
+ *
+ * <p>
+ * <b>This is what an {@link S88RecipeKind#INSTANCE} recipe names the equipment with, and a class
+ * recipe does not have one.</b> A class recipe names a class and leaves the choice of equipment to the
+ * batch, so there is no single equipment to point at. This is the uid of the element of the plant and
+ * not its name, so that renaming the equipment in the plant does not change what the recipe means.
+ *
+ * @return the uid, or {@code null} when this element does not name a piece of equipment
+ */
+    public String getEquipmentUid() {
+        S88OtherInformation info = S88OtherInformation.find(otherInformation,
+                S88OtherInformation.EQUIPMENT_UID);
+        return info != null ? info.getFirstValue() : null;
+    }
+
+    /**
+     * Records the equipment this element works on, replacing any already held.
+     *
+     * @param uid the {@code S88Element.getUid()} of the equipment, {@code null} to remove it
+     */
+    public void setEquipmentUid(String uid) {
+        otherInformation.removeIf(info -> S88OtherInformation.EQUIPMENT_UID
+                .equalsIgnoreCase(info.getId()));
+        if (uid != null && !uid.isBlank()) {
+            addOtherInformation(S88OtherInformation.of(S88OtherInformation.EQUIPMENT_UID, uid));
+        }
+    }
+
+    /**
      * The first element directly under this one with the given id, at any depth.
      *
      * @param wanted id to look for

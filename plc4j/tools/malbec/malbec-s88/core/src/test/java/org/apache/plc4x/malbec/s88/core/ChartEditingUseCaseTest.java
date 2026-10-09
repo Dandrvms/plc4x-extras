@@ -431,7 +431,52 @@ class ChartEditingUseCaseTest {
                         + " nobody can read is a recipe nobody can run");
     }
 
-        /**
+        /** A box on the chart working on a step of the recipe of the same name. */
+    private static void addOperation(S88MasterRecipe recipe, String id) {
+        CreateRecipeElementUseCase.forEquipmentClass(
+                recipe, null, id, S88RecipeElementKind.OPERATION, "MACHINE");
+        EditProcedureLogicUseCase.addStep(recipe, null, "BOX_" + id, id);
+    }
+
+    /**
+     * The step goes between the bar it waits at and the bar the flow used to reach.
+     *
+     * <p>
+     * Written as a whole because the shape is the thing: a box, a bar, a box, and the bar that was
+     * already there. A chain that leaves the new bar with nothing after it is a chart where the flow
+     * stops there, and the step the operator just added is somewhere the flow never goes.
+     */
+    @Test
+    void aStepPutAfterABoxGoesBetweenTheBarItWaitsAtAndTheOneItUsedToReach() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+
+        EditProcedureLogicUseCase.insertStepAfter(
+                recipe, null, "BEGIN", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS");
+
+        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BEGIN", "and it waits at a new bar", "T_QUENCH");
+        assertLeadsOnlyTo(recipe.getProcedureLogic(), "T_QUENCH",
+                "and the new bar is crossed into the new step", "BOX_QUENCH");
+        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BOX_QUENCH",
+                "and the new step leads on to the bar that was already there", "T1");
+        assertLeadsOnlyTo(recipe.getProcedureLogic(), "T1", "and the flow goes on as before", "END");
+    }
+
+    /** A step that works on nothing has nothing to do after the stop of the process. */
+    @Test
+    void aStepCannotBePutAfterTheEndOfTheProcess() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> EditProcedureLogicUseCase.insertStepAfter(
+                        recipe, null, "END", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS"));
+
+        assertTrue(failure.getMessage().contains("stops"),
+                "and it says why, because a step after the stop is a process with a second end");
+        assertEquals(2, recipe.getRecipeElements().size(),
+                "and nothing was added, because the refusal comes before anything is touched");
+    }
+
+    /**
      * Asserts that the flow leaving a box or bar goes where the test says, and nowhere else.
      *
      * <p>
@@ -444,6 +489,9 @@ class ChartEditingUseCaseTest {
                 because + ": " + from + " leads nowhere else");
     }
 
+    /**
+     * The lines leaving a box or a bar, in the order the chart holds them.
+     */
     private static List<S88ProcedureLink> linksLeaving(S88ProcedureLogic chart, String name) {
         List<S88ProcedureLink> leaving = new java.util.ArrayList<>();
         for (S88ProcedureLink link : chart.getLinks()) {
@@ -452,13 +500,6 @@ class ChartEditingUseCaseTest {
             }
         }
         return leaving;
-    }
-
-    /** A box on the chart working on a step of the recipe of the same name. */
-    private static void addOperation(S88MasterRecipe recipe, String id) {
-        CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, null, id, S88RecipeElementKind.OPERATION, "MACHINE");
-        EditProcedureLogicUseCase.addStep(recipe, null, "BOX_" + id, id);
     }
 
     /**

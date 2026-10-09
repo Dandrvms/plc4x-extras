@@ -22,6 +22,7 @@ import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
@@ -76,11 +77,32 @@ public final class RecipeConformance {
 
     /**
      * Measures a recipe against itself.
+ *
+ * @param recipe recipe to measure, may be {@code null}
+ * @return the report, empty when the recipe holds together
+ */
+    public static RecipeConformance of(S88Recipe recipe) {
+        return of(recipe, null);
+    }
+
+    /**
+     * Measures a recipe against itself and against the plant it was written against.
+     *
+     * <p>
+     * <b>A recipe is measured against a plant, not against the plant.</b> The plant changes while a
+     * recipe is written, and a step that follows the plant file is a step that has stopped meaning
+     * what its author meant. So everything a recipe says about equipment is checked against the
+     * copy that was frozen when the recipe set was made, which is the plant this recipe belongs to.
+     *
+     * <p>
+     * Without a plant only what a recipe can be wrong about on its own is reported, which is what
+     * {@link #of(S88Recipe)} says.
      *
      * @param recipe recipe to measure, may be {@code null}
+     * @param plant  the plant the recipe was written against, {@code null} when there is none
      * @return the report, empty when the recipe holds together
      */
-    public static RecipeConformance of(S88Recipe recipe) {
+    public static RecipeConformance of(S88Recipe recipe, S88PlantSnapshot plant) {
         List<String> excess = new ArrayList<>();
         List<String> deficit = new ArrayList<>();
         if (recipe == null) {
@@ -91,8 +113,46 @@ public final class RecipeConformance {
         checkIdentity(recipe, excess, deficit);
         checkSteps(recipe, excess, deficit);
         checkChart(recipe, excess, deficit);
+        checkEnds(recipe, recipe.getProcedureLogic(), excess);
+        if (plant != null) {
+            checkAgainstPlant(recipe, plant, excess, deficit);
+        }
 
         return new RecipeConformance(excess, deficit);
+    }
+
+    /**
+     * Whether every step that says what it works on is naming something the plant has.
+     *
+     * <p>
+     * The two kinds of recipe are asked different things, because they name different things. A class
+* recipe is asked whether the class is still there, and a recipe for particular equipment is asked
+ * whether the equipment is still there under the identity it was written against. A class recipe is
+ * not asked whether equipment of that class is there, because it is the batch that picks one.
+     */
+    private static void checkAgainstPlant(S88Recipe recipe, S88PlantSnapshot plant,
+                                          List<String> excess, List<String> deficit) {
+        boolean byClass = !(recipe instanceof S88MasterRecipe master) || master.addressesByClass();
+        for (S88RecipeElement element : recipe.getAllElements()) {
+            if (element.getKind() == S88RecipeElementKind.BEGIN
+                    || element.getKind() == S88RecipeElementKind.END) {
+                continue;
+            }
+            String label = "Step '" + element.getId() + "'";
+            if (byClass) {
+                String classId = element.getEquipmentClassId();
+                if (classId != null && plant.findClass(classId) == null) {
+                    excess.add(label + " names the class of equipment '" + classId + "', which the"
+                            + " plant this recipe was written against does not have.");
+                }
+            } else {
+                String uid = element.getEquipmentUid();
+                if (uid != null && plant.findByUid(uid).isEmpty()) {
+                    excess.add(label + " works on equipment this recipe's plant does not have"
+                            + " any more, so what it was written against is gone.");
+                }
+            }
+        }
     }
 
     private static void checkIdentity(S88Recipe recipe, List<String> excess, List<String> deficit) {
@@ -192,6 +252,7 @@ private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, 
         }
         checkBranches(logic, excess);
         checkReachability(recipe, logic, excess, deficit);
+        checkEnds(recipe, logic, excess);
     }
 
     /**
@@ -300,6 +361,64 @@ private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, 
             }
         }
         return null;
+    }
+
+    /**
+     * Every step of the chart whose element is of the given kind.
+     */
+    private static List<S88ProcedureStep> allOfKind(S88Recipe recipe, S88ProcedureLogic logic,
+                                                     S88RecipeElementKind kind) {
+        List<S88ProcedureStep> found = new ArrayList<>();
+        for (S88ProcedureStep step : logic.getSteps()) {
+            if (recipe.findElement(step.getRecipeElementId())
+                    .map(element -> element.getKind() == kind)
+                    .orElse(Boolean.FALSE)) {
+                found.add(step);
+            }
+        }
+        return found;
+    }
+
+     /**
+     * A process has one place it starts and one place it stops.
+     *
+     * <p>
+     * A recipe with two starts or two stops has no single answer to where the flow begins or ends, and
+     * a runtime that walks the chart has to pick one of them. Which one it picks is not something the
+     * recipe says, so the recipe is what has to be told.
+     * <p>
+     * Nothing is said here about lines leading into the start or out of the stop. A chart that goes
+     * back to its start is a retry, and a retry is a thing ISA-88 asks for, so a line that does it is
+     * not a mistake and calling it one would make this rule wrong on the recipes it was written to
+     * help.
+     */
+    private static void checkEnds(S88Recipe recipe, S88ProcedureLogic logic, List<String> excess) {
+        if (logic == null) {
+            // A recipe with no chart has nothing to have two ends of, and a chart with no start or
+            // stop is already said by checkReachability.
+            return;
+        }
+        for (S88ProcedureElementKindPair ends : S88ProcedureElementKindPair.BOTH) {
+            List<S88ProcedureStep> found = allOfKind(recipe, logic, ends.kind());
+            if (found.size() > 1) {
+                excess.add("The chart has " + found.size() + " steps whose element is of kind "
+                        + ends.word() + ", so it has more than one place the flow "
+                        + (ends.kind() == S88RecipeElementKind.BEGIN ? "starts" : "stops") + ".");
+            }
+        }
+    }
+
+    /**
+     * The two kinds of step that bound a process, which the ends rule is written once for.
+     *
+     * @param kind what kind of step
+     * @param word how it is called in a sentence about it
+     */
+    private record S88ProcedureElementKindPair(S88RecipeElementKind kind, String word) {
+
+        private static final List<S88ProcedureElementKindPair> BOTH = List.of(
+                new S88ProcedureElementKindPair(S88RecipeElementKind.BEGIN, "Begin"),
+                new S88ProcedureElementKindPair(S88RecipeElementKind.END, "End"));
     }
 
     @Override
