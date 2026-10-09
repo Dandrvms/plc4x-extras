@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -39,7 +40,7 @@ final class RecipeShapes {
     private static final Color EDGE = new Color(0x33, 0x33, 0x33);
     private static final Color LABEL = new Color(0x55, 0x55, 0x55);
     private static final Color START_EDGE = new Color(0x1B, 0x5E, 0x20);
-    private static final Color END_EDGE = new Color(0x8B, 0x1A, 0x1A);
+    private static final Color END_EDGE = new Color(51, 51, 51);
     private static final double STROKE = 1.4;
 
     /**
@@ -51,7 +52,17 @@ final class RecipeShapes {
     static final float LINE_WIDTH = 1.5f;
 
     /** What every label on the chart is written at. */
-    private static final float LABEL_SIZE = 11f;
+    /**
+ * How big the text on a chart is.
+ * <p>
+ * Rounded to a whole point because a font cannot be written at a fraction of a point and one that is
+ * asked for one gets rounded somewhere else, which is how a measured width stops matching a written
+ * one.
+ */
+private static final int LABEL_SIZE = 10;
+
+    /** The one font every box is measured with and written with. */
+    private static final Font CHART_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, LABEL_SIZE);
 
     private RecipeShapes() {
     }
@@ -68,6 +79,9 @@ final class RecipeShapes {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        // Set rather than assumed, so that anything drawn on top of this text is measured and written
+        // with the same font as the text itself.
+        g.setFont(chartFont());
         switch (kind) {
             case START:
                 paintStart(bounds, g, label);
@@ -85,15 +99,51 @@ final class RecipeShapes {
 
     /**
      * How wide a text would be written.
-     *
-     * @param label the text
-     * @return its width, 0 when there is no text
-     */
+ *
+ * <p>
+ * A label of more than one line is as wide as its widest line, because a box has to hold the widest
+ * of them.
+ *
+ * @param label the text
+ * @return its width, 0 when there is no text
+ */
     static int textWidth(Graphics2D g, String label) {
-        if (label == null || label.isEmpty()) {
+        int widest = 0;
+        for (String line : linesOf(label)) {
+            widest = Math.max(widest, g.getFontMetrics(chartFont()).stringWidth(line));
+        }
+        return widest;
+    }
+
+    /**
+ * How tall a text would be written.
+ *
+ * <p>
+ * A label of more than one line is as tall as all of them, because a box has to hold them all. The
+ * gap between lines is what stops them sitting on one another.
+ *
+ * @param label the text
+ * @return its height, 0 when there is no text
+ */
+    static int textHeight(Graphics2D g, String label) {
+        java.util.List<String> lines = linesOf(label);
+        if (lines.isEmpty()) {
             return 0;
         }
-        return g.getFontMetrics(chartFont(g)).stringWidth(label);
+        return lines.size() * g.getFontMetrics(chartFont()).getHeight();
+    }
+
+    /**
+     * The lines a label is written as.
+     *
+     * @param label the text, may be {@code null}
+     * @return its lines, empty when there is no text
+     */
+    static java.util.List<String> linesOf(String label) {
+        if (label == null || label.isEmpty()) {
+            return java.util.List.of();
+        }
+        return java.util.List.of(label.split("\\R"));
     }
 
     /**
@@ -121,7 +171,13 @@ final class RecipeShapes {
         g.setColor(EDGE);
         g.setStroke(new BasicStroke((float) STROKE));
         g.draw(bounds);
-        writeIn(bounds, g, label, EDGE, Horizontal.CENTRE, Vertical.MIDDLE);
+        // Written inside a small margin, because text that reaches the border reads as cut off even when
+        // it is not. The margin is kept small so that a fixed-height box has room for a value as
+        // well as for the name, and the box is made wide enough for the text plus this margin.
+        Rectangle2D inside = new Rectangle2D.Double(bounds.getX() + SfcMetrics.BOX_PADDING,
+                bounds.getY(), Math.max(0, bounds.getWidth() - 2.0 * SfcMetrics.BOX_PADDING),
+                bounds.getHeight());
+        writeIn(inside, g, label, EDGE, Horizontal.CENTRE, Vertical.MIDDLE);
     }
 
     /**
@@ -233,23 +289,40 @@ final class RecipeShapes {
      * A name longer than its box is cut short with an ellipsis rather than drawn over the edge, where
      * it would run into whatever is next to it and be unreadable either way. The whole name is
      * always on the tooltip.
+     * <p>
+     * A label of more than one line is written as a block centred on the shape, so that a step can
+     * say what it is called and what it works on without the box growing for it.
      */
     private static void writeIn(Rectangle2D bounds, Graphics2D g, String label, Color colour,
                                 Horizontal horizontal, Vertical vertical) {
-        if (label == null || label.isEmpty()) {
+        java.util.List<String> lines = linesOf(label);
+        if (lines.isEmpty()) {
             return;
         }
-        FontMetrics metrics = g.getFontMetrics(chartFont(g));
-        String fitting = shorten(label, (int) bounds.getWidth(), metrics);
-        int width = metrics.stringWidth(fitting);
-        double x = horizontal == Horizontal.CENTRE
-                ? bounds.getCenterX() - width / 2.0
-                : bounds.getX();
-        double y = vertical == Vertical.MIDDLE
-                ? bounds.getCenterY() + (metrics.getAscent() - metrics.getDescent()) / 2.0
-                : bounds.getMaxY() + metrics.getAscent();
+        FontMetrics metrics = g.getFontMetrics(chartFont());
         g.setColor(colour);
-        g.drawString(fitting, (float) x, (float) y);
+        if (lines.size() == 1) {
+            String fitting = shorten(lines.get(0), (int) bounds.getWidth(), metrics);
+            int width = metrics.stringWidth(fitting);
+            double x = horizontal == Horizontal.CENTRE
+                    ? bounds.getCenterX() - width / 2.0
+                    : bounds.getX();
+            double y = vertical == Vertical.MIDDLE
+                    ? bounds.getCenterY() + (metrics.getAscent() - metrics.getDescent()) / 2.0
+                    : bounds.getMaxY() + metrics.getAscent();
+            g.drawString(fitting, (float) x, (float) y);
+            return;
+        }
+        int line = metrics.getHeight();
+        double first = bounds.getCenterY() - (lines.size() - 1) * line / 2.0
+                + (metrics.getAscent() - metrics.getDescent()) / 2.0;
+        for (int i = 0; i < lines.size(); i++) {
+            String fitting = shorten(lines.get(i), (int) bounds.getWidth(), metrics);
+            double x = horizontal == Horizontal.CENTRE
+                    ? bounds.getCenterX() - metrics.stringWidth(fitting) / 2.0
+                    : bounds.getX();
+            g.drawString(fitting, (float) x, (float) (first + i * line));
+        }
     }
 
     /**
@@ -257,7 +330,7 @@ final class RecipeShapes {
      */
     private static void writeAt(Graphics2D g, String label, double x, double middle,
                                 Horizontal horizontal, Vertical vertical) {
-        FontMetrics metrics = g.getFontMetrics(chartFont(g));
+        FontMetrics metrics = g.getFontMetrics(chartFont());
         g.setColor(LABEL);
         double y = vertical == Vertical.MIDDLE
                 ? middle + (metrics.getAscent() - metrics.getDescent()) / 2.0
@@ -289,8 +362,22 @@ final class RecipeShapes {
         return label.substring(0, cut) + ellipsis;
     }
 
-    private static java.awt.Font chartFont(Graphics2D g) {
-        return g.getFont().deriveFont(LABEL_SIZE);
+    /**
+     * The one font every text on the chart is written and measured with.
+     *
+     * <p>
+     * A font of its own rather than the one the platform hands over, because a box has to be made wide
+     * enough for its own text before anything is painted, and text measured with one font and written
+     * with another is a box that is the wrong width for what it ends up saying.
+     *
+     * <p>
+     * Made once and handed out, because it is asked for every box and every bar on every repaint and
+     * a font is one of the more expensive things a drawing can build in a loop.
+     *
+     * @return the font, always the same one
+     */
+    static java.awt.Font chartFont() {
+        return CHART_FONT;
     }
 
     /** The things that can appear on a recipe chart. */

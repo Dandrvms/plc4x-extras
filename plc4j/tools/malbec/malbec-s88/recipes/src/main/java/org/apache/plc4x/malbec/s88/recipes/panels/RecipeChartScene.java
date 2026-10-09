@@ -28,12 +28,17 @@ import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import javax.swing.JComponent;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
+import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
@@ -57,6 +62,14 @@ import org.netbeans.api.visual.widget.Widget;
  * be drawn and leaving the conformance rules to report it afterwards.
  */
 final class RecipeChartScene extends GraphScene<String, String> {
+
+    /**
+ * Most lines a box writes, which is what its fixed height holds at the chart font size.
+     * <p>
+     * A box does not grow for a step with a lot to say: a chart of boxes at different heights is a
+     * chart whose branches no longer line up. What does not fit is not lost, it is under the pointer.
+     */
+    private static final int MAX_LABEL_LINES = 3;
 
     /** Connections below the boxes, so that a box is never hidden behind a line. */
     private final LayerWidget connectionLayer = new LayerWidget(this);
@@ -87,6 +100,20 @@ final class RecipeChartScene extends GraphScene<String, String> {
     };
 
     /**
+     * The lines the recipe holds, which is what tells a line apart from a box or a bar.
+     * <p>
+     * The library knows a connection and a node apart on its own, but the buttons do not get to ask
+     * it: they are given a name and have to say what it names.
+     */
+    private final Map<String, List<String>> pieces = new LinkedHashMap<>();
+
+    /** Where each drawn piece goes, which is what a click has to be measured against. */
+    private final Map<String, List<Point>> paths = new LinkedHashMap<>();
+
+    /** Which line of the recipe each drawn piece belongs to. */
+    private final Map<String, String> pieceOf = new LinkedHashMap<>();
+
+    /**
      * Builds the scene.
      * <p>
      * <b>The boxes go in first.</b> The library lays out the children of a scene in the order they
@@ -115,6 +142,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
         applyLayout(at);
         addSyncBars(at.syncBars());
         addLines(at.links());
+        applyPendingSelection();
     }
 
     /**
@@ -160,6 +188,11 @@ final class RecipeChartScene extends GraphScene<String, String> {
     /**
      * Every box and bar of a recipe, each with the shape it is drawn as and the name it says.
      *
+     * <p>
+     * A step says what it works on under its own name, because the name of a box on the chart is the
+     * name of the element in the recipe and says nothing about the plant. An engineer reading the chart
+     * has to see which heater a step turns on without opening the recipe.
+     *
      * @param recipe the recipe to read
      * @return one entry per box and per bar, keyed by the name the chart knows them by
      */
@@ -175,14 +208,128 @@ final class RecipeChartScene extends GraphScene<String, String> {
                     element == null ? RecipeShapes.Shape.BOX : RecipeShapes.shapeOf(element.getKind());
             // The start and the stop say what they are with their shape. A name under them would only
             // repeat it, and the room it takes would move the symbol off the line the flow leaves by.
+            boolean saysSomething = shape == RecipeShapes.Shape.BOX
+                    && element != null
+                    && namesEquipment(element);
             what.put(step.getId(), new NodeSpec(shape,
-                    shape == RecipeShapes.Shape.BOX ? step.getId() : null));
+                    saysSomething ? stepLabel(step, element) : null,
+                    saysSomething ? stepTooltip(step, element) : null));
         }
         for (S88ProcedureTransition transition : chart.getTransitions()) {
             what.put(transition.getId(), new NodeSpec(
-                    RecipeShapes.Shape.TRANSITION, conditionText(transition)));
+                    RecipeShapes.Shape.TRANSITION, conditionText(transition), transition.getId()));
         }
         return what;
+    }
+
+/**
+ * What a step says on itself: its name, the equipment it works on, and the values it works with.
+ *
+ * @param step    the box on the chart
+ * @param element the step of the recipe it works on, may be {@code null}
+ * @return the lines to write
+ */
+/**
+ * What a step says on itself.
+ * <p>
+ * <b>A step with no equipment says nothing.</b> Its name at that point is one this editor made up
+ * so that the chart could hold it, and putting it on the box would be showing the author a name
+ * that means nothing to them. A blank box with the standard width is a step waiting for its
+ * equipment, and the dashed border says which waiting one it is.
+ * <p>
+ * <b>A step bound to a class is not named twice.</b> Binding names the step after the class, so
+ * saying the class under its own name writes the same word twice, which reads as two different
+ * things and is one.
+ * <p>
+ * <b>The values the step works with go under the name.</b> A step that says it turns a heater on and
+ * nothing else leaves the engineer opening the step to find out how hot, and the chart is what they
+ * read instead.
+ *
+ * @param step    the box on the chart
+ * @param element the step of the recipe it works on, may be {@code null}
+ * @return the lines to write, or {@code null} when it says nothing
+ */
+    private static String stepLabel(S88ProcedureStep step, S88RecipeElement element) {
+        if (element == null || !namesEquipment(element)) {
+            return null;
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(step.getId());
+        String equipment = element.getEquipmentClassId();
+        if (equipment != null && !equipment.isBlank() && !equipment.trim().equals(step.getId())) {
+            lines.add(equipment.trim());
+        }
+        lines.addAll(parameterLines(element, MAX_LABEL_LINES - lines.size()));
+        return String.join("\n", lines);
+    }
+
+    /**
+     * What the step is being given, as the author would say it, with the unit it is measured in.
+     *
+     * <p>An enumeration has no unit, so what it would be shown with is the value on its own. A value
+     * the step has not been given is left out rather than shown empty, because a line saying nothing
+     * is a line the author has to read past.
+     *
+     * <p>What the batch writes while the recipe runs is left out too: the order a module is given is
+     * not the recipe's to state, and a box saying {@code NONE} is a box the author reads as nothing
+     * happening.
+     *
+     * @param element  the step of the recipe
+     * @param room     how many lines are still free on the box
+     * @return the lines, no more than the room there is
+     */
+    private static List<String> parameterLines(S88RecipeElement element, int room) {
+        List<String> lines = new ArrayList<>();
+        for (S88RecipeParameter parameter : element.getParameters()) {
+            if (lines.size() >= room) {
+                break;
+            }
+            S88ParameterValue value = parameter.getFirstValue();
+            if (value == null || value.getFirstValueString() == null
+                    || value.getFirstValueString().isBlank()
+                    || PlatformVariable.isWrittenByTheBatch(parameter.getId())) {
+                continue;
+            }
+            String unit = value.getUnitOfMeasure();
+            lines.add(value.getFirstValueString() + (unit == null || unit.isBlank()
+                    ? "" : " " + unit));
+        }
+        return lines;
+    }
+
+    /**
+     * What a box says about itself in full, for the pointer to show over it.
+     *
+     * <p>A box is written to fit and cut off, so what does not fit is here rather than nowhere.
+     */
+    private static String stepTooltip(S88ProcedureStep step, S88RecipeElement element) {
+        List<String> lines = new ArrayList<>();
+        lines.add(step.getId());
+        String equipment = element.getEquipmentClassId();
+        if (equipment != null && !equipment.isBlank() && !equipment.trim().equals(step.getId())) {
+            lines.add(equipment.trim());
+        }
+        for (S88RecipeParameter parameter : element.getParameters()) {
+            S88ParameterValue value = parameter.getFirstValue();
+            if (value == null || value.getFirstValueString() == null
+                    || value.getFirstValueString().isBlank()
+                    || PlatformVariable.isWrittenByTheBatch(parameter.getId())) {
+                continue;
+            }
+            String unit = value.getUnitOfMeasure();
+            lines.add(parameter.getId() + " = " + value.getFirstValueString()
+                    + (unit == null || unit.isBlank() ? "" : " " + unit));
+        }
+        return String.join("\n", lines);
+    }
+
+    /**
+     * Whether a step says what it works on, which is what makes it a step rather than a place the flow
+     * goes through.
+     */
+    private static boolean namesEquipment(S88RecipeElement element) {
+        return element.getEquipmentClassId() != null
+                || !element.getActualEquipmentIds().isEmpty();
     }
 
     private static String conditionText(S88ProcedureTransition transition) {
@@ -296,7 +443,11 @@ final class RecipeChartScene extends GraphScene<String, String> {
                 removeEdge(id);
             }
         }
+        pieces.clear();
+        paths.clear();
+        pieceOf.clear();
         wanted.forEach(this::route);
+        forgetSelectionIfItIsGone();
         validate();
     }
 
@@ -309,6 +460,9 @@ final class RecipeChartScene extends GraphScene<String, String> {
             return;
         }
         List<Point> path = link.path();
+        paths.put(id, new ArrayList<>(path));
+        pieceOf.put(id, link.lineId());
+        pieces.computeIfAbsent(link.lineId(), line -> new ArrayList<>()).add(id);
         connection.setSourceAnchor(new SfcAnchor(this, path.get(0), Anchor.Direction.BOTTOM));
         connection.setTargetAnchor(new SfcAnchor(this, path.get(path.size() - 1),
                 Anchor.Direction.TOP));
@@ -317,6 +471,34 @@ final class RecipeChartScene extends GraphScene<String, String> {
         // with an arrow where it arrives.
         connection.setTargetAnchorShape(
                 link.backwards() ? AnchorShape.TRIANGLE_FILLED : AnchorShape.NONE);
+        strokeOf(id);
+    }
+
+    /**
+     * Draws one drawn piece of a line thicker or not.
+     *
+     * <p>
+     * A line has no shape of its own, so being picked has to show in the stroke. Otherwise a line the
+     * operator has picked looks exactly like one they have not, and the buttons would act on
+     * something nobody can see they chose. Only the width changes, so a line nobody has picked is
+     * drawn exactly as it was before anything could be picked.
+     */
+    private void strokeOf(String piece) {
+        String line = pieceOf.get(piece);
+        boolean picked = line != null && isSelected(line);
+        if (findWidget(piece) instanceof ConnectionWidget connection) {
+            float width = picked ? RecipeShapes.LINE_WIDTH * 2f : RecipeShapes.LINE_WIDTH;
+            connection.setStroke(new BasicStroke(width, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
+        }
+    }
+
+    /**
+     * Draws a line as picked or not picked, in every piece it is drawn as.
+     */
+    private void restyle(String line) {
+        if (line != null) {
+            pieces.getOrDefault(line, List.of()).forEach(this::strokeOf);
+        }
     }
 
     /** What the layout could not arrange, which the drawing has to say rather than hide. */
@@ -408,27 +590,94 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * being picked has to lose its frame, and repainting only the new one leaves the old frame on
      * the screen with nothing there.
      *
+     * <p>
+     * <b>A pick of something not on the chart yet is kept until it is.</b> A button that just added
+     * a box asks for it to be picked, and the chart is drawn again a moment later, so at the moment
+     * of asking there is no such box. Dropping the ask would leave the operator with nothing picked
+     * and no way to tell what the button they just pressed did.
+     *
      * @param node name of the node now picked, {@code null} for nothing picked
      */
     void select(String node) {
-        String wanted = node == null || nodes.containsKey(node) ? node : null;
+        pickNow(node == null || nodes.containsKey(node) || pieces.containsKey(node) ? node : null);
+    }
+
+    /**
+     * Picks a node the chart has not been drawn with yet.
+     *
+     * <p>
+     * <b>Kept until the drawing that brings it.</b> A button that has just added a box asks for it to
+     * be picked, and the chart is drawn again a moment later, so at the moment of asking there is no
+     * such box. Dropping the ask leaves the operator with nothing picked and no way to tell what the
+     * button they just pressed did.
+     *
+     * <p>
+     * Written as its own thing rather than as {@link #select(String)} with a name that might not be
+     * there yet, because those are two different mistakes: a name nobody has on the chart is a
+     * mistake to be forgotten, and one that is not drawn yet is a pick in flight.
+     *
+     * @param node name of the node to be picked when it appears
+     */
+    void selectWhenDrawn(String node) {
+        if (node == null) {
+            pendingSelection = null;
+            select(null);
+        } else if (nodes.containsKey(node) || pieces.containsKey(node)) {
+            pendingSelection = null;
+            select(node);
+        } else {
+            pendingSelection = node;
+        }
+    }
+
+    /**
+     * Puts the frame on one node and takes it off another.
+     *
+     * @param wanted name of the node now picked, {@code null} for nothing picked
+     */
+    private void pickNow(String wanted) {
         if (java.util.Objects.equals(wanted, this.selected)) {
             return;
         }
-        Widget was = findWidget(this.selected);
+        String wasId = this.selected;
         this.selected = wanted;
+        // A box shows being picked with a frame, and a line with a heavier stroke, so both of the
+        // ones that changed have to be drawn again.
+        Widget was = findWidget(wasId);
         if (was != null) {
             was.repaint();
         }
+        restyle(wasId);
         Widget now = findWidget(wanted);
         if (now != null) {
             now.repaint();
         }
+        restyle(wanted);
     }
 
-    /** Forgets a node that is no longer on the chart, rather than acting on something that is gone. */
+    /** A pick that was asked for before the chart was drawn again. */
+    private String pendingSelection;
+
+    /**
+     * Picks whatever was asked for before this drawing, when it is on the chart now.
+     * <p>
+     * Dropped when it is not, because a pick that never arrives belongs to a change that was taken
+     * back, and applying it later would put a frame on something nobody chose.
+     */
+    private void applyPendingSelection() {
+        String asked = pendingSelection;
+        if (asked == null) {
+            return;
+        }
+        pendingSelection = null;
+        if (nodes.containsKey(asked) || pieces.containsKey(asked)) {
+            pickNow(asked);
+        }
+    }
+
+    /** Forgets a pick that is no longer on the chart, rather than acting on something that is gone. */
     private void forgetSelectionIfItIsGone() {
-        if (selected != null && !nodes.containsKey(selected)) {
+        if (selected != null && !nodes.containsKey(selected) && !pieces.containsKey(selected)) {
             select(null);
         }
     }
@@ -456,9 +705,156 @@ final class RecipeChartScene extends GraphScene<String, String> {
         return selected;
     }
 
-    /** Whether a node is the picked one, which is how the drawing knows to mark it. */
+    /**
+ * Marks one box as having nothing behind it, so the drawing says so.
+ *
+ * <p>
+ * A box that has not been given equipment is drawn with a dashed border and no name. That is the
+ * difference between a step that does something and a step that is only a place the flow goes
+ * through, and on a chart of named equipment it is the difference the eye needs most.
+ *
+ * @param node name of the box to mark, {@code null} for none
+ */
+    void markEmpty(String node) {
+        String wanted = node != null && nodes.containsKey(node) ? node : null;
+        String was = empty;
+        this.empty = wanted;
+        Widget before = findWidget(was);
+        Widget after = findWidget(wanted);
+        if (before != null) {
+            before.repaint();
+        }
+        if (after != null) {
+            after.repaint();
+        }
+    }
+
+    /** Whether a box is one that has no equipment behind it yet. */
+    boolean isEmpty(String node) {
+        return empty != null && empty.equals(node);
+    }
+
+    /** The box that has no equipment behind it yet, {@code null} when there is none. */
+    private String empty;
+
+    /** Whether a box or a bar is the picked one, which is how the drawing knows to mark it. */
     boolean isSelected(String node) {
         return selected != null && selected.equals(node);
+    }
+
+    /** Whether a name is a line of the recipe rather than a box or a bar. */
+    boolean isLine(String node) {
+        return node != null && pieces.containsKey(node);
+    }
+
+    /**
+     * Where a line of the recipe is drawn.
+     *
+     * <p>
+     * A line with two ends on each side is drawn as one piece per pair of ends, so this is the first
+     * of those pieces. Read back from the points the layout gave rather than worked out again, because
+     * a line measured somewhere other than where it is drawn would pass while the drawing was wrong.
+     *
+     * @param line name of the line
+     * @return the points it goes through, empty when there is no such line
+     */
+    List<Point> pathOfLine(String line) {
+        List<String> ofIt = pieces.get(line);
+        return ofIt == null || ofIt.isEmpty() ? List.of() : paths.getOrDefault(ofIt.get(0), List.of());
+    }
+
+    /**
+     * The first line of the chart, in the order the recipe holds its lines.
+ *
+     * @return the name of a line, {@code null} when the chart has none
+     */
+    String firstLine() {
+        return pieces.keySet().stream().findFirst().orElse(null);
+    }
+
+    /**
+     * The boxes and bars on the chart, so that a point can be measured against them.
+     *
+     * @return the name of each of them
+     */
+    java.util.Collection<String> nodes() {
+        return nodes.keySet();
+    }
+
+    /**
+     * Picks whatever the operator pointed at.
+     * <p>
+     * A box or a bar first, then a line, then nothing. A box wins where a line runs into it, because
+     * the line ends there and the operator pointing at that spot is pointing at the step.
+     *
+     * <p>
+     * Without this the buttons have nothing to act on. Nothing else on the chart turns a click into a
+     * pick, so without it the toolbar only ever worked on whatever the last button had picked.
+     *
+     * @param point where the pointer went down, in the coordinates of the scene
+     */
+    void pickAt(Point point) {
+        String node = nodeAt(point);
+        select(node != null ? node : lineAt(point));
+    }
+
+    /**
+     * The line under a point, when it is close enough to one to be meant.
+     *
+     * @param point where the pointer went down, in the coordinates of the scene
+     * @return the name of the line of the recipe, or {@code null} when the point is on empty chart
+     */
+    String lineAt(Point point) {
+        String nearest = null;
+        int closest = PICK_RADIUS;
+        for (Map.Entry<String, String> piece : pieceOf.entrySet()) {
+            int away = distanceTo(paths.getOrDefault(piece.getKey(), List.of()), point);
+            if (away < closest) {
+                closest = away;
+                nearest = piece.getValue();
+            }
+        }
+        return nearest;
+    }
+
+    /** How near a point has to be to a line to count as pointing at it. */
+    private static final int PICK_RADIUS = 6;
+
+    /**
+     * How far a point is from a line, measured to the closest of its pieces.
+     *
+     * @param path  the points the line goes through, in order
+     * @param point where the pointer went down
+     * @return the distance in pixels, or {@link Integer#MAX_VALUE} for a line with no pieces
+     */
+    private static int distanceTo(List<Point> path, Point point) {
+        int nearest = Integer.MAX_VALUE;
+        for (int i = 1; i < path.size(); i++) {
+            nearest = Math.min(nearest, distanceToSegment(path.get(i - 1), path.get(i), point));
+        }
+        return nearest;
+    }
+
+    /**
+     * How far a point is from one straight piece of a line.
+     *
+     * <p>
+     * Measured to the closest point of the piece, which is the projection of the point onto it. A
+     * piece with no length of its own is measured to its one end, because there is nothing else on it
+     * to measure to.
+     */
+    private static int distanceToSegment(Point from, Point to, Point point) {
+        double across = to.x - from.x;
+        double down = to.y - from.y;
+        double length = across * across + down * down;
+        if (length == 0) {
+            return (int) point.distance(from);
+        }
+        double howFar = ((point.x - from.x) * across + (point.y - from.y) * down) / length;
+        double at = Math.max(0, Math.min(1, howFar));
+        int nearestX = (int) Math.round(from.x + at * across);
+        int nearestY = (int) Math.round(from.y + at * down);
+        return (int) Math.hypot(point.x - nearestX, point.y - nearestY);
     }
 
     /**
@@ -520,12 +916,22 @@ final class RecipeChartScene extends GraphScene<String, String> {
         return nodeAt(convertViewToScene(point));
     }
 
+    /**
+     * Picks whatever a click went on, in the coordinates of the view.
+     *
+     * @param view  the component the library draws in, which is what the point is measured against
+     * @param point where the pointer went down, in the coordinates of that component
+     */
+    void pickAtInView(JComponent view, Point point) {
+        pickAt(convertViewToScene(point));
+    }
+
     @Override
     protected Widget attachNodeWidget(String node) {
         NodeSpec spec = nodes.get(node);
         RecipeShapes.Shape shape = spec == null ? RecipeShapes.Shape.BOX : spec.shape();
-        RecipeNodeWidget widget =
-                new RecipeNodeWidget(this, node, shape, spec == null ? node : spec.label());
+        RecipeNodeWidget widget = new RecipeNodeWidget(this, node, shape,
+                spec == null ? node : spec.label(), spec == null ? node : spec.tooltip());
         nodeLayer.addChild(widget);
         widget.getActions().addAction(new JoinOnRelease());
         return widget;
@@ -632,7 +1038,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @param shape how it is drawn
      * @param label what it says on itself, may be {@code null}
      */
-    record NodeSpec(RecipeShapes.Shape shape, String label) {
+    record NodeSpec(RecipeShapes.Shape shape, String label, String tooltip) {
     }
 
     /**
@@ -643,19 +1049,21 @@ final class RecipeChartScene extends GraphScene<String, String> {
      */
     private static final class RecipeNodeWidget extends Widget {
 
-        private final RecipeChartScene chart;
-        private final String id;
-        private final RecipeShapes.Shape shape;
-        private final String label;
+private final RecipeChartScene chart;
+    private final String id;
+    private final RecipeShapes.Shape shape;
+    private final String label;
+    private final String tooltip;
 
-        RecipeNodeWidget(RecipeChartScene chart, String id,
-                         RecipeShapes.Shape shape, String label) {
+    RecipeNodeWidget(RecipeChartScene chart, String id,
+                     RecipeShapes.Shape shape, String label, String tooltip) {
             super(chart);
             this.chart = chart;
             this.id = id;
             this.shape = shape;
             this.label = label;
-            setToolTipText(id);
+            this.tooltip = tooltip;
+            setToolTipText(tooltip == null ? id : tooltip);
             setPreferredBounds(new Rectangle(0, 0, SfcMetrics.widthOf(shape), SfcMetrics.heightOf(shape)));
         }
 
@@ -676,6 +1084,14 @@ final class RecipeChartScene extends GraphScene<String, String> {
                 g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
                         10f, new float[]{4f, 3f}, 0f));
                 g.drawRect(1, 1, bounds.width - 3, bounds.height - 3);
+            }
+            if (chart.isEmpty(id)) {
+                // Dashed, and not the frame of a pick, so a box that is waiting for its equipment
+                // looks different from one that is merely the one the buttons are about.
+                g.setColor(Color.GRAY);
+                g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+                        10f, new float[]{3f, 3f}, 0f));
+                g.drawRect(2, 2, bounds.width - 5, bounds.height - 5);
             }
         }
     }

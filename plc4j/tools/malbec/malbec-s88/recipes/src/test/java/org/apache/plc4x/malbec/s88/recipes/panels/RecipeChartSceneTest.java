@@ -18,6 +18,8 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -347,6 +350,193 @@ class RecipeChartSceneTest {
                 assertEquals(link.path().size() >= 2, link.path().size() >= 2);
             }
         });
+    }
+
+    // ========== Picking with the pointer ==========
+
+    /**
+     * A click has to pick something, because without it the buttons have nothing to act on.
+     */
+    @Test
+    void aClickOnABoxPicksIt() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+            scene.pickAt(centreOf(scene, "BOX_HEAT"));
+
+            assertEquals("BOX_HEAT", scene.selected(),
+                    "and the name the buttons are given is the box that was pointed at");
+        });
+    }
+
+    @Test
+    void aClickNearALinePicksTheLine() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+            String line = scene.firstLine();
+
+            scene.pickAt(emptiestPointOn(scene, line));
+
+            assertEquals(line, scene.selected(),
+                    "and a line has to be pickable, because a box cannot be taken off the chart while"
+                            + " a line runs into it, so a line that cannot be taken off is a chart the"
+                            + " operator cannot undo");
+        });
+    }
+
+    @Test
+    void aBoxWinsOverALineThatArrivesAtIt() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+
+            scene.pickAt(centreOf(scene, "BOX_HEAT"));
+
+            assertEquals("BOX_HEAT", scene.selected(),
+                    "a line stops at the box, so pointing there is pointing at the step");
+        });
+    }
+
+    @Test
+    void aClickOnEmptyChartPicksNothing() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+            scene.select("BOX_MIX");
+
+            scene.pickAt(new Point(-50, -50));
+
+            assertNull(scene.selected(),
+                    "and the pick is dropped, or the buttons would act on something the operator has"
+                            + " just pointed away from");
+        });
+    }
+
+    @Test
+    void aPickedLineIsForgottenWhenTheLineGoes() {
+        onSwingThread(() -> {
+            S88MasterRecipe recipe = SfcFixtures.lineal();
+            RecipeChartScene scene = sceneOf(recipe);
+            scene.pickAt(emptiestPointOn(scene, scene.firstLine()));
+            String line = scene.selected();
+
+            EditProcedureLogicUseCase.removeLink(recipe, null, line);
+            scene.draw(recipe);
+
+            assertNull(scene.selected(),
+                    "and nothing stays picked that is no longer on the chart");
+            assertFalse(scene.isLine(line), "and the line is not a line any more");
+        });
+    }
+
+    /**
+ * A button that adds something asks for it to be picked before the chart has been drawn again, so
+ * the pick has to survive until it can be shown.
+ */
+@Test
+    void aPickOfSomethingNotDrawnYetWaitsForTheDrawing() {
+        onSwingThread(() -> {
+            S88MasterRecipe recipe = SfcFixtures.lineal();
+            RecipeChartScene scene = sceneOf(recipe);
+
+            EditProcedureLogicUseCase.insertStepAfter(recipe, null, "BOX_BEGIN", "QUENCH",
+                    "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS");
+            scene.selectWhenDrawn("BOX_QUENCH");
+            assertNull(scene.selected(), "and before the drawing there is nothing to pick");
+
+            scene.draw(recipe);
+
+            assertEquals("BOX_QUENCH", scene.selected(),
+                    "and after it there is, or every button that adds something would leave the"
+                            + " operator with nothing picked");
+        });
+    }
+
+@Test
+    void aPickOfSomethingThatNeverArrivesIsDropped() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+
+            scene.selectWhenDrawn("BOX_NOT_HERE");
+            scene.draw(SfcFixtures.lineal());
+
+            assertNull(scene.selected(),
+                    "and a pick that never comes is a change that was taken back, not a frame on"
+                            + " something nobody chose");
+        });
+    }
+
+    /** The middle of a box on the chart. */
+    private static Point centreOf(RecipeChartScene scene, String node) {
+        Rectangle bounds = scene.boundsOf(node);
+        assertNotNull(bounds, node + " is on the chart to be pointed at");
+        return new Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    }
+
+    /**
+     * A point on a line that no box or bar is standing on.
+     *
+     * <p>
+     * Taken from the points the layout gave and measured against the boxes, rather than hard-coded,
+     * because the rows sit close enough together that a fixed number on a line is often inside a bar.
+     * A box wins over a line where they meet, so a point inside one would pick the box and the test
+     * would be about something else.
+     */
+    private static Point emptiestPointOn(RecipeChartScene scene, String line) {
+        List<Point> path = scene.pathOfLine(line);
+        assertTrue(path.size() >= 2, "the line has two ends to pick between");
+        Point emptiest = path.get(0);
+        int room = -1;
+        for (int step = 0; step <= 40; step++) {
+            Point candidate = along(path, step / 40.0);
+            int away = nearestNode(scene, candidate);
+            if (away > room) {
+                room = away;
+                emptiest = candidate;
+            }
+        }
+        assertTrue(room > 0,
+                "there has to be room to point at a line without pointing at a box, and "
+                        + "there was none along " + line);
+        return emptiest;
+    }
+
+    /** A point that far along the pieces of a line. */
+    private static Point along(List<Point> path, double howFar) {
+        double[] at = new double[path.size()];
+        double total = 0;
+        at[0] = 0;
+        for (int i = 1; i < path.size(); i++) {
+            total += path.get(i - 1).distance(path.get(i));
+            at[i] = total;
+        }
+        double wanted = total * howFar;
+        for (int i = 1; i < path.size(); i++) {
+            if (wanted <= at[i]) {
+                double piece = at[i] - at[i - 1];
+                double into = piece == 0 ? 0 : (wanted - at[i - 1]) / piece;
+                return new Point((int) Math.round(path.get(i - 1).x
+                        + into * (path.get(i).x - path.get(i - 1).x)),
+                        (int) Math.round(path.get(i - 1).y
+                        + into * (path.get(i).y - path.get(i - 1).y)));
+            }
+        }
+        return path.get(path.size() - 1);
+    }
+
+    /** How far a point is from the nearest box or bar, zero when it is inside one. */
+    private static int nearestNode(RecipeChartScene scene, Point point) {
+        int closest = Integer.MAX_VALUE;
+        for (String node : scene.nodes()) {
+            Rectangle bounds = scene.boundsOf(node);
+            if (bounds == null) {
+                continue;
+            }
+            if (bounds.contains(point)) {
+                return 0;
+            }
+            closest = Math.min(closest, (int) Math.hypot(
+                    Math.max(bounds.x - point.x, 0) + Math.max(point.x - bounds.x - bounds.width, 0),
+                    Math.max(bounds.y - point.y, 0) + Math.max(point.y - bounds.y - bounds.height, 0)));
+        }
+        return closest;
     }
 
     private static Map<String, RecipeShapes.Shape> shapesFor(S88MasterRecipe recipe) {
