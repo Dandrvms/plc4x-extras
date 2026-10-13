@@ -20,12 +20,13 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
+import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
@@ -33,15 +34,6 @@ import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 
 /**
  * The steps of a recipe, one per row.
- * <p>
- * Every step of the recipe is here, whatever it is nested inside, and the column of nesting says how
- * deep it is. A recipe is a tree of steps, but a table of all of them is what answers "what is in
- * this recipe" in one look, and the nesting is a column rather than a tree because the graph view is
- * where the shape of the recipe is read.
- * <p>
- * <b>The equipment column is what the recipe says, not what is resolved.</b> A recipe written by class
- * names a class of equipment, and the module of the plant it ends up on is decided later, when it is
- * bound. Showing a module here would be showing something the recipe does not carry.
  */
 public final class RecipeTableView extends AbstractRecipeView {
 
@@ -83,8 +75,7 @@ public final class RecipeTableView extends AbstractRecipeView {
             if (recipe != null) {
                 collect(recipe.getRecipeElements(), 0);
             }
-            // Whatever the report says about a step is held against that step rather than shown in
-            // one place, because the point of this view is to see which step is the problem.
+
             for (String line : conformance.excess()) {
                 attach(line);
             }
@@ -104,9 +95,6 @@ public final class RecipeTableView extends AbstractRecipeView {
 
         /**
          * Puts a report line against the step it names.
-         * <p>
-         * Matched on the quoted name the report uses, which is the same name the row shows. A line
-         * that names no step in this recipe is left out, because there is no row to put it on.
          */
         private void attach(String line) {
             String quoted = between(line, '\'', '\'');
@@ -159,10 +147,6 @@ public final class RecipeTableView extends AbstractRecipeView {
 
         /**
          * The equipment the step works on, or what is wrong about it.
-         * <p>
-         * A step that names nothing is a step that cannot run, and on a class recipe that is the
-         * normal state of a step that has not been bound yet. Saying so in this column is more use
-         * than leaving it blank, and it is where an operator looks for it.
          */
         private String equipment(S88RecipeElement element) {
             List<String> problems = complaints.get(element);
@@ -187,8 +171,7 @@ public final class RecipeTableView extends AbstractRecipeView {
             if (problems == null || problems.isEmpty()) {
                 return joined;
             }
-            // Anything the report says that is not about the equipment goes here, because the other
-            // two columns are already saying what the step is.
+
             return joined.isEmpty() ? String.join(" ", problems) : joined + "  " + String.join(" ", problems);
         }
 

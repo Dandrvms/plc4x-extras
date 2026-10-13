@@ -44,17 +44,9 @@ import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
  * A bar waits on a value read off a piece of equipment, and the two kinds of recipe name that
  * equipment in different words. A recipe written by class names a base name, which something will be
  * resolved against equipment later, so there is no equipment to name and none is written. A recipe
- * written for particular equipment names the equipment it reads off, because two of them can publish
- * a report of the same name and reading the one off the other is a recipe that does the wrong thing.
+ * written for particular equipment names the equipment it reads off.
  * <p>
- * <b>Nothing is offered that is not there.</b> The equipment offered is the equipment that publishes
- * something to wait on, the reports offered are the ones that equipment publishes, and a report it
- * does not publish is refused instead of written down. A bar on a report that is not there is a bar
- * that never opens, which is a recipe that stops halfway with nothing to say why.
- * <p>
- * <b>The value is checked against the type the plant declares.</b> A temperature that is a word is a
- * temperature no equipment will ever hold, and writing it down compares against a value that was
- * never going to be there.
+ * The value is checked against the type the plant declares.
  */
 public final class SetBarConditionUseCase {
 
@@ -121,16 +113,13 @@ public final class SetBarConditionUseCase {
     /**
      * The values a bar waiting on this report has to be given, or nothing when the report is not an
      * enumeration and takes whatever a person writes.
- *
- * <p>Offered rather than only checked, because a value the author has to remember is a value they
- * will get wrong, and the plant already says which ones are right.
- *
- * @param plant       the plant the recipe is written against
- * @param recipe      recipe being edited, to find the class a report is read from
- * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
- * @param reportName  report the bar waits on
- * @return the values it allows, empty when there are none to offer
- */
+     *
+     * @param plant       the plant the recipe is written against
+     * @param recipe      recipe being edited, to find the class a report is read from
+     * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
+     * @param reportName  report the bar waits on
+     * @return the values it allows, empty when there are none to offer
+     */
     public static List<String> allowedValues(S88MasterRecipe recipe, S88PlantSnapshot plant,
                                              String equipmentId, String reportName) {
         DeclaredReport report;
@@ -152,7 +141,7 @@ public final class SetBarConditionUseCase {
      * the plant.
      * <p>
      * Only the equipment that publishes something, because equipment with no report cannot be waited
-     * on and offering it makes the operator choose something that does not work.
+     * on.
      *
      * @param plant the plant the recipe is written against
      * @return the names of the equipment that publish reports
@@ -203,9 +192,6 @@ public final class SetBarConditionUseCase {
     /**
      * The base names a recipe by class can wait on, gathered from every class of equipment its steps
      * stand for.
-     * <p>
-     * They are gathered rather than asked which class, because the bar waits on a value and the class
-     * is a detail of where that value comes from. A base name two classes publish appears once.
      *
      * @param recipe recipe being edited
      * @param plant  the plant the recipe is written against
@@ -289,11 +275,7 @@ public final class SetBarConditionUseCase {
     }
 
     /**
-     * Whether the value written is one the report can ever hold.
-     * <p>
-     * An enumeration report names its enumeration, and the values it takes are the members of that
-     * enumeration rather than its name. Reading the name as the list would refuse every value the
-     * equipment can actually hold and accept the one string it cannot.
+     * Whether the value written matches the report data type.
      */
     private static void checkLiteral(S88PlantSnapshot plant, DeclaredReport report, String literal) {
         if (literal == null || literal.isBlank()) {
@@ -318,9 +300,6 @@ public final class SetBarConditionUseCase {
 
     /**
      * The values the named enumeration allows, in the order it declares them.
-     *
-     * <p>A report names its enumeration the way the plant file spells it, while the plant model
-     * keeps enumerations under a prefix, so both spellings are tried before giving up.
      *
      * @param plant    the plant the recipe is written against
      * @param enumName name of the enumeration, as the report spells it
@@ -357,7 +336,7 @@ public final class SetBarConditionUseCase {
         }
     }
 
-/**
+    /**
      * The reports a piece of equipment, or one class of equipment, declares.
      */
     @SuppressWarnings("unchecked")

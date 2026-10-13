@@ -88,17 +88,22 @@ public class RenameRecipeElementUseCase {
             if (element == step) {
                 renames.add(() -> element.setId(newId));
             }
-            S88ProcedureLogic chart = element.getProcedureLogic();
-            if (chart == null) {
-                continue;
-            }
-            for (S88ProcedureStep box : chart.getSteps()) {
-                if (oldId != null && oldId.equals(box.getRecipeElementId())) {
-                    renames.add(() -> box.setRecipeElementId(newId));
-                }
+            collectBoxes(renames, recipe.getProcedureLogic(), oldId, newId);
+        }
+        collectBoxes(renames, recipe.getProcedureLogic(), oldId, newId);
+        return renames;
+    }
+
+    private static void collectBoxes(List<StepRename> renames, S88ProcedureLogic chart, String oldId, String newId){
+        if (chart == null) {
+            return;
+        }
+        for (S88ProcedureStep box : chart.getSteps()) {
+            if (oldId != null && oldId.equals(box.getRecipeElementId())) {
+                renames.add(() -> box.setRecipeElementId(newId));
             }
         }
-        return renames;
+
     }
 
     private static List<S88IdRef> endsOf(S88ProcedureLogic chart) {

@@ -29,22 +29,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 
 /**
- * Use case for starting a new master recipe.
- * <p>
- * A recipe that has just been created is not an empty file. It carries the two steps every recipe
- * has to have, and the chart that joins them, so that the recipe is a process with a start and a
- * stop the moment it exists rather than something that only becomes one if the engineer remembers.
- * <p>
- * The chart puts a bar between the two. The model is bipartite, so a line drawn straight from one
- * box to another has nothing to follow, and a bar is how the flow says what has to be true before
- * it moves on. Here there is nothing to wait for, so the bar carries no condition and the flow
- * crosses it as soon as the step before it has finished. That is a deliberate reading of the bar
- * and not an oversight: a recipe with nothing in it says nothing about what it will wait for.
- * <p>
- * The two steps name no equipment, and neither is allowed to. They say where the process starts and
- * where it stops, and a recipe that began by naming a class of equipment would have made a claim
- * about a plant that has not been chosen yet. Every other step in the recipe names its equipment
- * the one way the recipe addresses it.
+ * Starting a new master recipe. It adds a BEGIN and an END element joined by a transition bar.
  */
 public final class CreateMasterRecipeUseCase {
 

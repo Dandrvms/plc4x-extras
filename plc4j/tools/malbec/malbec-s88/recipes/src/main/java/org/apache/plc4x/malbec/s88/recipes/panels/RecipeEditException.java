@@ -20,10 +20,6 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 /**
  * A change the recipe would not take.
- * <p>
- * Carries what went wrong in a form that can be shown to the operator: an exception from a button
- * press otherwise reaches nobody at all, and the operator is left with a button that did nothing
- * and no reason why.
  */
 public class RecipeEditException extends RuntimeException {
 

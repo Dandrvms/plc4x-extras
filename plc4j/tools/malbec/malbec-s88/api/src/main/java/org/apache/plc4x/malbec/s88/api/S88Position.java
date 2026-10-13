@@ -26,9 +26,6 @@ import java.util.Objects;
  * The unit is whatever the drawing tool works in, and this says nothing about it. A chart that was
  * drawn on one screen and opened on another has to be laid out again either way, so the numbers are
  * only ever compared with other numbers from the same drawing.
- * <p>
- * Two numbers and nothing else, because that is all a position is. Anything more would be a
- * description of the shape being drawn, and the shape is the recipe's to say, not the position's.
  */
 public final class S88Position {
 
@@ -52,10 +49,6 @@ public final class S88Position {
 
     /**
      * A copy moved by the given amounts.
-     * <p>
-     * Offsets rather than a new set of absolute numbers, because a chart is dragged by moving one
-     * box and the lines into it have to follow, and every line that ran into the box knows its own
-     * end rather than knowing where the box went.
      *
      * @param dx how far across to move
      * @param dy how far down to move

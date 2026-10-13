@@ -71,9 +71,7 @@ public class EditProcedureLogicUseCase {
      * The chart being drawn on, made if it is not there yet.
      * <p>
      * A recipe can carry a chart of its own, and that chart is where the process as a whole is
-     * drawn. It is reached by passing no step at all, so that the methods below work the same on
-     * it as on the chart of any step, instead of the recipe's own chart being the one thing in the
-     * model that can be read but not drawn on.
+     * drawn.
      *
      * @param recipe recipe the chart would belong to, may be {@code null}
      * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
@@ -96,11 +94,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * The chart being read, without making one.
-     * <p>
-     * Reading and writing are kept apart on purpose. Anything that reads has to be able to find
-     * nothing, because the thing it was looking for may not be there, and a method that made a
-     * chart to search would leave an empty one behind every time it found nothing.
+     * The chart being read.
      *
      * @param recipe recipe the chart would belong to, may be {@code null}
      * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
@@ -231,18 +225,6 @@ public class EditProcedureLogicUseCase {
 
     /**
      * Puts a step between a step and whatever the flow went on to.
-     * <p>
-     * This splits the line leaving the step rather than adding to either end of the chart, so a step
-     * can be put where it belongs after the fact instead of having to be planned before the one it
-     * follows exists.
-     * <p>
-     * <b>One bar is added, not two.</b> The line that is split ran from a box to a bar, and what it
-     * has to become is a box to a bar to a box to that same bar: the bar that was already there
-     * becomes the one the flow waits at after the new step. Putting a bar on each side instead would
-     * leave the flow going from a bar to a bar, which is the one thing this chart cannot have.
-     * <p>
-     * A step with nothing after it gets the new step and the bar, and the bar hangs at the end for
-     * the operator to carry on from. That is the same shape, with nothing to reattach.
      *
      * @param recipe     recipe being edited, may be {@code null} when no change event is wanted
      * @param step       step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -272,9 +254,7 @@ public class EditProcedureLogicUseCase {
 
         List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
         if (onward.size() > 1) {
-            // More than one thing leaves this step, so it is already a fork. Which side the new step
-            // belongs to is a decision this method cannot make, and guessing it would put the step
-            // somewhere the author did not mean.
+
             throw new IllegalStateException("Box '" + afterBoxId + "' already goes to "
                     + onward.size() + " places, so there is no single flow to put a step in the"
                     + " middle of.");
@@ -284,26 +264,20 @@ public class EditProcedureLogicUseCase {
             whatFollowed = List.of(onward.get(0).getTo().get(0).getValue());
         }
         if (onward.size() == 1 && onward.get(0).getTo().size() > 1) {
-            // One line leaving this box with more than one arrival is a bifurcation that sits on
-            // this box, and there is no single flow to put a step in the middle of. Carrying on as
-            // if there were one arrival would take the other branch off the chart without saying so.
+
             throw new IllegalStateException("Box '" + afterBoxId + "' goes to "
                     + onward.get(0).getTo().size() + " bars, so it is a branch point and there is no"
                     + " single flow to put a step in. Pick a step inside one of the branches."
                     + " The branches are " + namesOf(onward.get(0).getTo()) + ".");
         }
 
-        // Everything that can be refused is refused before anything is touched. Taking the line off
-        // first is what leaves a chart holding a line to nothing when the step that was going to
-        // replace it turns out to be named something that is already taken.
+
         requireFreeStepName(recipe, newStepId);
         requireFreeName(chart, newBoxId, "box");
         requireFreeName(chart, barId, "bar");
 
         S88LinkType onwardType = onward.isEmpty() ? null : onward.get(0).getLinkType();
-        // Only this box is taken off the line, not the whole line. A line leaving several boxes is
-        // the convergence of a branch, and taking it off whole would take the other branches with
-        // it. The line goes only when this box was the only one leaving it.
+
         S88ProcedureLink shared = detachEnd(chart, onward.isEmpty() ? null : onward.get(0), afterBoxId);
 
         S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
@@ -312,14 +286,11 @@ public class EditProcedureLogicUseCase {
         addTransition(recipe, step, barId);
         addLink(recipe, step, afterBoxId + "_TO_" + barId,
                 List.of(afterBoxId), List.of(barId), null);
-        // The bar the flow waits at has to lead into the new step. Without this line the flow stops
-        // at a bar with nothing after it, and the step that was just added is a box nothing reaches.
+
         addLink(recipe, step, barId + "_TO_" + newBoxId,
                 List.of(barId), List.of(newBoxId), null);
         if (!whatFollowed.isEmpty()) {
-            // The new step joins the convergence the other branches arrive on, rather than getting a
-            // line of its own into the same bar, which would draw the same thing as two separate
-            // things arriving there.
+
             if (shared != null) {
                 putWidened(chart, shared, newBoxId);
             } else {
@@ -369,15 +340,10 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
- * Whether another step can go after a box.
- *
- * <p>
- * <b>The stop of the process has nothing after it.</b> A step after the end is a process that carries
- * on after it has stopped, and the chart would show a flow leaving a ground symbol. The start is the
- * opposite case and is left alone: a step after the start is the ordinary first step of a recipe.
- *
- * @throws IllegalStateException when the box is where the flow stops
- */
+     * Whether another step can go after a box.
+     *
+     * @throws IllegalStateException when the box is where the flow stops
+     */
     private static void requireRoomAfter(S88Recipe recipe, S88ProcedureLogic chart, String boxId) {
         String elementId = chart.findStep(boxId).orElseThrow().getRecipeElementId();
         boolean stops = recipe.findElement(elementId)
@@ -430,18 +396,15 @@ public class EditProcedureLogicUseCase {
         }
     }
 
-private static String namesOf(List<S88IdRef> ends) {
+    private static String namesOf(List<S88IdRef> ends) {
         return ends.stream().map(S88IdRef::getValue).toList().toString();
     }
 
     /**
-     * The lines that leave a thing, and not the ones that arrive at it.
-     * <p>
-     * Needed because {@link S88ProcedureLogic#linksFrom(String)} answers a different and wider
-     * question than its name suggests: it gives the lines that touch the box at either end, which is
-     * right when checking whether a box can be removed and wrong when checking where the flow goes.
+     * The lines that leave a thing.
      */
-    private static List<S88ProcedureLink> leaving(S88ProcedureLogic chart, String id) {        List<S88ProcedureLink> leaving = new ArrayList<>();
+    private static List<S88ProcedureLink> leaving(S88ProcedureLogic chart, String id) {
+        List<S88ProcedureLink> leaving = new ArrayList<>();
         for (S88ProcedureLink link : chart.getLinks()) {
             for (S88IdRef end : link.getFrom()) {
                 if (id.equals(end.getValue())) {
@@ -456,13 +419,7 @@ private static String namesOf(List<S88IdRef> ends) {
     /**
      * Splits the flow leaving a step into two branches, each with its own bar.
      * <p>
-     * <b>A step that leaves towards more than one bar is a selective split.</b> Only one of the
-     * branches is taken, and which one is what the comparison on each bar decides. The two are one
-     * line with two arrivals rather than two lines, because a line with two arrivals is what says
-     * "one of these" and two lines out of a step say nothing about how many are taken.
-     * <p>
-     * Each branch needs a bar, and the operator fills in the comparison on each. Until they do, both
-     * branches cross straight away and the chart waits on nothing.
+     * Only one of the branches is taken, decided by the transition of each.
      *
      * @param recipe     recipe being edited, may be {@code null} when no change event is wanted
      * @param step       step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -490,18 +447,7 @@ private static String namesOf(List<S88IdRef> ends) {
     /**
      * Splits the flow leaving a bar into two branches, each with its own step.
      * <p>
-     * <b>A bar that leaves towards more than one step is a parallel split.</b> Both branches are
-     * taken at once, which is the whole difference between this and {@link #selectiveFork}, and it
-     * is what the drawing shows as one bar across the branches rather than two.
-     * <p>
-     * A bar on a chart that reads anywhere near right almost always already leads somewhere, so the
-     * split does not leave what it used to lead to stranded: it is moved behind a new bar that
-     * both branches arrive at. A bar that led nowhere gets no such bar, because there is nothing to
-     * carry on.
-     * <p>
-     * The branches need recipe steps of their own, which are made here rather than asked for,
-     * because a box working on nothing is not a step. The boxes are named after them the same way
-     * the rest of the module names a box.
+     * Both branches are taken (and executed in runtime) at once.
      *
      * @param recipe    recipe being edited, may be {@code null} when no change event is wanted
      * @param step      step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -568,10 +514,7 @@ private static String namesOf(List<S88IdRef> ends) {
             addLink(recipe, step, firstBox + "_AND_" + secondBox + "_TO_" + carriedOn,
                     List.of(firstBox, secondBox), List.of(carriedOn),
                     S88LinkType.PARALLEL_CONVERGENT);
-            // What the bar used to lead to is moved onto the new bar, keeping the line and its
-            // arrival, rather than left where it was: a bar leading both into the branches and
-            // straight past them would say the branches can be skipped, which is not what a
-            // parallel split says.
+
             carryOnAfter(recipe, step, wasLeadingTo, carriedOn);
         }
 
@@ -635,15 +578,6 @@ private static String namesOf(List<S88IdRef> ends) {
 
     /**
      * Brings two steps together onto one bar.
-     * <p>
-     * One line with two departures, because a line with two departures is what says "these two are
-     * waited for" and the type says whether they are waited for together or one at a time.
-     * <p>
-     * <b>The new bar leads nowhere until the author draws where the flow goes on.</b> Unlike a
-     * parallel split, there is nothing here that can be carried on for the author: a step always
-     * leads to a bar, so what the two of them led to is already bars, and moving those behind a bar
-     * would give a chart with bars leading to bars. Which way the flow leaves a join is the author's
-     * choice, so it is left to them rather than guessed.
      *
      * @param recipe    recipe being edited, may be {@code null} when no change event is wanted
      * @param step      step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -718,9 +652,6 @@ private static String namesOf(List<S88IdRef> ends) {
             return true;
         }
         for (S88ProcedureLink link : chart.getLinks()) {
-            // Every end on both sides, not only the first: a line with one bar and one step among
-            // its ends still does not cross between the two kinds, and looking at the first one
-            // only says what the author happened to put first.
             for (S88IdRef from : link.getFrom()) {
                 for (S88IdRef to : link.getTo()) {
                     if (from.getType() == to.getType()) {
@@ -734,8 +665,7 @@ private static String namesOf(List<S88IdRef> ends) {
 
     /**
      * What all the names of one end of a line are, which has to agree: a line either leaves several
-     * boxes or leaves several bars, and a line that left both would have two ends of every kind and
-     * would draw as two lines sharing a name.
+     * boxes or leaves several bars.
      * <p>
      * Every name is checked against the chart first, so that a name nobody has is reported as the
      * typo it is instead of being taken for a box.
@@ -756,7 +686,7 @@ private static String namesOf(List<S88IdRef> ends) {
                         + "' for a line to point at.");
             }
         }
-        S88IdRefType kind = chart.findTransition(names.get(0)).isPresent()
+        S88IdRefType kind = chart.findTransition(names.getFirst()).isPresent()
                 ? S88IdRefType.TRANSITION : S88IdRefType.STEP;
         for (String name : names) {
             S88IdRefType one = chart.findTransition(name).isPresent()
@@ -815,9 +745,9 @@ private static String namesOf(List<S88IdRef> ends) {
         if (ends.isEmpty()) {
             throw new IllegalArgumentException("Line '" + lineId + "' has no end at that side to move.");
         }
-        S88IdRef target = ends.get(0);
+        S88IdRef target = ends.getFirst();
         int at = ends.indexOf(target);
-if (atEnd) {
+        if (atEnd) {
             line.removeTo(target);
             List<S88IdRef> to = new ArrayList<>(line.getTo());
             to.add(at, moved);
@@ -830,17 +760,16 @@ if (atEnd) {
             line.clearFrom();
             line.addFrom(from.toArray(new S88IdRef[0]));
         }
-        // Back through the chart, because moving an end is a change the chart cannot see otherwise
-        // and it works out which ends name nothing from them.
+
         chart.removeLink(line);
         chart.addLink(line);
         announce(recipe);
     }
 
     /**
-     * Puts a bar on the chart that waits on nothing, which is the bar a chart draws between two
-     * steps that simply follow one another. There is always a bar between two boxes; a bar that
-     * waits on nothing is how it says it goes straight on.
+     * Puts a bar between two steps that simply follow one another.
+     * <p>
+     * A bar holds the condition for the transition. If it holds nothing, the condition is TRUE.
      *
      * @param recipe recipe the step belongs to, may be {@code null}
      * @param step   step whose chart is being drawn on
@@ -853,7 +782,7 @@ if (atEnd) {
     }
 
     /**
-     * Puts a bar on the chart that waits on something, which is where the recipe reads the plant.
+     * Puts a bar on the chart that waits on something. It is the transition between two steps.
      *
      * @param recipe     recipe the step belongs to, may be {@code null}
      * @param step       step whose chart is being drawn on
@@ -911,9 +840,6 @@ if (atEnd) {
 
     /**
      * Gives a box another name, and takes the lines running into it along.
-     * <p>
-     * A name that leaves lines naming the old one would give a chart that cannot be drawn, so the
-     * lines are moved rather than left behind.
      *
      * @param recipe recipe the step belongs to, may be {@code null}
      * @param step   step whose chart the box is on
@@ -931,9 +857,6 @@ if (atEnd) {
         if (!boxId.equals(newId)) {
             requireFreeName(chart, newId, "box");
         }
-        // Put back under the new name rather than renamed in place: the chart finds its boxes and
-        // bars by name, and a box whose name changed while the chart still looked it up by the old
-        // one is a box the chart cannot find.
         chart.removeStep(box);
         box.setId(newId);
         chart.addStep(box);
@@ -969,15 +892,6 @@ if (atEnd) {
 
     /**
      * Points every end of every line at a renamed box or bar.
-     *
-     * <p>
-     * Ends pointing outside this chart are left alone, because their names belong to another chart.
-     *
-     * <p>
-     * <b>Each line that changed is put back through the chart.</b> A line is changed by renaming the
-     * ends it holds, and the chart does not see that happen: it works out which ends name nothing
-     * whenever the set of lines changes, and a line renamed in place leaves that list still saying
-     * the old name is dangling. Taking the line out and putting it back is how the chart is told.
      */
     private static void renameLinkEnds(S88ProcedureLogic chart, String oldId, String newId) {
         for (S88ProcedureLink link : new ArrayList<>(chart.getLinks())) {
@@ -1008,11 +922,6 @@ if (atEnd) {
 
     /**
      * One end of a line, which has to name something this chart carries.
-     * <p>
-     * A name beginning with a mark points outside this chart, and is left alone by everything that
-     * renames or takes away boxes and bars here. That is the difference between the two kinds of
-     * reference a chart has, and it is why a name the chart cannot resolve is a mistake rather than
-     * something to resolve later.
      */
     private static S88IdRef existingEnd(S88ProcedureLogic chart, String name, String doing) {
         if (name == null || name.isBlank()) {

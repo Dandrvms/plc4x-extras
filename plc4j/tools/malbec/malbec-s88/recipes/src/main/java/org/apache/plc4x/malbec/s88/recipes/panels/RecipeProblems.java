@@ -32,29 +32,12 @@ import javax.swing.ListSelectionModel;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 
 /**
- * What is wrong with the recipe right now, written out under the view.
- *
- * <p>
- * The report exists already and both views had nothing to do with it, so an editor could hold a
- * recipe that cannot run and show nothing about it. A chart the reader has to work out what is missing
- * is a chart that gets worked out wrong.
- *
- * <p>
- * <b>Everything it says is advice, not a refusal.</b> A recipe part way through being written is
- * reported the same way as one that is broken, and the operator is the one who says which is which.
- * That is why nothing here stops an edit.
- *
- * <p>
- * <b>Nothing is shown when there is nothing to say.</b> An empty panel down the side of the chart
- * would be room taken from the chart for a message that is only sometimes true, and a list that is
- * usually empty is a list nobody reads.
+ * Component to see what is wrong with the recipe right now, written out under the view.
  */
 final class RecipeProblems extends JPanel {
 
     private static final long serialVersionUID = 1L;
 
-    /** Shown when the recipe holds together. */
-    private static final String NOTHING = "This recipe holds together.";
 
     private final DefaultListModel<String> lines = new DefaultListModel<>();
     private final JList<String> list = new JList<>(lines);
@@ -67,8 +50,6 @@ final class RecipeProblems extends JPanel {
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setVisibleRowCount(4);
-        // Each line is a sentence about one thing, and clicking it is not something this panel can
-        // do anything with, so the selection is left out rather than offered and ignored.
         list.setEnabled(false);
 
         add(heading, BorderLayout.NORTH);
@@ -91,10 +72,6 @@ final class RecipeProblems extends JPanel {
 
     /**
      * What the report has to say, in the order that helps most.
-     *
-     * <p>
-     * What the recipe cannot do comes before what it has not finished saying. A recipe that cannot run
-     * is worth stopping for, and a recipe that is half written is not a mistake.
      *
      * @param report what is wrong with the recipe
      * @return one line per finding
@@ -121,7 +98,7 @@ final class RecipeProblems extends JPanel {
         return howMany + " things to look at";
     }
 
-    /** The colour of the heading, which says how serious the findings are on its own. */
+    /** The color of the heading, which says how serious the findings are on its own. */
     Color headingColour() {
         return heading.getForeground();
     }

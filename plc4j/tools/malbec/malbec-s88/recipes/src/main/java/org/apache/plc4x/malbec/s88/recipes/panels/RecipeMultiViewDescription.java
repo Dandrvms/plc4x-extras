@@ -28,14 +28,6 @@ import org.openide.windows.TopComponent;
 
 /**
  * One tab of a recipe window, and how to make the view that goes in it.
- * <p>
- * The platform builds a multiview window from an array of these, and this is the recipe editor's
- * version of that declaration. It is written in code rather than declared in a layer, because the
- * recipe files have no registered file type: there is nothing in a layer that could say "these
- * files open this way", so the window is built where it is opened instead.
- * <p>
- * Each tab gets a preferred id built from where it sits, so that two recipe windows open at the same
- * time do not claim the same place in the window's stored layout.
  */
 final class RecipeMultiViewDescription implements MultiViewDescription {
 
@@ -73,10 +65,6 @@ final class RecipeMultiViewDescription implements MultiViewDescription {
 
     /**
      * Hands this description the editor state its view is built on.
-     * <p>
-     * The platform creates views itself and passes nothing to them, so the state has to arrive after
-     * the description is made and before the window is opened. Doing it in that order is what lets
-     * every tab of a window be given the same recipe, which is what keeps them in step.
      *
      * @param editorModel the recipe this tab is looking at
      */
@@ -86,8 +74,6 @@ final class RecipeMultiViewDescription implements MultiViewDescription {
 
     @Override
     public int getPersistenceType() {
-        // Never remembered across restarts. A recipe window that came back on its own would open onto
-        // a file that may since have been renamed or deleted.
         return TopComponent.PERSISTENCE_NEVER;
     }
 

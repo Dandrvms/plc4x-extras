@@ -28,6 +28,7 @@ import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
+import org.apache.plc4x.malbec.s88.recipes.panels.RecipeEditorTopComponent;
 import org.apache.plc4x.malbec.s88.recipes.services.S88RecipeProjectServices;
 import org.netbeans.api.project.Project;
 import org.openide.DialogDisplayer;
@@ -40,16 +41,8 @@ import org.openide.util.Lookup;
 /**
  * Creates a new recipe as a file in the recipe set.
  * <p>
- * Two things are asked, and the second one is the only real question here. A recipe is always a
- * master recipe: a control recipe is built at run time from a master and a plant, so there is
- * nothing of that kind to create here. What the engineer does choose is how the recipe names its
- * equipment, by the class of it or by one particular module, and that choice is made once and
- * applies to every step of the recipe, because a recipe that mixed the two would read but could not
- * run.
- * <p>
- * The file is written straight away, holding a recipe with its start and its stop and nothing else
- * between them. It has to exist before anything is edited in it: opening a file that is not there is
- * opening nothing, and a recipe is a document that is read, checked and saved as it is written.
+ * The user choose how the recipe names its equipment, by the class of it or by one particular
+ * module.
  */
 public class NewRecipeAction extends AbstractAction implements ContextAwareAction {
 
@@ -82,8 +75,6 @@ public class NewRecipeAction extends AbstractAction implements ContextAwareActio
         }
         String name = input.getInputText() == null ? "" : input.getInputText().trim();
         if (name.isEmpty()) {
-            // A recipe file named after nothing is a file nobody can find again, and saying so here
-            // is friendlier than creating one and leaving it to be discovered later.
             DialogDisplayer.getDefault().notify(
                     new NotifyDescriptor.Message("A recipe needs a name.", NotifyDescriptor.WARNING_MESSAGE));
             return;
@@ -108,8 +99,10 @@ public class NewRecipeAction extends AbstractAction implements ContextAwareActio
             S88RecipeProjectServices.createRepository("xml", new FileObjectStorage(recipeXml))
                     .saveRecipe(recipe);
             project.getProjectDirectory().refresh();
+            RecipeEditorTopComponent.showFor(recipeXml);
+            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message("Recipe " + name + " created.", NotifyDescriptor.QUESTION_MESSAGE));
         } catch (IOException | IllegalArgumentException ex) {
-            Exceptions.printStackTrace(ex);
+            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(ex.getMessage(), NotifyDescriptor.WARNING_MESSAGE));
         }
     }
 

@@ -18,6 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.actions;
 
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
 //import java.io.InputStream;
@@ -29,6 +30,7 @@ import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectProviderImpl;
 import org.apache.plc4x.malbec.s88.recipes.services.RecipeSetPlantSnapshot;
 import org.netbeans.api.project.Project;
+import org.netbeans.api.project.ProjectManager;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
 import org.openide.awt.ActionID;
@@ -80,7 +82,6 @@ public class CreateRecipesProjectAction extends AbstractAction implements Contex
         }
         String name = input.getInputText();
         if (name == null || name.trim().isEmpty()) {
-            // A set named after nothing is a folder nobody can find again.
             say("A recipe set needs a name.");
             return;
         }
@@ -93,15 +94,17 @@ public class CreateRecipesProjectAction extends AbstractAction implements Contex
         }
 
         Project recipeSet = null;
+        FileObject dir = null;
         try {
-            FileObject dir = project.getProjectDirectory().createFolder(name.trim());
+            dir = project.getProjectDirectory().createFolder(name.trim());
             dir.createData("recipes.cfg");
             project.getProjectDirectory().refresh();
             dir.refresh();
 
-            recipeSet = org.netbeans.api.project.ProjectManager.getDefault().findProject(dir);
+            recipeSet = ProjectManager.getDefault().findProject(dir);
             if (recipeSet == null) {
                 say("The recipe set could not be opened as a project of its own.");
+                deleteQuietly(dir);
                 return;
             }
             RecipeSetPlantSnapshot.takeIfMissing(recipeSet, plant);
@@ -109,32 +112,43 @@ public class CreateRecipesProjectAction extends AbstractAction implements Contex
             Plc4xRecipesSubProjectProviderImpl provider =
                     project.getLookup().lookup(Plc4xRecipesSubProjectProviderImpl.class);
             if (provider != null) {
-                java.awt.EventQueue.invokeLater(provider::fireChange);
+                EventQueue.invokeLater(provider::fireChange);
             }
         } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
             if (recipeSet != null) {
-                // The folder is left behind with no plant in it, and a set without a plant cannot
-                // carry out what a recipe set is for, so it is taken away rather than left to be
-                // found later and wondered about.
-                try {
-                    recipeSet.getProjectDirectory().delete();
-                } catch (IOException ignored) {
-                    Exceptions.printStackTrace(ignored);
+                deleteQuietly(dir);
+            } else {
+                    try {
+                        recipeSet.getProjectDirectory().delete();
+                    } catch (IOException ioe) {
+                        Exceptions.printStackTrace(ioe);
+                    }
                 }
-            }
             Exceptions.printStackTrace(ex);
             say(ex.getMessage());
         }
     }
 
-/**
- * Says something and waits for it to be read.
- *
- * @param what the message
- */
-private static void say(String what) {
-        DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
-                what, NotifyDescriptor.WARNING_MESSAGE));
+    private static void deleteQuietly(FileObject folder) {
+        if (folder == null) {
+            return;
+        }
+        try {
+            folder.delete();
+        } catch (IOException ioe) {
+            Exceptions.printStackTrace(ioe);
+        }
+    }
+
+
+    /**
+     * Says something and waits for it to be read.
+     *
+     * @param what the message
+     */
+    private static void say(String what) {
+            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
+                    what, NotifyDescriptor.WARNING_MESSAGE));
     }
 
     @Override

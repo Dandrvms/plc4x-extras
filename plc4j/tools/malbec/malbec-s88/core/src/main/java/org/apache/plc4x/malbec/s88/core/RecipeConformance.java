@@ -88,16 +88,6 @@ public final class RecipeConformance {
     /**
      * Measures a recipe against itself and against the plant it was written against.
      *
-     * <p>
-     * <b>A recipe is measured against a plant, not against the plant.</b> The plant changes while a
-     * recipe is written, and a step that follows the plant file is a step that has stopped meaning
-     * what its author meant. So everything a recipe says about equipment is checked against the
-     * copy that was frozen when the recipe set was made, which is the plant this recipe belongs to.
-     *
-     * <p>
-     * Without a plant only what a recipe can be wrong about on its own is reported, which is what
-     * {@link #of(S88Recipe)} says.
-     *
      * @param recipe recipe to measure, may be {@code null}
      * @param plant  the plant the recipe was written against, {@code null} when there is none
      * @return the report, empty when the recipe holds together
@@ -123,12 +113,6 @@ public final class RecipeConformance {
 
     /**
      * Whether every step that says what it works on is naming something the plant has.
-     *
-     * <p>
-     * The two kinds of recipe are asked different things, because they name different things. A class
-* recipe is asked whether the class is still there, and a recipe for particular equipment is asked
- * whether the equipment is still there under the identity it was written against. A class recipe is
- * not asked whether equipment of that class is there, because it is the batch that picks one.
      */
     private static void checkAgainstPlant(S88Recipe recipe, S88PlantSnapshot plant,
                                           List<String> excess, List<String> deficit) {
@@ -188,18 +172,18 @@ public final class RecipeConformance {
         }
     }
 
-    /**
-     * Whether a step names its equipment the way the recipe it belongs to writes addresses.
-     * <p>
-     * The three ways a step can be wrong here are kept apart because they are three different
-     * mistakes. Naming neither leaves nothing to run on, which is a missing thing. Naming both means
-     * the recipe is not consistent with itself, which is a thing in the way.
-     * <p>
-     * The start and the stop of the process are not held to this at all. They say where the flow
-     * begins and ends and nothing about a plant, so a recipe in which they name equipment would be
-     * claiming something they do not. {@link #checkReachability} is what holds them to being there.
-     */
-private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, String label,
+        /**
+         * Whether a step names its equipment the way the recipe it belongs to writes addresses.
+         * <p>
+         * The three ways a step can be wrong here are kept apart because they are three different
+         * mistakes. Naming neither leaves nothing to run on, which is a missing thing. Naming both means
+         * the recipe is not consistent with itself, which is a thing in the way.
+         * <p>
+         * The start and the stop of the process are not held to this at all. They say where the flow
+         * begins and ends and nothing about a plant, so a recipe in which they name equipment would be
+         * claiming something they do not. {@link #checkReachability} is what holds them to being there.
+         */
+        private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, String label,
                                             List<String> excess, List<String> deficit) {
         if (element.getKind() == S88RecipeElementKind.BEGIN
                 || element.getKind() == S88RecipeElementKind.END) {
@@ -211,6 +195,10 @@ private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, 
         boolean addressesByClass = !(recipe instanceof S88MasterRecipe master) || master.addressesByClass();
 
         if (hasClass && instances == 0) {
+            if (!addressesByClass) {
+                excess.add(label + " names a class of equipment in a recipe written for particular"
+                    + " equipment. A recipe of this kind says which module it runs on.");
+            }
             return;
         }
         if (!hasClass && instances == 0) {
@@ -381,21 +369,9 @@ private static void checkAddressing(S88Recipe recipe, S88RecipeElement element, 
 
      /**
      * A process has one place it starts and one place it stops.
-     *
-     * <p>
-     * A recipe with two starts or two stops has no single answer to where the flow begins or ends, and
-     * a runtime that walks the chart has to pick one of them. Which one it picks is not something the
-     * recipe says, so the recipe is what has to be told.
-     * <p>
-     * Nothing is said here about lines leading into the start or out of the stop. A chart that goes
-     * back to its start is a retry, and a retry is a thing ISA-88 asks for, so a line that does it is
-     * not a mistake and calling it one would make this rule wrong on the recipes it was written to
-     * help.
      */
     private static void checkEnds(S88Recipe recipe, S88ProcedureLogic logic, List<String> excess) {
         if (logic == null) {
-            // A recipe with no chart has nothing to have two ends of, and a chart with no start or
-            // stop is already said by checkReachability.
             return;
         }
         for (S88ProcedureElementKindPair ends : S88ProcedureElementKindPair.BOTH) {

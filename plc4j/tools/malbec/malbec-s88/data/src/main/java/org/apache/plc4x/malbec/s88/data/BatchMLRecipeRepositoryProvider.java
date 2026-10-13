@@ -26,10 +26,6 @@ import org.openide.util.lookup.ServiceProvider;
 
 /**
  * Offers recipes in the B2MML format of MESA.
- * <p>
- * Takes the same {@code xml} name as the plant does, because a recipe and a plant are both this
- * format and a caller asking for it should not have to know which of the two it is about to get.
- * Which one it gets is decided by what it asks the returned repository for, not by the name.
  */
 @ServiceProvider(service = S88RecipeRepositoryProvider.class)
 public class BatchMLRecipeRepositoryProvider implements S88RecipeRepositoryProvider {

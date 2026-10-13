@@ -28,8 +28,7 @@ import java.util.Optional;
 /**
  * The chart of a recipe: the boxes, the lines between them, and the bars the flow has to cross.
  * <p>
- * What it does offer is lookup: given a name, find the step, the line, or the bar. That is enough
- * to draw the chart and enough to check it, and it commits to nothing about running it.
+ * What it does offer is lookup: given a name, find the step, the line, or the bar.
  * <p>
  * The three lists keep the order the recipe format requires, which is not the order they read best
  * in: links, then steps, then transitions.

@@ -27,14 +27,6 @@ import org.openide.filesystems.FileObject;
 
 /**
  * Storage that reads and writes one file of a NetBeans project.
- * <p>
- * Shared rather than repeated. A plant file and a recipe file are both a single file inside the
- * project, and both repositories take an {@link S88Storage} rather than knowing about projects, so
- * this is the one place that has to know how a {@link FileObject} turns into streams.
- * <p>
- * It lives here, next to the repositories that take it, rather than in the model: the model is
- * plain Java with no NetBeans in it, and one of the two halves of this tool is the runtime that
- * will read these files without a project in sight at all.
  */
 public record FileObjectStorage(FileObject fileObject) implements S88Storage {
 

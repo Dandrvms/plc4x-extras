@@ -29,21 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Use case for taking a step out of a recipe.
- * <p>
- * This refuses when something still points at the step, and says what. That is the one place where
- * a recipe behaves differently from the plant, where deleting an element is simply a matter of
- * detaching it: a step of a recipe is named in a chart as often as it is anything else, and a box on
- * the chart and a step of the recipe are not the same thing.
- * <p>
- * So the box is removed by {@code RemoveProcedureStepUseCase} and the step by this one, and each
- * refuses while the other still stands. Tearing both down in one go would mean guessing which of the
- * lines touching the box were there to be kept, and a line with one end missing is not something a
- * reader can be expected to put right on their own.
- * <p>
- * Deleting a step takes everything nested under it with it, which is the only sensible reading: a
- * phase with no operations is not a phase. The refusal happens first, so a step that is still
- * pointed at leaves the whole subtree alone.
+ * Taking a step out of a recipe. Refuses when something still points at the step, and says what.
  */
 public class DeleteRecipeElementUseCase {
 
@@ -92,13 +78,7 @@ public class DeleteRecipeElementUseCase {
     }
 
     /**
-     * The things still naming this step, which means the boxes on every chart in the recipe that work
-     * on it, and the lines those boxes are joined by, since taking a box off a chart that still has
-     * lines running into it is refused in its own right.
-     * <p>
-     * The lines are not looked at for a name of their own. A line names the box it runs between and
-     * not the step the box works on, so a line named after a step would be a coincidence of naming
-     * rather than a reference, and reading one as the other would refuse deletions for no reason.
+     * The things still naming this step.
      *
      * @param recipe recipe to look through
      * @param step   step being asked about

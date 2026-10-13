@@ -18,6 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import org.netbeans.core.spi.multiview.MultiViewFactory;
@@ -27,20 +28,6 @@ import org.openide.windows.TopComponent;
 
 /**
  * The window a recipe is edited in, one per recipe file.
- * <p>
- * <b>It does not extend {@code TopComponent} and carries no window annotations.</b> A top component
- * registered with the platform is one window that the platform remembers, offers once in the Window
- * menu, and will happily open whether there is a recipe behind it or not. A recipe editor has to be
- * the opposite of that: one only for a file that exists, and a different one for every such file.
- * Registering it would also put an "Open" in the Window menu that opens an editor of nothing.
- * <p>
- * The window that is actually shown is the one the platform's multiview factory builds, because that
- * is where the tab bar, the tab lifecycle and the close prompt live. This builds the tabs and hands
- * them over.
- * <p>
- * <b>At most one editor per file.</b> Opening a recipe that is already open brings that one forward
- * instead of making a second window over the same file, because two windows over one file is two of
- * them writing to one file.
  */
 public final class RecipeEditorTopComponent {
 
@@ -54,9 +41,9 @@ public final class RecipeEditorTopComponent {
      *
      * @param recipeFile the recipe to edit
      * @return the window, whether it was made now or was already there
-     * @throws java.io.IOException when the file does not hold a recipe that can be read
+     * @throws IOException when the file does not hold a recipe that can be read
      */
-    public static TopComponent showFor(FileObject recipeFile) throws java.io.IOException {
+    public static TopComponent showFor(FileObject recipeFile) throws IOException {
         String key = recipeFile.getPath();
         synchronized (RecipeEditorTopComponent.class) {
             TopComponent existing = OPEN.get(key);
@@ -66,9 +53,7 @@ public final class RecipeEditorTopComponent {
             }
         }
 
-        // Read before any window is made. A recipe that cannot be read has to fail here, because an
-        // editor over one that was not read would show an empty recipe and the first save would write
-        // that empty recipe over the one on disk.
+
         RecipeEditorModel model = RecipeEditorModel.open(recipeFile);
         TopComponent window = build(key, model);
         window.open();
@@ -80,22 +65,16 @@ public final class RecipeEditorTopComponent {
 
     /**
      * Builds the window for a recipe.
-     * <p>
-     * The tab list is the place a second view of the same recipe goes. Every tab is handed the same
-     * editor state, which is what makes the views of one recipe agree with each other.
-     * <p>
-     * <b>The chart is a tab, not a window of its own.</b> The steps of a recipe and the chart of
-     * those steps are one thing seen twice, and a second window would be two windows over one file
-     * writing to one file.
      */
     private static TopComponent build(String key, RecipeEditorModel model) {
-        RecipeMultiViewDescription steps = RecipeMultiViewDescription.steps(key);
         RecipeMultiViewDescription chart = RecipeMultiViewDescription.chart(key);
-        steps.setModel(model);
-        chart.setModel(model);
-        RecipeMultiViewDescription[] tabs = {steps, chart};
+        RecipeMultiViewDescription steps = RecipeMultiViewDescription.steps(key);
 
-        TopComponent window = MultiViewFactory.createMultiView(tabs, steps, new RecipeCloseHandler());
+        chart.setModel(model);
+        steps.setModel(model);
+        RecipeMultiViewDescription[] tabs = {chart, steps};
+
+        TopComponent window = MultiViewFactory.createMultiView(tabs, chart, new RecipeCloseHandler());
         String label = model.getRecipe().getId() != null
                 ? model.getRecipe().getId()
                 : model.getRecipeFile().getNameExt();
@@ -116,5 +95,12 @@ public final class RecipeEditorTopComponent {
     public static synchronized boolean isOpen(FileObject recipeFile) {
         TopComponent window = OPEN.get(recipeFile.getPath());
         return window != null && window.isOpened();
+    }
+
+
+    public static synchronized void unregister(FileObject recipeFile) {
+        if (recipeFile != null) {
+            OPEN.remove(recipeFile.getPath());
+        }
     }
 }

@@ -31,13 +31,6 @@ import org.openide.util.Lookup;
 
 /**
  * Opens a recipe in an editor.
- * <p>
- * There is no open action from the platform for this file, because a recipe has no registered file
- * type and so is not a data object that the platform knows how to open. This is that action instead.
- * <p>
- * <b>A recipe that cannot be read is said out loud and nothing opens.</b> An editor over a recipe
- * that was not read would show an empty recipe, and the first save would write that empty recipe over
- * the one on disk, which is a worse outcome than not opening at all.
  */
 public final class RecipeOpenAction extends AbstractAction implements ContextAwareAction {
 

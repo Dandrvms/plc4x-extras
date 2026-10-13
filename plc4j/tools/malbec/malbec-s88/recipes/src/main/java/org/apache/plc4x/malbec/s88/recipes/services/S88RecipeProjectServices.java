@@ -25,10 +25,6 @@ import org.openide.util.Lookup;
 
 /**
  * NetBeans integration service for recipe repositories.
- * <p>
- * The counterpart of the one the plant has. What it buys is that a caller names the format and not
- * the class: the recipe repositories are reached the same way the plant ones already are, so adding
- * a format means adding a provider and touching nothing that opens a recipe.
  */
 public final class S88RecipeProjectServices {
 

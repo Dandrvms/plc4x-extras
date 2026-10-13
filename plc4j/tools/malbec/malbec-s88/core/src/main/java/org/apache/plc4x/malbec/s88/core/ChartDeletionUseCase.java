@@ -36,15 +36,11 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 /**
  * Takes a box off a chart and joins the flow across it.
  *
- * <p>Where the step sits in its branch decides what happens to the bars around it. A step in the
+ * <p>Where the step sits in its branch decides what happens to the surrounding bars. A step in the
  * middle of a run takes its own bar with it and the step behind carries on through the bar that was
  * behind it. A step that opens a branch hands the bar that opened it to the step behind it, and a
  * step that ends one hands the bar that ended it to the step in front of it. A branch of one step
- * goes with that step, because there is nothing left of it.
- *
- * <p>A bar that another branch also arrives at or leaves from is not the step's to take away, and
- * joining across it means putting the step in that branch's place on the line it already shares,
- * keeping the line the kind of line it is.
+ * goes with that step.
  *
  * <p>The whole rearrangement is worked out on a copy and checked before the recipe is touched, so a
  * chart that cannot be joined again leaves the recipe as it was.
@@ -54,8 +50,6 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  */
 public final class ChartDeletionUseCase {
 
-    /** Enough passes for any chart the editor can draw, and a stop if something is looping. */
-    private static final int PASSES = 64;
 
     private ChartDeletionUseCase() {
         /* This utility class should not be instantiated */
@@ -81,6 +75,8 @@ public final class ChartDeletionUseCase {
         refuseIfEnd(recipe, box);
         String elementId = box.getRecipeElementId();
 
+        refuseIfNestedChartsNameIt(recipe, elementId);
+
         S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
         takeStepOff(joined, boxId);
         List<String> sweptUp = sweepUpWhatNothingReaches(joined);
@@ -92,6 +88,28 @@ public final class ChartDeletionUseCase {
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
+    private static void refuseIfNestedChartsNameIt(S88Recipe recipe, String elementId) {
+        List<String> pointing = new ArrayList<>();
+        collectBoxes(pointing, elementId, recipe.getProcedureLogic());
+        for (S88RecipeElement element : recipe.getAllElements()) {
+            collectBoxes(pointing, elementId, element.getProcedureLogic());
+        }
+        if (!pointing.isEmpty()) {
+            throw new IllegalStateException("Step '" + elementId + "' is still drawn in "
+                + String.join(", ", pointing) + ", so taking it off this chart would leave a line"
+                + " going to nothing. Take it off that chart first.");
+        }
+    }
+
+    private static void collectBoxes(List<String> pointing, String elementId, S88ProcedureLogic chart) {
+        if (chart == null) {
+            return;
+        }
+        chart.getSteps().stream()
+            .filter(box -> elementId.equals(box.getRecipeElementId()))
+            .forEach(box -> pointing.add("'" + box.getId() + "'"));
+    }
+
     /**
      * Where the step sits, and what the bars on either side of it are, decides who takes its place.
      */
@@ -101,37 +119,37 @@ public final class ChartDeletionUseCase {
         if (arriving == null || leaving == null) {
             return;
         }
-        String before = arriving.getFrom().get(0).getValue();
+        String before = arriving.getFrom().getFirst().getValue();
         List<String> barsBehind = names(leaving.getTo());
         if (barsBehind.size() > 1) {
             throw new IllegalStateException("Step '" + boxId + "' leads to " + barsBehind.size()
                     + " bars at once, so the flow splits here and there is no one bar to join"
                     + " across to.");
         }
-        String after = barsBehind.get(0);
+        String after = barsBehind.getFirst();
         List<String> nextSteps = branchEndsAt(chart, leaving, after) ? List.of()
                 : theOnlyStepAfter(chart, after);
         List<String> beforeBox = theOnlyBoxBefore(chart, before);
 
         if (!beforeBox.isEmpty()) {
             if (leaving.getFrom().size() > 1) {
-                joinIntoTheConvergence(chart, boxId, before, beforeBox.get(0), leaving);
+                joinIntoTheConvergence(chart, boxId, before, beforeBox.getFirst(), leaving);
             } else {
-                joinAcross(chart, boxId, before, beforeBox.get(0), after);
+                joinAcross(chart, boxId, before, beforeBox.getFirst(), after);
             }
             return;
         }
         if (nextSteps.isEmpty()) {
             takeTheBranchOff(chart, boxId, before, after, waitsOnABranchOfItsOwn(chart, before));
         } else {
-            handTheBranchToTheNextStep(chart, boxId, before, after, nextSteps.get(0));
+            handTheBranchToTheNextStep(chart, boxId, before, after, nextSteps.getFirst());
         }
     }
 
     /**
-     * Whether this branch is over at the bar behind the step. A parallel branch ends at the bar the
-     * other branches come back to, and a branch of the other kind ends at the bar other branches are
-     * already on its way out of. Neither has a step of this branch behind it.
+     * It depends on whether this branch extends to the bar behind the step.
+     * A parallel branch connects to the common return bar, while a branch of the alternative
+     * type connects to an outgoing bar. Neither of them has a step following this branch.
      */
     private static boolean branchEndsAt(S88ProcedureLogic chart, S88ProcedureLink leaving,
                                         String after) {
@@ -153,10 +171,10 @@ public final class ChartDeletionUseCase {
 
     /**
      * The one box that leads to this bar, or nothing when the bar is not this step's to take away.
-     *
-     * <p>A bar the flow splits out of is one of several a line leads to, and a bar the flow joins on
-     * is reached by more than one box. Neither has the one box in front of it that joining across
-     * needs.
+     * <p>
+     * A bar from which the flow branches off is one of several to which a line leads, and a bar to
+     * which the flow joins is the one reached by more than one cell. Neither of the two has the
+     * cell located immediately in front of it, which is necessary for the cross-connection.
      */
     private static List<String> theOnlyBoxBefore(S88ProcedureLogic chart, String barId) {
         S88ProcedureLink line = onlyTouching(chart, barId, true);
@@ -202,7 +220,7 @@ public final class ChartDeletionUseCase {
 
     /**
      * This step opened its branch, so the step behind it takes its place. When the bar that opened
-     * the branch belongs to the branch alone it is kept and linked to the step behind, and when it
+     * the branch belongs to the branch alone it is kept and linked to the step behind. When it
      * is a bar the flow splits out of, the step behind it goes on that line in this step's place.
      */
     private static void handTheBranchToTheNextStep(S88ProcedureLogic chart, String boxId,
@@ -220,8 +238,7 @@ public final class ChartDeletionUseCase {
     }
 
     /**
-     * This step was all its branch had, so the branch goes with it. A bar that belongs to the branch
-     * alone goes too, and a bar the flow splits out of stays, with one branch less to split into.
+     * This step was all its branch had, so the branch goes with it.
      */
     private static void takeTheBranchOff(S88ProcedureLogic chart, String boxId, String before,
                                          String after, boolean ofItsOwn) {
@@ -239,13 +256,13 @@ public final class ChartDeletionUseCase {
  */
     private static List<String> sweepUpWhatNothingReaches(S88ProcedureLogic chart) {
         List<String> taken = new ArrayList<>();
-        for (int pass = 0; pass < PASSES; pass++) {
+        int ceiling = chart.getSteps().size() + 1;
+        for (int pass = 0; pass < ceiling; pass++) {
             List<S88ProcedureStep> unreached = new ArrayList<>();
             for (S88ProcedureStep box : chart.getSteps()) {
-                if (!arrivalsOf(chart, box.getId()).isEmpty() || box.getId().equals("BEGIN")) {
-                    continue;
+                if (arrivalsOf(chart, box.getId()).isEmpty() || !box.getId().equals("BEGIN")) {
+                    unreached.add(box);
                 }
-                unreached.add(box);
             }
             if (unreached.isEmpty()) {
                 return taken;
@@ -353,8 +370,7 @@ public final class ChartDeletionUseCase {
             line.getFrom().stream().filter(end -> !id.equals(end.getValue())).forEach(from::add);
             line.getTo().stream().filter(end -> !id.equals(end.getValue())).forEach(to::add);
             if (!from.isEmpty() && !to.isEmpty()) {
-                // A line with one end at each side is an ordinary line. One that still says it
-                // splits or joins is a branch with a whole side of it still there.
+
                 S88LinkType type = from.size() < 2 && to.size() < 2 ? null : line.getLinkType();
                 chart.addLink(rebuilt(line.getId(), from, to, type));
             }

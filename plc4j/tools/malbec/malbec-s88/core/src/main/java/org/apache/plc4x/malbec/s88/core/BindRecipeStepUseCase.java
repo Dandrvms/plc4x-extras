@@ -21,30 +21,13 @@ package org.apache.plc4x.malbec.s88.core;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.plc4x.malbec.s88.api.DataType;
-import org.apache.plc4x.malbec.s88.api.S88Element;
-import org.apache.plc4x.malbec.s88.api.S88ElementClass;
-import org.apache.plc4x.malbec.s88.api.S88Level;
-import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
-import org.apache.plc4x.malbec.s88.api.S88Recipe;
-import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
-import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
+
+import org.apache.plc4x.malbec.s88.api.*;
 
 /**
  * What a step of a recipe is: one piece of equipment with values given to its parameters.
- *
  * <p>
- * <b>A step is created empty and named here.</b> A box with nothing behind it is a place the flow
- * goes through and nothing else, which is what a step is until it is given something to do. The name
- * is not asked for either: it is the name of the equipment, because a name the operator types is a
- * name that can be typed wrong, and a recipe full of equipment that is not there is a recipe
- * nobody can run.
- *
- * <p>
- * <b>The two kinds of recipe are bound differently, and mixing them up is the mistake this class is
- * written to be hard about.</b> A class recipe names a class of equipment and leaves the choice of
+ * A step is created empty and named here. A class recipe names a class of equipment and leaves the choice of
  * equipment to the batch, so the variables it carries are the base names the class publishes and
  * something else resolves them later. An equipment recipe names the equipment itself, so its variables
  * are the names that equipment publishes and there is nothing left to resolve.
@@ -80,10 +63,6 @@ public final class BindRecipeStepUseCase {
 
     /**
      * The classes a step of a class recipe can stand for.
-     * <p>
-     * Units as well as equipment modules, because a unit is written as the steps of the modules it
-     * is made of, and a recipe that names a unit says the same thing as one that names the modules
-     * of that unit.
      */
     private static List<String> classesFor(S88PlantSnapshot plant) {
         Map<String, String> byName = new LinkedHashMap<>();
@@ -116,8 +95,7 @@ public final class BindRecipeStepUseCase {
     }
 
     /**
-     * Binds a step to a class of equipment, which is what a
-     * {@link org.apache.plc4x.malbec.s88.api.S88RecipeKind#CLASS} recipe does.
+     * Binds a step to a class of equipment.
      *
      * @param recipe    recipe being edited, may be {@code null} when no change event is wanted
      * @param step      step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -138,21 +116,18 @@ public final class BindRecipeStepUseCase {
         }
         S88RecipeElement element = elementOn(recipe, chart, boxId);
         requireNotStopped(element);
-        // A class recipe names no equipment, so nothing is written to the equipment fields and the
-        // binding is the class alone.
+
         element.setEquipmentUid(null);
         removeEveryEquipment(element);
         element.setEquipmentClassId(className);
-        // The class publishes base names. They are written down as they are and are resolved to a
-        // concrete equipment later, which is a question for the batch and not for this recipe.
+
         giveParametersFrom(element, equipmentClass.getProperties());
         nameAfter(recipe, step, chart, boxId, className);
         return element;
     }
 
     /**
-     * Binds a step to one piece of equipment, which is what an
-     * {@link org.apache.plc4x.malbec.s88.api.S88RecipeKind#INSTANCE} recipe does.
+     * Binds a step to one piece of equipment.
      *
      * @param recipe   recipe being edited, may be {@code null} when no change event is wanted
      * @param step     step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -174,22 +149,17 @@ public final class BindRecipeStepUseCase {
         element.setEquipmentClassId(null);
         removeEveryEquipment(element);
         element.addActualEquipmentId(equipmentId);
-        // The uid rather than the name, so that renaming the equipment in the plant leaves this
-        // recipe saying the same equipment.
+
         element.setEquipmentUid(equipment.getUid());
-        // A piece of equipment publishes names of its own and there is nothing left to resolve, so what it
-        // publishes is what the recipe writes down.
+
         giveParametersFrom(element, equipment.getProperties());
         nameAfter(recipe, step, chart, boxId, equipmentId);
         return element;
     }
 
-/**
+    /**
      * Takes every piece of equipment off a step, so that binding it to a class leaves nothing of what
      * it had before.
-     * <p>
-     * A step bound to a class and a step bound to particular equipment are two different things, and
-     * a step carrying both says it stands for one piece of equipment and for any of a class at the same time.
      */
     private static void removeEveryEquipment(S88RecipeElement element) {
         for (String boundId : element.getActualEquipmentIds()) {
@@ -199,13 +169,13 @@ public final class BindRecipeStepUseCase {
 
     /**
      * The step a box of the chart works on.
- *
- * @param recipe the recipe the chart belongs to
- * @param chart  the chart the box is on
- * @param boxId  name of the box
- * @return the step behind the box
- * @throws IllegalArgumentException when there is no such box or it works on no step
- */
+     *
+     * @param recipe the recipe the chart belongs to
+     * @param chart  the chart the box is on
+     * @param boxId  name of the box
+     * @return the step behind the box
+     * @throws IllegalArgumentException when there is no such box or it works on no step
+     */
     private static S88RecipeElement elementOn(S88Recipe recipe, S88ProcedureLogic chart,
                                               String boxId) {
         S88ProcedureStep box = chart.findStep(boxId)
@@ -244,18 +214,7 @@ public final class BindRecipeStepUseCase {
     }
 
     /**
- * Puts an empty step on the chart after a box, and asks nothing.
- *
- * <p>
- * <b>A step is made empty and named afterwards.</b> A box that the flow goes through and that has
- * nothing behind it is a step that has not been given anything to do yet, which is a thing an author
- * makes on purpose when drawing the shape of a process before knowing what will do the work. Asking
- * for a name at this point would mean asking for it twice, and the name that counts is the one the
- * equipment gives.
- *
- * <p>
- * The names are made here and are never shown: the step is called something, and it stops being
- * called that the moment one piece of equipment is bound to it.
+ * Puts an empty step on the chart after a box.
  *
  * @param recipe     recipe being edited, may be {@code null} when no change event is wanted
  * @param step       step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -321,9 +280,19 @@ public final class BindRecipeStepUseCase {
                     box.setRecipeElementId(newId);
                 }
             }
-            // Through the recipe, so that its index of steps by name keeps up. A step whose name
-            // changed while the index kept the old one cannot be found by anything that looks it up.
+            rewriteBoxes(recipe.getProcedureLogic(), oldId, newId);
             recipe.renameRecipeElement(element, newId);
+        }
+    }
+
+    private static void rewriteBoxes(S88ProcedureLogic chart, String oldId, String newId) {
+        if (chart == null) {
+            return;
+        }
+        for (S88ProcedureStep box : chart.getSteps()) {
+            if (oldId.equals(box.getRecipeElementId())) {
+                box.setRecipeElementId(newId);
+            }
         }
     }
 
@@ -333,7 +302,7 @@ public final class BindRecipeStepUseCase {
      * @throws IllegalStateException when the step is the end of the process
      */
     private static void requireNotStopped(S88RecipeElement element) {
-        if (element.getKind() == org.apache.plc4x.malbec.s88.api.S88RecipeElementKind.END) {
+        if (element.getKind() == S88RecipeElementKind.END) {
             throw new IllegalStateException("Step '" + element.getId() + "' is where the flow stops,"
                     + " so there is nothing to attach to it.");
         }
@@ -343,7 +312,7 @@ public final class BindRecipeStepUseCase {
      * Writes down a value for every parameter the equipment declares.
      * <p>
      * The value written is the one the plant says the parameter starts at, which is what the equipment
-     * would be holding if nobody had touched it. An operator then changes the ones the recipe is
+     * would be holding if nobody had touched it. A user then changes the ones the recipe is
      * about, and the ones they did not change say what the equipment already does.
      */
     @SuppressWarnings("unchecked")
@@ -361,8 +330,9 @@ public final class BindRecipeStepUseCase {
             Map<String, Object> definition = (Map<String, Object>) raw;
             DataType dataType = dataTypeOf(text(definition, "Type"));
             String unitsOrEnum = text(definition, UNITS_OR_ENUM);
-            // An enumeration has no unit. The plant keeps the name of the one in the same place it
-            // keeps a unit, so writing it as a unit would export a parameter saying its value is
+
+            // An enumeration has no engineering units. The plant keeps the name of the one in the same place it
+            // keeps a unit. Writing it as an engineering unit would export a parameter saying its value is
             // measured in "COMMAND", which is a name and not a measure.
             S88RecipeParameter added = S88RecipeParameter.of(
                     declaredParameter.getKey(),

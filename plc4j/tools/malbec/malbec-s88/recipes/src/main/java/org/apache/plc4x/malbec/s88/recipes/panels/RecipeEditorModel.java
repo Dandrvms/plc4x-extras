@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import javax.swing.undo.AbstractUndoableEdit;
+import javax.swing.undo.CannotRedoException;
+import javax.swing.undo.CannotUndoException;
+
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
@@ -39,23 +42,6 @@ import org.openide.filesystems.FileObject;
 
 /**
  * What an open editor is holding, and what it does about it.
- * <p>
- * One of these per open recipe, and both views are handed the same one. That is the whole reason
- * editing the table and looking at the graph can be the same window: there is one recipe, and it has
- * one unsaved state and one history.
- * <p>
- * <b>It owns the unsaved state because nothing else does.</b> A recipe file has no type registered for
- * it and so is not a {@code DataObject}, which in the platform is what carries a document and its
- * dirty flag and supplies Save, Undo and Redo for nothing. Here the editor is the document, so it has
- * to keep track of whether there is anything to save itself.
- * <p>
- * <b>Every change goes through {@link #edit}</b>, so that every change can be undone and every change
- * marks the recipe as unsaved. An edit that goes around that is a change nobody can take back.
- * <p>
- * <b>The recipe is read again rather than edited in place after a revert.</b> A revert replaces the
- * recipe object instead of emptying it and refilling it, because there is no copy into an existing
- * recipe. A view therefore asks {@link #getRecipe()} every time it redraws rather than holding on to
- * the recipe it was given.
  */
 public final class RecipeEditorModel {
 
@@ -87,10 +73,6 @@ public final class RecipeEditorModel {
 
     /**
      * Reads a recipe file so that it can be edited.
-     * <p>
-     * A file that cannot be read is a failure here rather than a recipe with something missing. An
-     * editor that opened on a recipe it had not managed to read would show an empty recipe, and the
-     * next save would write that empty recipe over the one on disk.
      *
      * @param recipeFile the recipe to open
      * @return the editor state for it
@@ -109,8 +91,6 @@ public final class RecipeEditorModel {
      */
     private static S88PlantSnapshot plantUnder(FileObject recipeFile) throws IOException {
         if (recipeFile == null) {
-            // A recipe read from somewhere that is not a project of its own, which is what a test
-            // and a runtime reading recipes off a piece of equipment do.
             return null;
         }
         FileObject folder = recipeFile.getParent();
@@ -125,11 +105,6 @@ public final class RecipeEditorModel {
 
     /**
      * Reads a recipe so that it can be edited, from wherever the recipe is kept.
-     * <p>
-     * The storage is what the recipe is read from and written to, and in the editor it is one file
-     * in a project. Taking it as an argument rather than assuming one is what lets the editor be
-     * opened on a recipe that is not in a project at all, which is what a test needs and what a
-     * runtime reading recipes off a piece of equipment would need.
      *
      * @param recipeFile the file being edited, {@code null} when there is no file
      * @param storage    where the recipe is read from and written to
@@ -171,8 +146,6 @@ public final class RecipeEditorModel {
 
     /**
      * The recipe being edited, shared by every view of it.
-     * <p>
-     * Asked for on each redraw rather than held on to, because a revert brings a different object.
      *
      * @return the recipe, never {@code null} while the window is open
      */
@@ -181,12 +154,8 @@ public final class RecipeEditorModel {
     }
 
     /**
- * What is wrong with the recipe right now, empty when it holds together.
- *
- * <p>
- * Measured against the plant frozen into the recipe set when it was made, because a recipe is about
- * the plant it was written against and not about whatever the plant file says today.
- */
+     * What is wrong with the recipe right now, empty when it holds together.
+     */
     public RecipeConformance conformance() {
         return RecipeConformance.of(recipe, plant);
     }
@@ -203,14 +172,6 @@ public final class RecipeEditorModel {
 
     /**
      * Makes a change that can be taken back.
-     * <p>
-     * <b>How it is taken back is not up to the caller.</b> A copy of the whole recipe is kept on both
-     * sides of the change, and undo and redo put those copies back. Asking the caller for a way back
-     * means every button has to know exactly what the change did and what undoes it, and one that
-     * does not is an edit that cannot be taken back, or one that undoes half of itself.
-     * <p>
-     * <b>A change that fails leaves nothing behind.</b> The copy from before is put back before the
-     * failure is reported, so a recipe that cannot take the change is a recipe that did not take it.
      *
      * @param name  how the undo button names this change, such as "Add step"
      * @param apply what the change does
@@ -226,9 +187,7 @@ public final class RecipeEditorModel {
             throw new RecipeEditException(name, failure);
         }
         S88MasterRecipe after = RecipeDeepCopy.copyMasterRecipe(recipe);
-        // The recipe on screen is the one the change made, but it is a copy of it: undo and redo
-        // both put their own copy back rather than running the change again, and the copy that is
-        // kept must be the one that was really the state of things.
+
         replaceRecipe(RecipeDeepCopy.copyMasterRecipe(after));
         undoRedo.add(new SnapshotEdit(before, after), name);
         fireChanged();
@@ -261,11 +220,7 @@ public final class RecipeEditorModel {
         }
     }
 
-    /**
-     * Takes back the last change.
-     *
-     * @return true when there was one to take back
-     */
+
     public boolean undo() {
         if (!undoRedo.canUndo()) {
             return false;
@@ -273,16 +228,12 @@ public final class RecipeEditorModel {
         try {
             undoRedo.undo();
             return true;
-        } catch (javax.swing.undo.CannotUndoException nothingToUndo) {
+        } catch (CannotUndoException nothingToUndo) {
             return false;
         }
     }
 
-    /**
-     * Puts back the change that was taken back.
-     *
-     * @return true when there was one to put back
-     */
+
     public boolean redo() {
         if (!undoRedo.canRedo()) {
             return false;
@@ -290,34 +241,23 @@ public final class RecipeEditorModel {
         try {
             undoRedo.redo();
             return true;
-        } catch (javax.swing.undo.CannotRedoException nothingToRedo) {
+        } catch (CannotRedoException nothingToRedo) {
             return false;
         }
     }
 
-    /**
-     * Writes the recipe out.
-     *
-     * @throws IOException when the file cannot be written
-     */
+
     public void save() throws IOException {
         repository.saveRecipe(recipe);
         savedPosition = undoRedo.position();
         fireChanged();
     }
 
-    /**
-     * Throws away everything changed since the recipe was read and reads it again.
-     * <p>
-     * The history goes with it. Leaving a stack of edits that undo to a recipe that is no longer on
-     * screen is how undo starts producing states nobody chose.
-     *
-     * @throws IOException when the file cannot be read again
-     */
+
     public void revert() throws IOException {
         S88MasterRecipe reloaded = repository.loadRecipe();
         if (reloaded == null) {
-            throw new IOException("'" + recipeFile.getNameExt() + "' no longer holds a recipe.");
+            throw new IOException("'" + name(recipeFile) + "' no longer holds a recipe.");
         }
         recipe = reloaded;
         undoRedo.discardAll();
@@ -325,26 +265,16 @@ public final class RecipeEditorModel {
         fireChanged();
     }
 
-    /**
-     * Throws the recipe away and puts another one in its place.
-     * <p>
-     * Used when an edit is taken back or put again: there is no copy of a recipe to fill in, so the
-     * whole thing is swapped for one that was kept.
-     *
-     * @param other the recipe to hold from now on
-     */
+
     private void replaceRecipe(S88MasterRecipe other) {
         this.recipe = other;
     }
 
-    /**
-     * Registers something to be told when the recipe changed.
-     */
+
     void addChangeListener(Consumer<RecipeEditorModel> listener) {
         listeners.add(listener);
     }
 
-    /** Stops telling a listener, so that a closed view is not called back into. */
     void removeChangeListener(Consumer<RecipeEditorModel> listener) {
         listeners.remove(listener);
     }

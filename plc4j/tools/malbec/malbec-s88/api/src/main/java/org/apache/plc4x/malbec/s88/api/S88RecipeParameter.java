@@ -57,7 +57,7 @@ public class S88RecipeParameter {
      * @param id           address of the variable
      * @param value        the value to apply
      * @param dataType     type of the variable, may be {@code null} to leave it unsaid
-     * @param unit         unit of the value, may be {@code null}
+     * @param unit         engineering unit of the value, may be {@code null}
      * @return the parameter
      */
     public static S88RecipeParameter of(String id, String value, DataType dataType, String unit) {

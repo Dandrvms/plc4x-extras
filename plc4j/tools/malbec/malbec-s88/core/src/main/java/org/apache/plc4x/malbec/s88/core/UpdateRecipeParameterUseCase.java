@@ -18,13 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.core;
 
-import org.apache.plc4x.malbec.s88.api.DataType;
-import org.apache.plc4x.malbec.s88.api.S88DataInterpretation;
-import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
-import org.apache.plc4x.malbec.s88.api.S88Recipe;
-import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
-import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
-import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
+import org.apache.plc4x.malbec.s88.api.*;
 
 import java.util.List;
 
@@ -76,6 +70,8 @@ public class UpdateRecipeParameterUseCase {
             return created;
         });
 
+        S88ParameterValue carried = parameter.getFirstValue();
+
         S88ParameterValue parameterValue = new S88ParameterValue();
         if (value != null) {
             parameterValue.addValueString(value);
@@ -83,6 +79,9 @@ public class UpdateRecipeParameterUseCase {
         parameterValue.setDataInterpretation(S88DataInterpretation.CONSTANT);
         parameterValue.setDataType(dataType);
         parameterValue.setUnitOfMeasure(unit);
+        if(carried != null) {
+            carried.getEnumerationSetIds().forEach(parameterValue::addEnumerationSetId);
+        }
         parameter.setValues(List.of(parameterValue));
 
         if (recipe != null) {
@@ -106,9 +105,13 @@ public class UpdateRecipeParameterUseCase {
      */
     public static String byBaseName(S88Recipe recipe, S88RecipeElement step, String container,
                                     String baseName, String value) {
-        String address = container + org.apache.plc4x.malbec.s88.api.S88VariableAddress.SEPARATOR
+        String address = container + S88VariableAddress.SEPARATOR
                 + baseName;
-        execute(recipe, step, address, value, null, null);
+        S88RecipeParameter target = step.findParameter(address).orElse(null);
+        S88ParameterValue carried = target == null ? null : target.getFirstValue();
+        execute(recipe, step, address, value,
+            carried == null ? null : carried.getDataType(),
+            carried == null ? null : carried.getUnitOfMeasure());
         return address;
     }
 

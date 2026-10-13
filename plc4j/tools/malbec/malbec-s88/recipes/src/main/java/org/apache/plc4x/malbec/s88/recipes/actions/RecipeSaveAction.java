@@ -30,13 +30,6 @@ import org.openide.util.Lookup;
 
 /**
  * Writes the recipe on disk.
- * <p>
- * The platform has a save action, but it belongs to a document, and a recipe is not one: its file
- * has no registered file type and so the platform does not know there is anything here to save. This
- * action stands in for it, and it is on the toolbar of every view and bound to {@code Ctrl+S}.
- * <p>
- * A recipe that cannot be written is said out loud and stays unsaved, so the window still knows
- * there is something to save rather than quietly claiming otherwise.
  */
 public final class RecipeSaveAction extends AbstractAction implements ContextAwareAction {
 
@@ -57,21 +50,15 @@ public final class RecipeSaveAction extends AbstractAction implements ContextAwa
         if (model == null) {
             return;
         }
-        save(model, null);
+        save(model);
     }
 
     /**
      * Writes a recipe out, and says so out loud when it cannot be written.
      *
-     * <p>
-     * Shared with the window that asks about closing, because a recipe that could not be written on
-     * purpose and one that could not be written by accident are the same problem for the operator and
-     * have to be said about the same way.
-     *
      * @param model  the recipe to write
-     * @param parent the window the complaint belongs to, {@code null} for none
      */
-    public static void save(RecipeEditorModel model, java.awt.Component parent) {
+    public static void save(RecipeEditorModel model) {
         try {
             model.save();
         } catch (IOException e) {

@@ -19,6 +19,8 @@
 package org.apache.plc4x.malbec.s88.recipes.services;
 
 import java.io.IOException;
+import java.util.ServiceLoader;
+
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88Repository;
@@ -31,52 +33,17 @@ import org.openide.filesystems.FileObject;
 
 /**
  * The plant a recipe set was written against, frozen into its own file.
- *
+ * So the plant is copied once, into this folder, and every recipe of the set reads that copy.
  * <p>
- * <b>A recipe belongs to the plant it was written against, not to the plant as it is now.</b> A
- * equipment that is renamed, moved or given a different parameter after a recipe was written does not
- * stop being the equipment that recipe steps on, and a recipe that silently followed the change would
- * be a recipe that no longer says what its author meant. So the plant is copied once, into this
- * folder, and every recipe of the set reads that copy.
+ * Taking a new snapshot is a migration, and there is none yet.
  *
- * <p>
- * <b>The copy is never taken again.</b> Taking a new one would change what every existing recipe
- * means, which is a question for the author of those recipes and not for the editor. Taking a new
- * snapshot is a migration, and there is none yet.
- *
- * <p>
- * <b>The file is not a recipe and does not say it is one.</b> It has no {@code .xml} extension and
- * the recipe set node leaves out anything that is not a recipe, so there is no node to open, rename
- * or delete. Nothing in the editor writes to it either: it is read and left alone.
- *
- * <p>
- * The plant is found by the name of its own file rather than by asking the plant module, which is
- * the same convention {@code recipes.cfg} and {@code plant.cfg} already follow across the modules of
- * this project. That is what lets a recipe be written without the plant module on the classpath at
- * all, and only the plant it was written against matters from then on.
- *
- * @see #SNAPSHOT_FILE
- * @see #PLANT_FILE
  */
 public final class RecipeSetPlantSnapshot {
 
-    /**
-     * What the frozen plant is called inside a recipe set.
-     * <p>
-     * Without an extension on purpose. The recipe set lists what ends in {@code .xml} and nothing
-     * else, and a file that has to be excluded by name is a file that can be shown by mistake.
-     */
     public static final String SNAPSHOT_FILE = "plant.snapshot";
 
-    /**
-     * The name the plant of a project has, which is how it is found from a recipe set.
-     * <p>
-     * The plant module declares the same name for its own project file, and neither module can ask
-     * the other for it without one of them depending on the other.
-     */
     public static final String PLANT_FILE = "plant.xml";
 
-    /** The format the frozen plant is written in, which is the one the plant itself is. */
     private static final String FORMAT = "xml";
 
     private RecipeSetPlantSnapshot() {
@@ -108,8 +75,7 @@ public final class RecipeSetPlantSnapshot {
     /**
      * Freezes the plant of a project into a recipe set that has none yet.
      * <p>
-     * Does nothing when the recipe set already has one, because that file is the plant every recipe
-     * of the set already means and taking it again would change all of them.
+     * Does nothing when the recipe set already has one.
      *
      * @param recipeSet recipe set the plant is frozen into
      * @param plant     plant of the project the recipe set belongs to
@@ -117,7 +83,7 @@ public final class RecipeSetPlantSnapshot {
      * @throws IOException when the file cannot be written
      * @throws IllegalArgumentException when there is no plant to freeze
      */
-public static boolean takeIfMissing(Project recipeSet, S88PlantModel plant) throws IOException {
+    public static boolean takeIfMissing(Project recipeSet, S88PlantModel plant) throws IOException {
         if (isTaken(recipeSet)) {
             return false;
         }
@@ -143,7 +109,7 @@ public static boolean takeIfMissing(Project recipeSet, S88PlantModel plant) thro
 
     private static S88Repository createRepository(S88Storage storage) {
         for (S88RepositoryProvider provider
-                : java.util.ServiceLoader.load(S88RepositoryProvider.class)) {
+                : ServiceLoader.load(S88RepositoryProvider.class)) {
             if (provider.accepts(FORMAT)) {
                 return provider.createRepository(storage);
             }

@@ -18,9 +18,8 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
-import java.awt.BorderLayout;
-import java.awt.Component;
-import java.awt.Dimension;
+import java.awt.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,17 +47,6 @@ import org.apache.plc4x.malbec.s88.core.UpdateRecipeParameterUseCase;
  * What one step of a recipe is for: the equipment behind it, the values it gives that equipment, and
  * the values it will read back off it.
  *
- * <p>
- * <b>A step is a piece of equipment with values on it.</b> The parameters are what the step sets,
- * and they are the part an author changes from recipe to recipe. The reports are what the step reads
- * back, and they are here to be looked at rather than edited, because a report is what the equipment
- * publishes and a recipe does not get to decide what that equipment says.
- *
- * <p>
- * <b>Whether the names are the equipment's own or the class's base names is not decided here.</b> A
- * recipe written for particular equipment names the variables that equipment publishes, and a recipe
- * written by class names the base names its class declares, which are resolved to a piece of equipment later.
- * Either way the names come from the plant and the author does not type them.
  */
 final class StepEquipmentDialog extends JDialog {
 
@@ -87,8 +75,7 @@ final class StepEquipmentDialog extends JDialog {
 
         @Override
         public boolean isCellEditable(int row, int column) {
-            // Only the value is the recipe's to change. The name, the type and the units are what
-            // the plant says, and the allowed values are what it will accept.
+            // parameter value column
             return column == 1;
         }
     };
@@ -98,7 +85,7 @@ final class StepEquipmentDialog extends JDialog {
         private static final long serialVersionUID = 1L;
     };
 
-    StepEquipmentDialog(java.awt.Window owner, RecipeEditorModel model, S88RecipeElement step) {
+    StepEquipmentDialog(Window owner, RecipeEditorModel model, S88RecipeElement step) {
         super(owner, "Equipment of " + step.getId(), ModalityType.APPLICATION_MODAL);
         this.model = model;
         this.step = step;
@@ -106,8 +93,8 @@ final class StepEquipmentDialog extends JDialog {
         this.byClass = model.getRecipe().addressesByClass();
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Parameters", table(parameters));
-        tabs.addTab("Reports", table(reports));
+        tabs.addTab(PARAMETERS, table(parameters));
+        tabs.addTab(REPORTS, table(reports));
         add(tabs, BorderLayout.CENTER);
         add(buttons(), BorderLayout.SOUTH);
         read();
@@ -162,8 +149,6 @@ final class StepEquipmentDialog extends JDialog {
         for (S88RecipeParameter parameter : step.getParameters()) {
             String name = parameter.getId();
             if (PlatformVariable.isWrittenByTheBatch(name)) {
-                // The batch writes this one while the recipe runs. Offering it here would ask the
-                // author for something they do not decide.
                 continue;
             }
             Map<String, Object> definition = plantParameters.get(name);
@@ -190,10 +175,6 @@ final class StepEquipmentDialog extends JDialog {
 
     /**
      * The parameters and reports of whatever this step stands for.
-     * <p>
-     * A step bound to a class reads the class, because a class is what it names and what the batch
-     * will resolve it against. A step bound to one piece of equipment reads that equipment, because that is the only
-     * place the values it will send and read are written down.
      */
     private Map<String, Object> publishedBy() {
         if (byClass) {
@@ -252,40 +233,44 @@ final class StepEquipmentDialog extends JDialog {
 
     /**
      * Writes the values the author changed back into the recipe.
-     * <p>
-     * Each one on its own edit, so that undo takes back one value rather than the whole table.
      */
     private void saveValues() {
         Map<String, Map<String, Object>> declared =
                 container(publishedBy(), PARAMETERS);
+        List<ValuesToWrite> writes = new ArrayList<>();
         for (int row = 0; row < parameters.getRowCount(); row++) {
             String name = (String) parameters.getValueAt(row, 0);
             Object typed = parameters.getValueAt(row, 1);
             String wanted = typed == null ? "" : typed.toString();
             S88RecipeParameter parameter = step.findParameter(name).orElse(null);
             String already = parameter == null || parameter.getFirstValue() == null
-                    ? null
-                    : parameter.getFirstValue().getFirstValueString();
+                ? null
+                : parameter.getFirstValue().getFirstValueString();
             if (java.util.Objects.equals(wanted, already)) {
                 continue;
             }
-            S88ParameterValue carried = parameter == null ? null : parameter.getFirstValue();
             Map<String, Object> definition = declared.get(name);
-            DataType dataType = dataTypeOf(definition, carried);
-            String unit = unitOf(definition, carried, dataType);
-            String saving = name;
-            model.edit("Value of " + name, () -> UpdateRecipeParameterUseCase.execute(
-                    model.getRecipe(), step, saving, wanted, dataType, unit));
+            DataType dataType = dataTypeOf(definition, parameter == null ? null : parameter.getFirstValue());
+            writes.add(new ValuesToWrite(name, wanted, dataType, unitOf(definition, parameter == null ? null : parameter.getFirstValue(), dataType)));
+
         }
+        if(writes.isEmpty()){
+            dispose();
+            return;
+        }
+        model.edit("Value of " + step.getId(), () -> {
+            for(ValuesToWrite write : writes){
+                S88RecipeElement current = model.getRecipe().findElement(step.getId()).orElse(step);
+                UpdateRecipeParameterUseCase.execute(model.getRecipe(), current, write.name(), write.value(), write.type(), write.unit());
+            }
+        });
         dispose();
     }
 
+    private record ValuesToWrite(String name, String value, DataType type, String unit){}
+
     /**
      * The type the value keeps, which is the one the plant declares for it.
-     *
-     * <p>Writing a value writes the whole value afresh, so a type left out of that write is a type
-     * thrown away. What the parameter already carries is the fallback for a plant that says nothing,
-     * because a type nobody declared is better than none at all.
      */
     private static DataType dataTypeOf(Map<String, Object> definition, S88ParameterValue carried) {
         String declared = text(definition, "Type");
@@ -330,8 +315,8 @@ final class StepEquipmentDialog extends JDialog {
     }
 
     /** The parameter values as they now stand, for a test that reads them. */
-    java.util.List<String> valuesShown() {
-        java.util.List<String> shown = new java.util.ArrayList<>();
+    List<String> valuesShown() {
+        List<String> shown = new ArrayList<>();
         for (int row = 0; row < parameters.getRowCount(); row++) {
             shown.add(parameters.getValueAt(row, 0) + "=" + parameters.getValueAt(row, 1));
         }
@@ -346,8 +331,8 @@ final class StepEquipmentDialog extends JDialog {
     }
 
     /** The type and unit columns as they now stand, for a test that reads them. */
-    java.util.List<String> typeAndUnitShown() {
-        java.util.List<String> shown = new java.util.ArrayList<>();
+    List<String> typeAndUnitShown() {
+        List<String> shown = new ArrayList<>();
         for (int row = 0; row < parameters.getRowCount(); row++) {
             shown.add(parameters.getValueAt(row, 2) + " / " + parameters.getValueAt(row, 3));
         }

@@ -23,13 +23,13 @@ import org.netbeans.api.visual.anchor.Anchor;
 import org.netbeans.api.visual.widget.Widget;
 
 /**
- * One end of a line, at a point the layout decided.
+ * The end of a line. It is placed at a point determined by the layout
  * <p>
- * The library's own anchors work out where an end is from the widget they are on, and offer a
- * rectangular one, a circular one and two that pick the side nearest the other end. None of those is
- * what a sequential chart wants: where a line leaves a box is fixed once the layout has said where
- * the boxes are, and it is the middle of the bottom of one box or the middle of the top of another
- * whichever is being drawn.
+ * The library provides default anchors that determine endpoints based on the parent widget.
+ * These include rectangular and circular shapes, as well as two anchors that target the nearest side.
+ * However, none of these fit the needs of a sequential chart, where connection points are strictly
+ * fixed by the layout: specifically, the bottom-center of one box or the top-center of another,
+ * depending on the drawing direction.
  */
 final class SfcAnchor extends Anchor {
 

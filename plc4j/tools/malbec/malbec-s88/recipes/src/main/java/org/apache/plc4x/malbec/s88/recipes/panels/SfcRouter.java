@@ -26,11 +26,6 @@ import org.netbeans.api.visual.widget.ConnectionWidget;
 
 /**
  * Draws one line through the points the layout worked out for it.
- * <p>
- * The library offers a straight line between the two ends, and a router that searches round the
- * other widgets for a path. Neither is what a sequential chart is: the lines are vertical, they go
- * round the side when they loop back, and they bend where a split or a join has to be met halfway.
- * All of that is decided by the layout, so all this has to do is hand the points over.
  */
 final class SfcRouter implements Router {
 

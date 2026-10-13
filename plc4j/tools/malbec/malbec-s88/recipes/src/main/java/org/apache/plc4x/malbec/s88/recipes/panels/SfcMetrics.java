@@ -20,10 +20,6 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 /**
  * How big each thing on a chart is and how far apart they sit.
- * <p>
- * One place for every measurement, because the layout and the drawing have to agree on them: a box
- * the layout measured as one size and the drawing drew at another is a chart whose lines do not
- * reach it.
  */
 final class SfcMetrics {
 
@@ -48,13 +44,10 @@ final class SfcMetrics {
 
     /**
      * Room between the border of a box and the text inside it.
-     *
-     * <p>Kept small on purpose. A box is a fixed size and a step has more to say than its name, so
-     * every pixel taken by a margin is a pixel a value does not get drawn in.
      */
     static final int BOX_PADDING = 2;
 
-        /** The bar that joins the branches of a split or a join. */
+    /** The bar that joins the branches of a split or a join. */
     static final int SYNC_BAR_WIDTH = 28;
     static final int SYNC_BAR_HEIGHT = 6;
 
@@ -78,39 +71,27 @@ final class SfcMetrics {
      * @return how wide it is
      */
     static int widthOf(RecipeShapes.Shape shape) {
-        switch (shape) {
-            case START:
-            case END:
-                return TERMINAL_WIDTH;
-            case TRANSITION:
-                return TRANSITION_WIDTH;
-            default:
-                return STEP_WIDTH;
-        }
+        return switch (shape) {
+            case START, END -> TERMINAL_WIDTH;
+            case TRANSITION -> TRANSITION_WIDTH;
+            default -> STEP_WIDTH;
+        };
     }
 
-        /**
+    /**
      * @param shape what is being drawn
      * @return how tall it is
      */
     static int heightOf(RecipeShapes.Shape shape) {
-        switch (shape) {
-            case START:
-            case END:
-                return TERMINAL_HEIGHT;
-            case TRANSITION:
-                return TRANSITION_HIT_HEIGHT;
-            default:
-                return STEP_HEIGHT;
-        }
+        return switch (shape) {
+            case START, END -> TERMINAL_HEIGHT;
+            case TRANSITION -> TRANSITION_HIT_HEIGHT;
+            default -> STEP_HEIGHT;
+        };
     }
 
 /**
  * How wide a transition has to be for its bar and the condition beside it.
- * <p>
- * The condition is measured rather than guessed at, because a bar narrower than its own text
- * clips the text, and a bar wider than it needs to be pushes the branches apart for nothing. The
- * margin at the far end is what keeps the text off the edge of the chart.
  *
  * @param labelWidth how wide the condition is, 0 when the bar waits on nothing
  * @return the width, never less than what the bar itself needs
@@ -122,10 +103,6 @@ final class SfcMetrics {
 
 /**
  * How wide a step has to be for the name it carries and the equipment under it.
- * <p>
- * Measured rather than guessed at, for the same reason a transition is: a box narrower than its
- * own text cuts the text off, and the name of the equipment is what tells an engineer which
- * equipment the step works on. The room on each side is what keeps the text off the border.
  *
  * @param labelWidth how wide the widest line of its text is, 0 when it has none
  * @return the width, never less than what a step normally needs

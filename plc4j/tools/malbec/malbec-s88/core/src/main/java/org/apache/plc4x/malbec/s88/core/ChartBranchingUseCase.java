@@ -35,9 +35,6 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  * <p>A parallel branch is a step. A branch is a bar and then a step, so there is somewhere to say
  * what that branch waits on.
  *
- * <p>Bars are born empty and wait on nothing. The condition is the author's to write, and a bar
- * that already said something would be a bar the author did not write.
- *
  * @see EditProcedureLogicUseCase#insertStepAfter(S88Recipe, S88RecipeElement, String, String,
  *         String, String, String)
  */
@@ -99,9 +96,13 @@ public final class ChartBranchingUseCase {
             throw new IllegalStateException("Step '" + boxId + "' is already fed by a branch point or"
                     + " already goes to more than one place, so there is no one line to widen.");
         }
-        String barBehind = entering.getFrom().get(0).getValue();
+        if (entering.getFrom().size() != 1) {
+            throw new IllegalStateException(("Step '" + boxId + "' is reached by a line the flow joins"
+            + " on, so there is no one branch to open another beside."));
+        }
+        String barBehind = entering.getFrom().getFirst().getValue();
         S88ProcedureLink feeding = arrivingAt(chart, barBehind);
-        String barAfter = leaving.getTo().get(0).getValue();
+        String barAfter = leaving.getTo().getFirst().getValue();
         S88ProcedureLink carryingOn = leavingFrom(chart, barAfter);
 
         String branchBar = newBar(recipe, step, chart);
@@ -152,7 +153,7 @@ public final class ChartBranchingUseCase {
             throw new IllegalStateException("Box '" + id + "' has " + found.size() + " lines"
                     + " arriving at it, so there is no one line to branch from.");
         }
-        return found.get(0);
+        return found.getFirst();
     }
 
     private static S88ProcedureLink leavingFrom(S88ProcedureLogic chart, String id) {
@@ -166,7 +167,7 @@ public final class ChartBranchingUseCase {
             throw new IllegalStateException("Box '" + id + "' has " + found.size() + " lines"
                     + " leaving it, so there is no one line to branch from.");
         }
-        return found.get(0);
+        return found.getFirst();
     }
 
     /** Whether a line can take one more arrival without changing what kind of line it is. */
@@ -246,12 +247,22 @@ public final class ChartBranchingUseCase {
     private static String freeName(S88Recipe recipe, S88ProcedureLogic chart, String stem) {
         String candidate = stem;
         int more = 1;
-        while (chart.findStep(candidate).isPresent() || chart.findTransition(candidate).isPresent()
-                || chart.findStep("BOX_" + candidate).isPresent()
-                || (recipe != null && recipe.findElement(candidate).isPresent())) {
+        while (!isFree(recipe, chart, candidate)) {
             candidate = stem + "_" + more++;
         }
         return candidate;
+    }
+
+    private static boolean isFree(S88Recipe recipe, S88ProcedureLogic chart, String candidate) {
+        return takesNoName(recipe, chart, candidate)
+            && takesNoName(recipe, chart, "BOX_" + candidate)
+            && takesNoName(recipe, chart, "T_" + candidate);
+    }
+
+    private static boolean takesNoName(S88Recipe recipe, S88ProcedureLogic chart, String name) {
+        return chart.findStep(name).isEmpty()
+            && chart.findTransition(name).isEmpty()
+            && (recipe == null || recipe.findElement(name).isEmpty());
     }
 
     private static void announce(S88Recipe recipe) {

@@ -23,10 +23,8 @@ import java.awt.Image;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.swing.Action;
-import javax.swing.JComponent;
-import javax.swing.JPanel;
-import javax.swing.JToolBar;
+import javax.swing.*;
+
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction;
 import org.netbeans.core.spi.multiview.CloseOperationState;
@@ -37,6 +35,7 @@ import org.openide.awt.UndoRedo;
 import org.openide.util.ImageUtilities;
 import org.openide.util.Lookup;
 import org.openide.util.lookup.Lookups;
+import org.openide.windows.TopComponent;
 
 /**
  * What the two views of a recipe have in common.
@@ -52,8 +51,6 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /**
      * How long several changes in a row are gathered before the view is drawn again.
-     * <p>
-     * A short wait, so that a burst of changes is one drawing and not one drawing each.
      */
     private static final int REDRAW_DELAY_MILLIS = 120;
 
@@ -64,14 +61,9 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /**
      * The drawing that is waiting to happen, restarted by every change that asks for one.
-     * <p>
-     * Serialized rather than dropped, because a change nobody draws is a change the operator cannot
-     * see they made. The first change waits and the last one wins, so nothing is lost and nothing is
-     * drawn more than once.
      */
-    private final javax.swing.Timer pendingRedraw = new javax.swing.Timer(REDRAW_DELAY_MILLIS, event -> {
-        javax.swing.SwingUtilities.invokeLater(this::redrawSafely);
-    });
+    private final Timer pendingRedraw = new Timer(REDRAW_DELAY_MILLIS,
+        event -> SwingUtilities.invokeLater(this::redrawSafely));
 
     protected AbstractRecipeView(RecipeEditorModel model) {
         this(model, model == null ? null : model.plant());
@@ -90,25 +82,19 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
         pendingRedraw.setRepeats(false);
         setLayout(new BorderLayout());
         toolBar.setFloatable(false);
-        // Save is on every view, because which tab is showing is not the operator's problem when the
-        // question is whether what they did has reached the disk.
-        toolBar.add(new org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction()
+        toolBar.add(new RecipeSaveAction()
                 .createContextAwareInstance(getLookup()));
         add(toolBar, BorderLayout.NORTH);
     }
 
     /**
      * Asks for this view to be drawn again, without drawing it yet.
-     * <p>
-     * A recipe arrives here one change at a time, and one change can touch the chart, the table and
-     * the list of problems at once. Drawing on every one of them makes the operator watch the same
-     * work happen several times, and on a big chart each drawing costs more than the change did.
      */
     private void askForRedraw() {
-        if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+        if (SwingUtilities.isEventDispatchThread()) {
             pendingRedraw.restart();
         } else {
-            javax.swing.SwingUtilities.invokeLater(() -> pendingRedraw.restart());
+            SwingUtilities.invokeLater(pendingRedraw::restart);
         }
     }
 
@@ -150,16 +136,11 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     @Override
     public Lookup getLookup() {
-        // The recipe and its file, so that an action on this view can reach both without having to
-        // be told which recipe it belongs to.
         return Lookups.singleton(model);
     }
 
     @Override
     public void componentOpened() {
-        // Registered here and not in the constructor, because the platform makes a view and may never
-        // open it, and a listener that outlives its view keeps that view alive for as long as the
-        // recipe is open.
         model.addChangeListener(onRecipeChanged);
         redrawSafely();
     }
@@ -172,11 +153,6 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /**
      * Draws this view again, and does not let a failure stop the window.
-     * <p>
-     * Every redraw goes through here. A redraw runs on the platform's own thread, and an exception
-     * from it reaches the window instead of the view, so one bad frame takes the editor down and the
-     * operator is left with a window that will not open. The recipe is still in the model either
-     * way, so a frame that fails is logged and the next change draws again.
      */
     private void redrawSafely() {
         try {
@@ -196,7 +172,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
      *
      * @return the window this view is in, {@code null} when the platform has not said yet
      */
-    protected final org.openide.windows.TopComponent window() {
+    protected final TopComponent window() {
         return callback != null ? callback.getTopComponent() : null;
     }
 
@@ -214,9 +190,6 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /**
      * The history of this recipe, handed to the window.
-     * <p>
-     * The window draws its undo and redo buttons out of this, so returning the real thing here is
-     * what puts working buttons on the window rather than buttons of our own.
      */
     @Override
     public UndoRedo getUndoRedo() {
@@ -233,17 +206,9 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
         return callback;
     }
 
-/**
- * Whether the window may close.
- * <p>
- * A recipe with changes still on the screen says so, and the two things the operator can choose come
- * with it: write them out, or leave them. The window asks because the platform only asks when a view
- * refuses, and the state that says what can be done about it is made by a factory of the platform
- * rather than by a constructor this class cannot reach.
- * <p>
- * Every view of one recipe says the same thing about the same recipe, so the window is asked once and
- * not once per tab.
- */
+    /**
+     * Whether the window may close.
+     */
     @Override
     public CloseOperationState canCloseElement() {
         if (!model.isModified()) {
@@ -260,7 +225,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     static final String UNSAVED_WARNING = "malbec.recipe.unsaved";
 
     /** Writes the recipe out and says so when it cannot be written. */
-    private static final class SaveChanges extends javax.swing.AbstractAction {
+    private static final class SaveChanges extends AbstractAction {
 
         private static final long serialVersionUID = 1L;
         private final RecipeEditorModel model;
@@ -272,12 +237,12 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
         @Override
         public void actionPerformed(java.awt.event.ActionEvent event) {
-            org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction.save(model, null);
+            RecipeSaveAction.save(model);
         }
     }
 
     /** Throws the changes away, which is what closing without saving means. */
-    private static final class DiscardChanges extends javax.swing.AbstractAction {
+    private static final class DiscardChanges extends AbstractAction {
 
         private static final long serialVersionUID = 1L;
 

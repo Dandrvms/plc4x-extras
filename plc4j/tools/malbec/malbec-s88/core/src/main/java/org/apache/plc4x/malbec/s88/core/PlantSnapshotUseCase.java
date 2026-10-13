@@ -61,12 +61,6 @@ public class PlantSnapshotUseCase {
      */
     public static S88PlantModel copy(S88PlantModel source) {
         S88PlantModel copy = new S88PlantModel(copyElement(source.getRoot(), null));
-        // One pass over the declared classes, and that is all.
-        // <b>Enumerations come along with it.</b> The plant keeps them among the classes, under an
-        // ENUM_ name, so a second pass that registered them again would be registering the same
-        // class twice and refusing to do it. Copying them here also keeps their properties as they
-        // were written, rather than taking them apart and putting them back together from what a
-        // reader of the plant understands an enumeration to be.
         for (S88ElementClass elementClass : source.getClasses().values()) {
             copy.registerClass(copyClass(elementClass));
         }
@@ -108,15 +102,7 @@ public class PlantSnapshotUseCase {
         return copy;
     }
 
-    /**
-     * The properties of an element or a class, with nothing shared with the original.
-     * <p>
-     * The variables of a piece of equipment sit two maps deep: {@code Reports} holds one entry per
-     * variable, and each of those holds the type, the units and the limits. Copying only the outer
-     * map would leave the inner ones in both plants, so a change made to the plant afterwards would
-     * show up in a recipe that was approved against the plant as it was before that change. That is
-     * the whole point of the copy, so the nesting is followed all the way down.
-     */
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> copyProperties(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();

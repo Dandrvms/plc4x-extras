@@ -26,14 +26,12 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Line2D;
 import java.awt.geom.Rectangle2D;
-import java.awt.image.BufferedImage;
+import java.util.List;
+
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 
 /**
- * What each thing on a chart looks like.
- * <p>
- * One definition per thing, drawn with Java2D. Drawing rather than loading also means the chart
- * stays sharp when it is zoomed and there are no image files to keep.
+ * The shape of each thing on the chart.
  */
 final class RecipeShapes {
 
@@ -43,25 +41,11 @@ final class RecipeShapes {
     private static final Color END_EDGE = new Color(51, 51, 51);
     private static final double STROKE = 1.4;
 
-    /**
-     * How thick a line and a bar are drawn.
-     * <p>
-     * The library draws its connections at this width, and a bar drawn at a different one reads as a
-     * mark stuck on the end of a line rather than as part of it.
-     */
+
     static final float LINE_WIDTH = 1.5f;
 
-    /** What every label on the chart is written at. */
-    /**
- * How big the text on a chart is.
- * <p>
- * Rounded to a whole point because a font cannot be written at a fraction of a point and one that is
- * asked for one gets rounded somewhere else, which is how a measured width stops matching a written
- * one.
- */
-private static final int LABEL_SIZE = 10;
+    private static final int LABEL_SIZE = 10;
 
-    /** The one font every box is measured with and written with. */
     private static final Font CHART_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, LABEL_SIZE);
 
     private RecipeShapes() {
@@ -79,8 +63,7 @@ private static final int LABEL_SIZE = 10;
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        // Set rather than assumed, so that anything drawn on top of this text is measured and written
-        // with the same font as the text itself.
+
         g.setFont(chartFont());
         switch (kind) {
             case START:
@@ -99,14 +82,10 @@ private static final int LABEL_SIZE = 10;
 
     /**
      * How wide a text would be written.
- *
- * <p>
- * A label of more than one line is as wide as its widest line, because a box has to hold the widest
- * of them.
- *
- * @param label the text
- * @return its width, 0 when there is no text
- */
+     *
+     * @param label the text
+     * @return its width, 0 when there is no text
+     */
     static int textWidth(Graphics2D g, String label) {
         int widest = 0;
         for (String line : linesOf(label)) {
@@ -116,17 +95,13 @@ private static final int LABEL_SIZE = 10;
     }
 
     /**
- * How tall a text would be written.
- *
- * <p>
- * A label of more than one line is as tall as all of them, because a box has to hold them all. The
- * gap between lines is what stops them sitting on one another.
- *
- * @param label the text
- * @return its height, 0 when there is no text
- */
+     * How tall a text would be written.
+     *
+     * @param label the text
+     * @return its height, 0 when there is no text
+     */
     static int textHeight(Graphics2D g, String label) {
-        java.util.List<String> lines = linesOf(label);
+        List<String> lines = linesOf(label);
         if (lines.isEmpty()) {
             return 0;
         }
@@ -139,11 +114,11 @@ private static final int LABEL_SIZE = 10;
      * @param label the text, may be {@code null}
      * @return its lines, empty when there is no text
      */
-    static java.util.List<String> linesOf(String label) {
+    static List<String> linesOf(String label) {
         if (label == null || label.isEmpty()) {
-            return java.util.List.of();
+            return List.of();
         }
-        return java.util.List.of(label.split("\\R"));
+        return List.of(label.split("\\R"));
     }
 
     /**
@@ -171,9 +146,7 @@ private static final int LABEL_SIZE = 10;
         g.setColor(EDGE);
         g.setStroke(new BasicStroke((float) STROKE));
         g.draw(bounds);
-        // Written inside a small margin, because text that reaches the border reads as cut off even when
-        // it is not. The margin is kept small so that a fixed-height box has room for a value as
-        // well as for the name, and the box is made wide enough for the text plus this margin.
+
         Rectangle2D inside = new Rectangle2D.Double(bounds.getX() + SfcMetrics.BOX_PADDING,
                 bounds.getY(), Math.max(0, bounds.getWidth() - 2.0 * SfcMetrics.BOX_PADDING),
                 bounds.getHeight());
@@ -182,8 +155,6 @@ private static final int LABEL_SIZE = 10;
 
     /**
      * The start of the process: a square inside a square.
-     * <p>
-     * Two concentric outlines are what a chart uses to mark where the flow begins.
      */
     private static void paintStart(Rectangle2D bounds, Graphics2D g, String label) {
         double side = Math.min(bounds.getWidth(), bounds.getHeight());
@@ -200,40 +171,45 @@ private static final int LABEL_SIZE = 10;
     }
 
     /**
-     * The stop of the process: the ground symbol of a circuit.
-     * <p>
-     * A vertical stem with three horizontal bars across it, getting shorter from the top one to the
-     * bottom one, and the stem running past the last bar so that it reads as a terminal.
+     * The stop of the process. Ground symbol of electrical circuits.
      */
     private static void paintEnd(Rectangle2D bounds, Graphics2D g, String label) {
-        double side = Math.min(bounds.getWidth(), bounds.getHeight());
-        double centre = bounds.getX() + side / 2;
-        double top = bounds.getY();
-        double bottom = top + side;
-        g.setColor(Color.WHITE);
-        g.fill(new Rectangle2D.Double(bounds.getX(), top, side, side));
-        g.setColor(END_EDGE);
-        g.setStroke(new BasicStroke((float) STROKE));
-        g.draw(new Line2D.Double(centre, top, centre, bottom));
+        int numLines = 7;
+        double lineSpacingProportion = 0.6;
+        double maxWidthProportion = 0.85;
+        double minWidthProportion = 0.15;
 
-        double widest = side * 0.88;
-        double barHeight = side / 4.0;
-        double step = widest / 3.0;
-        for (int i = 0; i < 3; i++) {
-            double y = top + barHeight * i;
-            double half = widest / 2 - step * i;
-            g.draw(new Line2D.Double(centre - half, y, centre + half, y));
+        double side = Math.min(bounds.getWidth(), bounds.getHeight());
+        double centreX = bounds.getX() + side / 2;
+        double top = bounds.getY();
+
+        double verticalLineHeight = side * (1.0 - lineSpacingProportion);
+        double startY = top + verticalLineHeight;
+        double totalBarHeight = side * lineSpacingProportion;
+
+
+        g.setColor(END_EDGE);
+        g.setStroke(new BasicStroke((float) STROKE, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(new Line2D.Double(centreX, top, centreX, startY));
+
+
+        double stepY = totalBarHeight / (numLines - 1);
+
+        double maxWidth = side * maxWidthProportion;
+        double minWidth = side * minWidthProportion;
+
+        for (int i = 0; i < numLines; i++) {
+            double y = startY + i * stepY;
+            double currentWidth = maxWidth - ((maxWidth - minWidth) * i) / (numLines - 1);
+            double halfWidth = currentWidth / 2.0;
+            g.draw(new Line2D.Double(centreX - halfWidth, y, centreX + halfWidth, y));
         }
+
         writeIn(bounds, g, label, END_EDGE, Horizontal.CENTRE, Vertical.BELOW);
     }
 
     /**
      * A transition: a short bar across the link.
-     * <p>
-     * The bar is what the flow passes through, and it is drawn across the link rather than along it,
-     * so a link that goes on either side of it reads as one run through a wait. The comparison that
-     * has to be true for the flow to carry on is written to the right of it, where it has room and
-     * where nothing else is drawn.
      */
     private static void paintTransition(Rectangle2D bounds, Graphics2D g, String label) {
         g.setColor(EDGE);
@@ -249,14 +225,7 @@ private static final int LABEL_SIZE = 10;
 
     /**
      * The bar across the branches of a split or a join.
-     * <p>
-     * One line is a split where only one branch is taken, and two lines a short way apart are a
-     * split where they all are. That is the whole difference between the two, so it is the whole
-     * difference between the two symbols.
-     * <p>
-     * The branches leave the first of the two lines rather than the middle between them, so that the
-     * line the branches run along is one of the two drawn and not a third one between them. Drawn
-     * through the middle, the three of them make a box and the symbol stops reading as one.
+     * <p>Two parallel lines mean the two branches are executed at once. One line means one branch or the other.
      *
      * @param bounds  where the bar is
      * @param g       where to draw it onto
@@ -284,25 +253,18 @@ private static final int LABEL_SIZE = 10;
     }
 
     /**
-     * Writes a text on a shape, never outside it.
-     * <p>
-     * A name longer than its box is cut short with an ellipsis rather than drawn over the edge, where
-     * it would run into whatever is next to it and be unreadable either way. The whole name is
-     * always on the tooltip.
-     * <p>
-     * A label of more than one line is written as a block centred on the shape, so that a step can
-     * say what it is called and what it works on without the box growing for it.
+     * Writes a text on a shape.
      */
     private static void writeIn(Rectangle2D bounds, Graphics2D g, String label, Color colour,
                                 Horizontal horizontal, Vertical vertical) {
-        java.util.List<String> lines = linesOf(label);
+        List<String> lines = linesOf(label);
         if (lines.isEmpty()) {
             return;
         }
         FontMetrics metrics = g.getFontMetrics(chartFont());
         g.setColor(colour);
         if (lines.size() == 1) {
-            String fitting = shorten(lines.get(0), (int) bounds.getWidth(), metrics);
+            String fitting = shorten(lines.getFirst(), (int) bounds.getWidth(), metrics);
             int width = metrics.stringWidth(fitting);
             double x = horizontal == Horizontal.CENTRE
                     ? bounds.getCenterX() - width / 2.0
@@ -362,20 +324,6 @@ private static final int LABEL_SIZE = 10;
         return label.substring(0, cut) + ellipsis;
     }
 
-    /**
-     * The one font every text on the chart is written and measured with.
-     *
-     * <p>
-     * A font of its own rather than the one the platform hands over, because a box has to be made wide
-     * enough for its own text before anything is painted, and text measured with one font and written
-     * with another is a box that is the wrong width for what it ends up saying.
-     *
-     * <p>
-     * Made once and handed out, because it is asked for every box and every bar on every repaint and
-     * a font is one of the more expensive things a drawing can build in a loop.
-     *
-     * @return the font, always the same one
-     */
     static java.awt.Font chartFont() {
         return CHART_FONT;
     }

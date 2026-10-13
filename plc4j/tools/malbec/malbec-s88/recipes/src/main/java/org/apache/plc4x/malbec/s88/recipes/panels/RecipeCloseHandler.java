@@ -30,26 +30,11 @@ import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
 
 /**
- * Asks the operator what to do with the changes of a recipe when its window is closing.
- *
- * <p>
- * The platform has a dialog for this, and it offers two answers and no third. A recipe is the one
- * thing in this editor that has no other copy: there is no document behind it that the platform can
- * reopen, so the question that matters most here is the one that dialog does not ask, which is to
- * stop and go back to the work.
- *
- * <p>
- * <b>The question is asked once for a window.</b> Every view of one recipe reports the same thing
- * about the same recipe, and asking again for the other tab would be asking the same operator the
- * same question twice before they had answered it once.
- *
- * <p>
- * What each answer does is not decided here. It arrives with the state that reports the problem, so
- * this only asks and carries out.
+ * Asks the user what to do with the changes of a recipe when its window is closing.
  */
 final class RecipeCloseHandler implements CloseOperationHandler {
 
-    /** What the operator can choose instead of closing, which the platform's own dialog leaves out. */
+
     static final String GO_BACK = "Go back";
 
     @Override
@@ -103,16 +88,12 @@ final class RecipeCloseHandler implements CloseOperationHandler {
             chosen.does().actionPerformed(
                     new ActionEvent(chosen, ActionEvent.ACTION_PERFORMED, "close"));
         }
+
         return true;
     }
 
     /**
-     * One of the things the operator can choose, with the label it is shown with.
-     *
-     * <p>
-     * A wrapper rather than the action itself, because the dialog writes down whatever it is given
-     * with {@code toString()}, and an action says nothing useful about itself that way. The operator
-     * is offered "Save" and not the name of a class with a memory address on the end.
+     * One of the things the operator can choose.
      *
      * @param label how the choice is written on the button
      * @param does  what choosing it carries out, {@code null} for a choice that only answers

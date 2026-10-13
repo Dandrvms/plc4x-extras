@@ -30,13 +30,6 @@ import org.openide.nodes.Node;
 
 /**
  * Builds the recipe nodes of a recipe set.
- * <p>
- * Only recipe files are listed. A recipe set folder also holds a marker file saying the folder is a
- * recipe set, and that is bookkeeping rather than something anybody needs to see in the tree.
- * <p>
- * The folder is watched, so a recipe created by the new recipe action, or deleted or renamed from
- * anywhere, appears and disappears on its own. Without that the tree would be wrong until something
- * else happened to rebuild it.
  */
 public final class RecipeNodeFactory extends ChildFactory<FileObject> {
 
@@ -52,6 +45,15 @@ public final class RecipeNodeFactory extends ChildFactory<FileObject> {
         folder.addFileChangeListener(new FileChangeAdapter() {
             @Override
             public void fileChanged(FileEvent event) {
+                refresh(true);
+            }
+
+            @Override
+            public void fileDataCreated(FileEvent event) {
+                refresh(true);
+            }
+
+            public void fileDeleted(FileEvent event) {
                 refresh(true);
             }
         });

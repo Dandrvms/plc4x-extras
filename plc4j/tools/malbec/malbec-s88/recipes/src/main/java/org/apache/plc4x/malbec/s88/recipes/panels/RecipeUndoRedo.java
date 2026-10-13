@@ -33,16 +33,6 @@ import org.openide.awt.UndoRedo;
 
 /**
  * What can be undone and redone in one open recipe.
- * <p>
- * <b>Written here rather than taken from the platform.</b> The platform's own undo manager is
- * {@code org.openide.text.UndoRedoManager}, and it takes a {@code CloneableEditorSupport}, which is
- * a wrapper around a document. A recipe is not a document and has no reason to be one: it is a model
- * that a repository reads and writes whole. Implementing the small interface the multiview asks for
- * over a stack of edits is the whole of what undo is here, and it costs no document at all.
- * <p>
- * <b>The stack forgets what is redoable as soon as something new is done.</b> That is what undo means
- * everywhere else, and the alternative leaves a redo that would take the recipe somewhere it has
- * never been.
  */
 final class RecipeUndoRedo implements UndoRedo {
 
@@ -60,10 +50,6 @@ final class RecipeUndoRedo implements UndoRedo {
 
     /**
      * Says what to call when an edit is taken back or put again.
-     * <p>
-     * The change listeners of this class only reach the window's own buttons. What an edit did to
-     * the recipe has to be said separately, because a view that is not told keeps drawing something
-     * that is no longer there.
      *
      * @param what to call once the recipe has changed, never {@code null}
      */
@@ -98,8 +84,6 @@ final class RecipeUndoRedo implements UndoRedo {
      * <p>
      * This is what says whether the recipe on screen is the one on disk: the position where it was
      * saved is remembered by the editor, and being anywhere else means there is something to save.
-     * Counting rather than carrying a separate dirty flag is what keeps the flag and the history from
-     * telling different stories, which they would as soon as something was undone.
      */
     int position() {
         return position;
@@ -132,9 +116,6 @@ final class RecipeUndoRedo implements UndoRedo {
         try {
             edit.edit.undo();
         } catch (RuntimeException failure) {
-            // Put it back rather than losing it: an edit that cannot be taken back after it has
-            // already been applied is a bug in the edit, and dropping it makes the button stop
-            // working with nothing to say why.
             done.push(edit);
             throw failure;
         }
@@ -162,9 +143,6 @@ final class RecipeUndoRedo implements UndoRedo {
 
     /**
      * Tells the buttons, then tells the views.
-     * <p>
-     * The edit is put back on the other stack either way, so a view that throws while redrawing
-     * does not cost the operator the edit they just took back.
      */
     private void tell() {
         fireChanged();

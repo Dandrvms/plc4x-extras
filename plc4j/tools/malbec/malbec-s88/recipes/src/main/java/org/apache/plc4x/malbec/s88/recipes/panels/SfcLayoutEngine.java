@@ -20,16 +20,8 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -37,16 +29,13 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 /**
  * Where everything on a chart goes, worked out from the chart alone.
  * <p>
- * No Swing in here: a layout that can only be checked by looking at it cannot be tested, and where
- * a chart's boxes go is arithmetic.
- * <p>
  * Read from top to bottom, one row per node, and a branch centred on where it left. A link that goes
  * back up closes a cycle, and no set of rows satisfies every edge of a cycle, so that link is left
  * out of the numbering and drawn round the side with an arrow.
  */
 final class SfcLayoutEngine {
 
-        private final S88ProcedureLogic chart;
+    private final S88ProcedureLogic chart;
     private final Map<String, RecipeShapes.Shape> shapes;
 
     /**
@@ -102,11 +91,6 @@ final class SfcLayoutEngine {
 
     /**
      * How far from its line the left of a node sits.
-     * <p>
-     * A transition is a bar with the comparison written beside it, and the bar is what the flow
-     * crosses and what the line has to arrive at. Centring the whole node on the line puts the bar
-     * a whole text width to one side of it, so the line arrives at the text instead of at the bar,
-     * and two bars whose texts are long push each other out of their branches.
      */
     private int halfWidthOf(String node) {
         return shapes.get(node) == RecipeShapes.Shape.TRANSITION
@@ -118,8 +102,7 @@ final class SfcLayoutEngine {
      * How much room a node needs across.
      *
      * <p>
-     * A bar is as wide as its own text and a step as wide as its own name, because a symbol narrower
-     * than what it has to say cuts the text off and the text is the part an engineer reads.
+     * A bar is as wide as its own text and a step as wide as its own name.
      *
      * @param node name of the node
      * @return the width, in units of the chart
@@ -196,10 +179,10 @@ final class SfcLayoutEngine {
         return names;
     }
 
-    /** One that does not is a chart that cannot be read top to bottom, and saying so beats drawing it. */
+
     private void checkAlternation() {
         for (S88ProcedureLink link : links) {
-            boolean fromIsBar = shapes.get(link.getFrom().get(0).getValue())
+            boolean fromIsBar = shapes.get(link.getFrom().getFirst().getValue())
                     == RecipeShapes.Shape.TRANSITION;
             for (S88IdRef end : link.getTo()) {
                 if (!shapes.containsKey(end.getValue())) {
@@ -222,9 +205,6 @@ final class SfcLayoutEngine {
      * that nothing here depends on the order the nodes come in.
      */
     private void numberRows() {
-        // One walk over the whole chart, sharing what has been seen and what is on the stack. A walk
-        // per node would find a different edge of the same cycle each time, and a cycle whose every
-        // edge goes up is a chart with nothing left to draw.
         Deque<String> onStack = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
         List<String> reached = new ArrayList<>();
@@ -278,7 +258,7 @@ final class SfcLayoutEngine {
         return ordered;
     }
 
-    /** The step of kind begin, or the first node nothing leads to, which is what it can be. */
+    /** The step of kind begin, or the first node nothing leads to. */
     private String findStart() {
         for (String id : shapes.keySet()) {
             if (shapes.get(id) == RecipeShapes.Shape.START) {
@@ -352,26 +332,26 @@ final class SfcLayoutEngine {
         inThisRow.sort(Comparator.comparingDouble(id -> wanted.getOrDefault(id, Double.MAX_VALUE)));
     }
 
-    /** Where a node's neighbours sit in the other row, on average. */
-    private java.util.OptionalDouble middleOfNeighbours(String node, Map<String, Integer> where) {
+    /** Where a node's neighbors sit in the other row, on average. */
+    private OptionalDouble middleOfNeighbours(String node, Map<String, Integer> where) {
         List<Integer> at = new ArrayList<>();
-        for (String other : neighbours(node)) {
+        for (String other : neighbors(node)) {
             Integer one = where.get(other);
             if (one != null) {
                 at.add(one);
             }
         }
         if (at.isEmpty()) {
-            return java.util.OptionalDouble.empty();
+            return OptionalDouble.empty();
         }
         double total = 0;
         for (int one : at) {
             total += one;
         }
-        return java.util.OptionalDouble.of(total / at.size());
+        return OptionalDouble.of(total / at.size());
     }
 
-    private List<String> neighbours(String node) {
+    private List<String> neighbors(String node) {
         List<String> before = new ArrayList<>();
         for (String other : predecessors.getOrDefault(node, Set.of())) {
             if (!goingBackwards.contains(edge(other, node))) {
@@ -382,20 +362,16 @@ final class SfcLayoutEngine {
     }
 
     /**
-     * Puts each node on the middle of the leaves it is responsible for.
+     * Puts each node in the middle of the leaves it is responsible for.
      * <p>
      * A node that splits into two is given one leaf's worth of the chart for each branch, and each
      * branch is given one for whatever it splits into in turn. A node with a single branch below it
      * therefore sits on exactly the same line as that branch all the way down, and the edge between
      * them is straight however wide the two boxes are.
      * <p>
-     * Measuring by anything else fails on the first split: a bar is narrower than a step, so two
-     * bars side by side fit closer together than two steps do, and the steps then cannot both sit
-     * under their own bar. Every edge from the bars down to the steps comes out diagonal.
-     * <p>
-     * <b>A leaf is as wide as the widest thing that stands over it.</b> A bar with a long comparison
+     * A leaf is as wide as the widest thing that stands over it. A bar with a long comparison
      * beside it is wider than the step below it. Two such bars have to sit further apart than two
-     * steps do, and if the room is not made for them here they are pushed apart afterwards and no
+     * steps do, and if the room is not made for them here they are pushed apart afterward and no
      * longer stand over the branch they belong to.
      */
     private void assignAxis() {
@@ -412,31 +388,67 @@ final class SfcLayoutEngine {
         for (int leaf = 0; leaf < room; leaf++) {
             where[leaf + 1] = where[leaf] + leafWidth[leaf] + SfcMetrics.GAP;
         }
+
+        widenConvergentRanges();
         for (Map.Entry<String, int[]> entry : leafRange.entrySet()) {
             int[] range = entry.getValue();
             axis.put(entry.getKey(), (where[range[0]] + where[range[1]]) / 2);
         }
-        // Anything nothing leads to has no leaves of its own, so it goes after everything that has
-        // rather than on top of whatever is already there.
-        int next = used;
+
+        int cursor = where[Math.min(used, room)];
         for (String id : orderOfAppearance()) {
             if (axis.containsKey(id)) {
                 continue;
             }
-            axis.put(id, where[next] + halfWidthOf(id));
-            next++;
+            axis.put(id, cursor + halfWidthOf(id));
+            cursor += widthOf(id) + SfcMetrics.GAP;
         }
         orderRowsByTheirLeaves();
         separateRows();
         shiftRight();
     }
 
+    /** Widens the run of every node the flow rejoins at, to cover every branch that reaches it. */
+    private void widenConvergentRanges() {
+        boolean changed = true;
+        int guard = 0;
+        int ceiling = chart.getSteps().size() + 1;
+        while (changed && guard++ <= ceiling) {
+            changed = false;
+            for (String id : orderOfAppearance()) {
+                int[] mine = leafRange.get(id);
+                if (mine == null) {
+                    continue;
+                }
+                for (String before : predecessorsOf(id)) {
+                    int[] theirs = leafRange.get(before);
+                    if (theirs == null) {
+                        continue;
+                    }
+                    int low = Math.min(mine[0], theirs[0]);
+                    int high = Math.max(mine[1], theirs[1]);
+                    if (low != mine[0] || high != mine[1]) {
+                        leafRange.put(id, new int[]{low, high});
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /** The nodes the given one is reached from. */
+    private List<String> predecessorsOf(String id) {
+        Set<String> found = new LinkedHashSet<>();
+        for (S88ProcedureLink line : chart.getLinks()) {
+            if (line.getTo().stream().anyMatch(end -> id.equals(end.getValue()))) {
+                line.getFrom().forEach(end -> found.add(end.getValue()));
+            }
+        }
+        found.remove(id);
+        return new ArrayList<>(found);
+    }
     /**
      * Puts each row in the order of the leaves it stands over.
-     * <p>
-     * Without this a row keeps whatever order it happened to be built in, and pushing two nodes
-     * apart then has to move one of them all the way to the right of where its own leaves put it.
-     * That leaves a branch on the wrong side of its parent and every edge below it diagonal.
      */
     private void orderRowsByTheirLeaves() {
         for (List<String> inRow : rowsOfEverything()) {
@@ -482,11 +494,6 @@ final class SfcLayoutEngine {
 
     /**
      * Pushes nodes apart within a row when two of them asked for the same line.
-     * <p>
-     * Leaves say two branches need room for the steps under them, but two things joining into the
-     * same node are given the same leaves by whichever reached them first and can end up on top of
-     * each other. The order of the row is kept, so a node that has to move goes right rather than
-     * swapping places with its neighbour.
      */
     private void separateRows() {
         for (List<String> inRow : rowsOfEverything()) {
@@ -517,10 +524,6 @@ final class SfcLayoutEngine {
 
     /**
      * Every node grouped by the row it is in, worked out once and then kept.
-     * <p>
-     * Kept rather than rebuilt because the order within a row is itself an answer: sorting a row
-     * that is thrown away afterwards sorts nothing, and the order the chart is drawn in is what
-     * comes out of the order the recipe happens to list its nodes.
      */
     private List<List<String>> rowsOfEverything() {
         if (!byRow.isEmpty()) {
@@ -649,8 +652,7 @@ final class SfcLayoutEngine {
             left = Math.min(left, centre);
             right = Math.max(right, centre);
         }
-        // The bar runs from just before the leftmost branch to just past the rightmost one, so that
-        // the edges have something of it to arrive at rather than a point on it.
+
         int middle = (highestBottom + lowestTop) / 2;
         boolean doubled = link.getLinkType() != null && link.getLinkType().isParallel();
         int height = SfcMetrics.SYNC_BAR_HEIGHT * (doubled ? 2 : 1);
@@ -661,14 +663,6 @@ final class SfcLayoutEngine {
 
     /**
      * The line between two things, as the points to draw it through.
-     * <p>
-     * Down the chart it is one straight run, or a dogleg through a bar when the branches have to
-     * meet. Up the chart it is taken out to a lane on the right, because a line that goes back up has
-     * nowhere to go on the way that is not through something else.
-     * <p>
-     * One line of the recipe with two ends on each side is drawn as one piece per pair of ends, and
-     * each of those needs its own name inside the scene. The name of the line it came from is carried
-     * as well, because picking a drawn piece and taking the line off are two different things.
      */
     private Link route(String linkId, String from, String to, Map<String, Rectangle> corners,
                        Rectangle syncBar) {
@@ -701,12 +695,8 @@ final class SfcLayoutEngine {
 
     /**
      * Where a line leaves a node.
-     * <p>
-     * A step is left at the middle of its bottom edge. A bar is left at its own middle, which is
-     * where the link passes through it, so that the line in and the line out are one straight run
-     * through the bar rather than two that stop short of it.
      */
-private Point leavesAt(String node, Rectangle box) {
+    private Point leavesAt(String node, Rectangle box) {
         return new Point(acrossAt(node, box), barOrEdge(node, box, true));
     }
 
@@ -722,7 +712,7 @@ private Point leavesAt(String node, Rectangle box) {
                 : box.x + box.width / 2;
     }
 
-    /** Along a node: a bar is left and arrived at at its own middle, a box at its two edges. */
+    /** Along a node: a bar is left and arrived at its own middle, a box at its two edges. */
     private int barOrEdge(String node, Rectangle box, boolean leaving) {
         if (shapes.get(node) == RecipeShapes.Shape.TRANSITION) {
             return box.y + SfcMetrics.TRANSITION_HEIGHT / 2;

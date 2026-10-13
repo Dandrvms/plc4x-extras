@@ -18,15 +18,12 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import org.netbeans.api.visual.widget.Widget;
 
 /**
  * The bar across the branches of a split or a join.
- * <p>
- * Not a node of the chart: nothing picks it and nothing joins to it. It is the mark that says a line
- * with more than one end at it is a split rather than two lines that happen to meet.
  */
 final class SyncBarWidget extends Widget {
 
@@ -49,7 +46,7 @@ final class SyncBarWidget extends Widget {
         if (g == null) {
             return;
         }
-        java.awt.Rectangle bounds = getBounds();
+        Rectangle bounds = getBounds();
         RecipeShapes.paintSyncBar(
                 new Rectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height), g, doubled);
     }

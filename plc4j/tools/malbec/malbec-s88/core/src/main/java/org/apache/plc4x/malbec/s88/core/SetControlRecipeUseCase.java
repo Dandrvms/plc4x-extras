@@ -27,17 +27,11 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 /**
  * Sets a master recipe for one batch, producing the control recipe that goes to the plant.
  * <p>
- * What this does is small on purpose. It takes a copy of the master, names the batch it is for, and
- * records which master it came from. It does not choose equipment.
+ * It takes a copy of the master, names the batch it is for, and records which master it came from.
  * <p>
  * A master recipe written by class says "a unit of this class". Setting it for a batch does not
  * turn it into a recipe for one particular unit, because which of the hundred free units this
  * batch gets is decided while the batch runs.
- * <p>
- * A plant may have a thousand identical tanks, and a recipe that names the
- * class is the recipe that lets any of them do the work. So the control recipe keeps the way
- * of naming it that the master had, and the question of which equipment answers to it belongs
- * to whatever runs the recipe.
  */
 public class SetControlRecipeUseCase {
 

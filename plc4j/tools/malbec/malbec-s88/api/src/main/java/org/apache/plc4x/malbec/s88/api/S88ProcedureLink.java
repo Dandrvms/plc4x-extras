@@ -26,9 +26,7 @@ import java.util.List;
  * The line between two things on the chart, and what it means.
  * <p>
  * The {@link S88LinkType} is the part that matters: it says whether the flow splits, rejoins, and
- * whether the two sides happen at once or in turn. That is written down rather than left to be
- * worked out from how many links meet at a point, because a reader that has to infer it can get it
- * wrong in exactly the cases where it matters, and a recipe is not a place to be ambiguous.
+ * whether the two sides happen at once or in turn.
  * <p>
  * Both ends hold any number of names, which is what lets a single link be the shared edge of a
  * split or a join.

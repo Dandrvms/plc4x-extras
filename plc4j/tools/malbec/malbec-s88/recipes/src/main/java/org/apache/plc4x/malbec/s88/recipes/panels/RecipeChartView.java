@@ -67,9 +67,6 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     /**
      * Picks a box, a bar or a line when the operator clicks on it.
-     * <p>
-     * Without a click doing this, nothing on the chart says which thing the buttons are about, and
-     * they can only act on whatever the last button happened to pick.
      */
     private void pickWithThePointer() {
         view.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -81,12 +78,7 @@ public final class RecipeChartView extends AbstractRecipeView {
     }
 
     /**
-     * Zooms with the wheel while the control key is held, and leaves the wheel to the scroll
-     * otherwise.
-     * <p>
-     * A chart that zooms on every tick of the wheel cannot be scrolled, because the two are the same
-     * gesture. Asking for the control key is what tells the operator which of the two they are
-     * doing.
+     * Zooms with the wheel while the control key is held.
      *
      * @param target the component the library draws in, which is what receives the wheel
      * @param chart  the chart to zoom, which is where the zoom factor is held
@@ -103,7 +95,7 @@ public final class RecipeChartView extends AbstractRecipeView {
             } else {
                 zoom /= step;
             }
-            chart.setZoomFactor(Math.max(0.2, Math.min(4.0, zoom)));
+            chart.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
             event.consume();
         });
     }
@@ -123,12 +115,7 @@ public final class RecipeChartView extends AbstractRecipeView {
         return model.getRecipe().getProcedureLogic();
     }
 
-    /**
-     * Draws the chart again.
-     * <p>
-     * The whole recipe goes in at once, because the layout has to see the whole chart: where a box
-     * sits depends on what leads to it and what leaves it.
-     */
+
     @Override
     protected void redraw() {
         scene.draw(model.getRecipe());
@@ -136,15 +123,10 @@ public final class RecipeChartView extends AbstractRecipeView {
     }
 
     /**
- * Remembers that the step just added has no equipment yet, so the chart marks it.
- *
- * <p>
- * <b>An empty box says so on the chart.</b> A step with nothing behind it is where the flow goes
- * and does nothing, and on a chart full of named equipment a box that cannot be told apart from a
- * step that is done is a box an author cannot find again.
- *
- * @param elementId id of the step that was added
- */
+     * Remembers that the step just added has no equipment yet, so the chart marks it.
+     *
+     * @param elementId id of the step that was added
+     */
     void markEmptyStep(String elementId) {
         emptyStep = elementId;
         scene.markEmpty(elementId);
@@ -185,7 +167,7 @@ public final class RecipeChartView extends AbstractRecipeView {
     }
 
     /**
-     * A name no link in this chart is using, asked for when the line is drawn rather than before it.
+     * A name no link in this chart is using.
      *
      * @param chart the chart the line is being added to
      * @return a name nothing is using

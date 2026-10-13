@@ -35,16 +35,6 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 
 /**
  * Copies a step, or a whole recipe, without sharing anything with the original.
- * <p>
- * A recipe is a document, and the obvious way to change one is to copy it first. That only works if
- * the copy shares nothing: a copy that still points at the original's parameters, chart or nested
- * steps is two names for one thing, and saving one of them writes changes into the other. Every
- * container is rebuilt and every value in it is put across by hand for that reason.
- * <p>
- * The chart is the one place where a copy has to decide something. {@link #copyRecipe} leaves the
- * chart to the caller, because the chart points at steps by name and a caller who copies one step
- * has to say what the new box should be called; {@link #copyChart} copies it as it stands, keeping
- * the same names, which is right when the whole recipe is being copied and the names come with it.
  */
 public class RecipeDeepCopy {
 
@@ -70,8 +60,7 @@ public class RecipeDeepCopy {
         copy.setBuildingBlockElementId(source.getBuildingBlockElementId());
         copy.setBuildingBlockElementVersion(source.getBuildingBlockElementVersion());
         source.getActualEquipmentIds().forEach(copy::addActualEquipmentId);
-        // The class of the equipment is one of the entries of the other information, so setting it
-        // here as well would leave the copy holding it twice.
+
         for (S88EquipmentRequirement requirement : source.getEquipmentRequirements()) {
             copy.addEquipmentRequirement(copyRequirement(requirement));
         }
@@ -129,9 +118,7 @@ public class RecipeDeepCopy {
      * A copy of a master recipe, typed as one.
      * <p>
      * {@link #copyRecipe} hands back a {@code S88Recipe} even when what it copied was a master,
-     * because the return type covers both kinds. A caller that has a master and knows it needs a
-     * master back uses this instead of casting a copy that would have thrown if the kind were
-     * anything else.
+     * because the return type covers both kinds.
      *
      * @param source recipe to copy, may be {@code null}
      * @return the copy, or {@code null} when there was nothing to copy
@@ -146,8 +133,7 @@ public class RecipeDeepCopy {
                     + source.getId() + "' is a " + source.getClass().getSimpleName() + ".");
         }
         copyRecipeInto(source, empty);
-        // Set after the other information is across, because the kind is one of its entries and
-        // setting it first would leave the copy holding the answer twice.
+
         empty.setKind(source.getKind());
         return empty;
     }
@@ -155,7 +141,7 @@ public class RecipeDeepCopy {
     /**
      * A recipe of the same kind as the one given, carrying nothing of it.
      * <p>
-     * The kind matters because a control recipe is set for particular equipment and named after its
+     * A control recipe is set for particular equipment and named after its
      * batch, and a copy that came back as a plain master would lose both. It is kept apart from
      * {@link #copyRecipe} so that a caller setting a recipe for a batch can make the shell first,
      * give it the batch, and only then put the steps in.

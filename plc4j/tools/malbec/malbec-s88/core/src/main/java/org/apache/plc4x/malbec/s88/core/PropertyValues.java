@@ -28,9 +28,7 @@ import java.util.Map;
  * Defensive copies of the values held by the properties of an element.
  * <p>
  * Properties are stored as arbitrarily nested {@code Map} structures (a parameter owns its
- * own children, such as its {@code Reference}). Copying only the outermost container would
- * leave the inner maps shared, so that editing one element would silently mutate a sibling.
- * Every boundary that hands properties from one owner to another must therefore go through
+ * own children, such as its {@code Reference}).
  * {@link #deepCopy(Object)}.
  */
 final class PropertyValues {
