@@ -18,6 +18,7 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
+import java.awt.Window;
 import java.util.List;
 import java.util.function.Function;
 import javax.swing.*;
@@ -28,11 +29,13 @@ import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
+import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 
 /**
  * The buttons that change the chart of a recipe.
@@ -61,15 +64,91 @@ final class RecipeChartToolbar {
     private final RecipeChartView view;
     private final RecipeChartScene scene;
 
+    /** The recipe the actions change, which a menu passes in because it has no view. */
+    private final RecipeEditorModel owned;
+
     RecipeChartToolbar(RecipeChartView view, RecipeChartScene scene) {
         this.view = view;
         this.scene = scene;
+        this.owned = view.model();
+    }
+
+    /**
+     * A toolbar with no view behind it, for the actions a menu offers.
+     *
+     * <p>Every action it runs reaches the model through the scene, which the view set up. A menu
+     * has no view, and the actions do not need one.
+     *
+     * @param view  ignored, must be {@code null}
+     * @param scene the drawing, which says what is picked
+     * @param owned the recipe being edited
+     */
+    RecipeChartToolbar(RecipeChartView view, RecipeChartScene scene,
+                       RecipeEditorModel owned) {
+        this.view = view;
+        this.scene = scene;
+        this.owned = owned;
+    }
+
+    /** The recipe the actions change. */
+    RecipeEditorModel model() {
+        return view == null ? owned : view.model();
+    }
+
+    /**
+     * Draws the chart that holds the one on show, which is one level up.
+     *
+     * <p>A step at the top of the recipe goes straight back to the chart of the recipe, because
+     * that is the chart that holds it. A step inside another goes to the chart of the step that
+     * holds it.
+     */
+    private void goUp() {
+        S88RecipeElement step = model().currentStep();
+        model().editChartOf(step == null ? null : step.getParent());
+    }
+
+    /** The step whose chart is drawn if the operator goes up, {@code null} for the recipe. */
+    private S88RecipeElement oneLevelUp() {
+        S88RecipeElement step = model().currentStep();
+        return step == null ? null : step.getParent();
+    }
+
+    /**
+     * Names what going up leads to, so the button says where the operator is as well as where it
+     * goes.
+     */
+    private String upLabel() {
+        S88RecipeElement up = oneLevelUp();
+        return "Up to " + (up == null ? "Recipe" : up.getId());
+    }
+
+    /** The button that draws the chart one level up, whose label says where that is. */
+    private JButton upButton;
+
+    /**
+     * Brings the up button into line with the chart on show.
+     *
+     * <p>The label names where the button leads, which is also where the operator is, so it has to
+     * move every time the drawing does.
+     */
+    void refreshUpButton() {
+        if (upButton == null) {
+            return;
+        }
+        boolean inside = model().currentStep() != null;
+        upButton.setText(upLabel());
+        upButton.setEnabled(inside);
+        upButton.setToolTipText(inside
+                ? "Draw the chart of " + upLabel().substring("Up to ".length())
+                : "The chart of the recipe is already on show");
     }
 
     /**
      * * Puts the buttons in a bar.
      */
     void addTo(JToolBar bar) {
+        upButton = button(upLabel(), "Draw the chart that holds this one", this::goUp);
+        bar.add(upButton);
         bar.add(button("Add step", "Put an empty step and its bar in after the box that is picked." + " Press it again to put another one under that.", this::addStepAfterSelection));
         bar.add(button("Add parallel branch", "Put a step beside the one that is picked, so the two" + " run at once. Press it again for one more beside those.", () -> branch(this::addParallelBranch, "parallel branch")));
         bar.add(button("Add branch", "Put a step beside the one that is picked, with a bar of its own" + " so it can wait on something of its own. Press it again for one more.", () -> branch(this::addAlternativeBranch, "branch")));
@@ -78,8 +157,8 @@ final class RecipeChartToolbar {
         bar.add(button("Condition", "Say what the bar that is picked waits on", this::editCondition));
         bar.add(button("Delete", "Take the picked box or bar off the chart, and join what it joined", this::delete));
         bar.addSeparator();
-        bar.add(button("Undo", "Take back the last change", () -> view.model().undo()));
-        bar.add(button("Redo", "Put back the change that was taken back", () -> view.model().redo()));
+        bar.add(button("Undo", "Take back the last change", () -> model().undo()));
+        bar.add(button("Redo", "Put back the change that was taken back", () -> model().redo()));
     }
 
     /**
@@ -91,18 +170,18 @@ final class RecipeChartToolbar {
             return;
         }
         S88RecipeElement[] made = new S88RecipeElement[1];
-        view.model().edit("Add " + label, () -> made[0] = what.apply(box));
+        model().edit("Add " + label, () -> made[0] = what.apply(box));
         if (made[0] != null) {
             scene.selectWhenDrawn("BOX_" + made[0].getId());
         }
     }
 
     private S88RecipeElement addParallelBranch(String box) {
-        return ChartBranchingUseCase.addParallelBranch(view.model().getRecipe(), null, box);
+        return ChartBranchingUseCase.addParallelBranch(model().getRecipe(), actionStep(), box);
     }
 
     private S88RecipeElement addAlternativeBranch(String box) {
-        return ChartBranchingUseCase.addAlternativeBranch(view.model().getRecipe(), null, box);
+        return ChartBranchingUseCase.addAlternativeBranch(model().getRecipe(), actionStep(), box);
     }
 
     /**
@@ -139,9 +218,9 @@ final class RecipeChartToolbar {
         if (after == null) {
             return;
         }
-        view.model().edit("Add step", () -> {
-            S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(view.model().getRecipe(), null, after);
-            view.markEmptyStep(empty.getId());
+        model().edit("Add step", () -> {
+            S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(model().getRecipe(), actionStep(), after);
+            model().markEmptyStep(empty.getId());
         });
     }
 
@@ -154,16 +233,19 @@ final class RecipeChartToolbar {
         if (box == null || refusedLine(box)) {
             return;
         }
-        S88RecipeElement element = view.model().getRecipe().findElement(view.chart().findStep(box).orElseThrow().getRecipeElementId()).orElse(null);
+        S88RecipeElement element = model().getRecipe()
+                .findElement(model().chartBeingEdited().findStep(box)
+                        .orElseThrow().getRecipeElementId()).orElse(null);
         if (element == null) {
             return;
         }
-        boolean hasEquipment = view.model().getRecipe().addressesByClass() ? element.getEquipmentClassId() != null : !element.getActualEquipmentIds().isEmpty();
+        boolean hasEquipment = model().getRecipe().addressesByClass() ? element.getEquipmentClassId() != null : !element.getActualEquipmentIds().isEmpty();
         if (!hasEquipment) {
             JOptionPane.showMessageDialog(bar(), "This step has no equipment yet, so there is nothing to give a value to." + " Give it one first.", "No equipment", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        new StepEquipmentDialog(SwingUtilities.getWindowAncestor(bar()), view.model(), element).setVisible(true);
+        Window owner = view == null ? null : SwingUtilities.getWindowAncestor(view);
+        new StepEquipmentDialog(owner, model(), element).setVisible(true);
     }
 
     /**
@@ -173,34 +255,67 @@ final class RecipeChartToolbar {
      * parameters it is given, which is why nothing about either is asked for
      * here.
      */
+    /**
+     * The step whose chart every button acts on.
+     *
+     * <p>The drawing shows the chart of one step, so that is the step the buttons edit. It is
+     * {@code null} while the chart of the recipe is open.
+     */
+    private S88RecipeElement actionStep() {
+        return model().currentStep();
+    }
+
+    /** The kind of step the buttons put in, which is what the chart being drawn holds. */
+    private S88RecipeElementKind levelBeingEdited() {
+        return model().levelBeingEdited();
+    }
+
+    /**
+     * The step of the recipe the picked box works on.
+     */
+    private S88RecipeElement pickedStep() {
+        String box = pickedBox();
+        if (box == null) {
+            return null;
+        }
+        return model().chartBeingEdited()
+                .findStep(box)
+                .flatMap(stepBox -> model().getRecipe()
+                        .findElement(stepBox.getRecipeElementId()))
+                .orElse(null);
+    }
+
     private void bindEquipment() {
         String box = pickedBox();
         if (box == null || refusedLine(box)) {
             return;
         }
-        S88PlantSnapshot plant = view.model().plant();
+        S88PlantSnapshot plant = model().plant();
         if (plant == null) {
             JOptionPane.showMessageDialog(bar(), "This recipe set has no plant frozen into it, so there is nothing to attach the" + " step to.", "No plant", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        boolean byClass = view.model().getRecipe().addressesByClass();
-        List<String> choices = BindRecipeStepUseCase.choices(plant, byClass);
+        boolean byClass = model().getRecipe().addressesByClass();
+        S88RecipeElement step = pickedStep();
+        List<String> choices =
+                BindRecipeStepUseCase.choices(plant, byClass, step == null ? null : step.getKind());
         if (choices.isEmpty()) {
-            JOptionPane.showMessageDialog(bar(), "The plant has no " + (byClass ? "class of equipment" : "equipment") + " a step can be.", "Nothing to choose", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(bar(), "This step is an " + (step == null ? "" : step.getKind())
+                    + " and groups others, so it works on no equipment of its own.", "Nothing to choose", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
         String chosen = (String) JOptionPane.showInputDialog(bar(), byClass ? "Which class of equipment does this step stand for?" : "Which equipment does this step work on?", "Equipment of " + box, JOptionPane.QUESTION_MESSAGE, null, choices.toArray(), choices.get(0));
         if (chosen == null) {
             return;
         }
-        view.model().edit("Bind " + box + " to " + chosen, () -> {
+        model().edit("Bind " + box + " to " + chosen, () -> {
             if (byClass) {
-                BindRecipeStepUseCase.bindToClass(view.model().getRecipe(), null, box, chosen, plant);
+                BindRecipeStepUseCase.bindToClass(model().getRecipe(), actionStep(), box, chosen, plant);
             } else {
-                BindRecipeStepUseCase.bindToEquipment(view.model().getRecipe(), null, box, chosen, plant);
+                BindRecipeStepUseCase.bindToEquipment(model().getRecipe(), actionStep(), box, chosen, plant);
             }
         });
-        view.forgetEmptyStep();
+        model().forgetEmptyStep();
     }
 
     /**
@@ -210,13 +325,27 @@ final class RecipeChartToolbar {
      * piece of equipment publishes, so the operator picks that equipment,
      * then the report, then how it compares, and types only the value itself.
      */
+    /**
+     * What an edit refused says, unwrapped from the edit that carried it.
+     *
+     * <p>An edit that could not be made wraps what went wrong, and what the operator needs to read
+     * is the reason underneath, not the name of the thing that carried it.
+     *
+     * @param refused the edit that could not be made
+     * @return what the operator has to read
+     */
+    private static String reasonWithing(RecipeEditException refused) {
+        return refused.getCause() == null ? refused.getMessage() : refused.getCause().getMessage();
+    }
+
     private void editCondition() {
         String bar = pickedBar();
         if (bar == null) {
             return;
         }
-        S88MasterRecipe recipe = view.model().getRecipe();
-        S88PlantSnapshot plant = view.model().plant();
+        S88MasterRecipe recipe = model().getRecipe();
+        S88RecipeElement owner = actionStep();
+        S88PlantSnapshot plant = model().plant();
         if (plant == null) {
             JOptionPane.showMessageDialog(bar(), "This recipe set has no plant frozen into it, so there is nothing to read a" + " value from.", "No plant", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -253,9 +382,12 @@ final class RecipeChartToolbar {
         }
         String reads = equipment;
         try {
-            view.model().edit("Condition of " + bar, () -> SetBarConditionUseCase.waitUntil(recipe, null, bar, plant, reads, report, operator, value.trim()));
-        } catch (IllegalArgumentException refused) {
-            JOptionPane.showMessageDialog(bar(), refused.getMessage(), "Not something to wait on", JOptionPane.WARNING_MESSAGE);
+            model().edit("Condition of " + bar,
+                    () -> SetBarConditionUseCase.waitUntil(model().getRecipe(), owner, bar,
+                            plant, reads, report, operator, value.trim()));
+        } catch (RecipeEditException refused) {
+            JOptionPane.showMessageDialog(bar(), reasonWithing(refused),
+                    "Not something to wait on", JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -323,7 +455,7 @@ final class RecipeChartToolbar {
             return;
         }
         String wanted = typed.trim();
-        view.model().edit("Rename " + node + " to " + wanted, () -> EditProcedureLogicUseCase.renameStep(view.model().getRecipe(), null, node, wanted));
+        model().edit("Rename " + node + " to " + wanted, () -> EditProcedureLogicUseCase.renameStep(model().getRecipe(), actionStep(), node, wanted));
         scene.selectWhenDrawn(wanted);
     }
 
@@ -344,13 +476,13 @@ final class RecipeChartToolbar {
         if (answer != JOptionPane.OK_OPTION) {
             return;
         }
-        view.model().edit("Delete " + node, () -> {
+        model().edit("Delete " + node, () -> {
             if (scene.isLine(node)) {
-                EditProcedureLogicUseCase.removeLink(view.model().getRecipe(), null, node);
+                EditProcedureLogicUseCase.removeLink(model().getRecipe(), actionStep(), node);
             } else if (scene.isBox(node)) {
-                ChartDeletionUseCase.deleteBox(view.model().getRecipe(), null, node);
+                ChartDeletionUseCase.deleteBox(model().getRecipe(), actionStep(), node);
             } else {
-                EditProcedureLogicUseCase.removeTransition(view.model().getRecipe(), null, node);
+                EditProcedureLogicUseCase.removeTransition(model().getRecipe(), actionStep(), node);
             }
         });
         scene.select(null);
@@ -430,6 +562,107 @@ final class RecipeChartToolbar {
 
     private static boolean isTaken(S88ProcedureLogic chart, S88MasterRecipe recipe, String candidate) {
         return chart.findStep(candidate).isPresent() || chart.findTransition(candidate).isPresent() || recipe.findElement(candidate).isPresent();
+    }
+
+    /**
+     * Puts the actions of the toolbar in a menu, which is where a right click finds them.
+     *
+     * <p>A menu has no toolbar behind it, so the actions are built over the drawing and the model
+     * alone, and the caller does the redrawing after each one.
+     *
+     * @param menu   menu to fill, must not be {@code null}
+     * @param model  the recipe being edited
+     * @param scene  the drawing, which says what is picked
+     * @param redraw what to call after an action changed the chart
+     */
+    static void buildMenu(JPopupMenu menu, RecipeEditorModel model, RecipeChartScene scene,
+                          Runnable redraw) {
+        new RecipeChartToolbar(null, scene, model).addActionsTo(menu, redraw);
+    }
+
+    /**
+     * Adds the actions of the toolbar to a menu, filtered by the level of the chart on show.
+     *
+     * @param menu   menu to fill, must not be {@code null}
+     * @param redraw what to call after an action changed the chart
+     */
+    private void addActionsTo(JPopupMenu menu, Runnable redraw) {
+        if (model().currentStep() != null) {
+            menu.add(item(upLabel(), "Draw the chart that holds this one", this::goUp, redraw));
+        }
+        menu.add(item("Add step", "Put an empty step and its bar in after the box that is picked",
+                this::addStepAfterSelection, redraw));
+        menu.add(item("Add parallel branch", "Put a step beside the one that is picked",
+                () -> branch(this::addParallelBranch, "parallel branch"), redraw));
+        menu.add(item("Add branch", "Put a step beside the one that is picked, with a bar of its own",
+                () -> branch(this::addAlternativeBranch, "branch"), redraw));
+        if (holdsAChart(pickedStep())) {
+            menu.add(item("Chart", "Draw what the picked step does, step by step",
+                    () -> openChartOfSelection(redraw), redraw));
+        }
+        menu.add(item("Equipment", "Give the picked step the equipment it works on",
+                this::bindEquipment, redraw));
+        menu.add(item("Values", "Show what the picked step sets and what it reads back",
+                this::showValues, redraw));
+        menu.add(item("Condition", "Say what the bar that is picked waits on",
+                this::editCondition, redraw));
+        menu.add(item("Rename", "Give the picked box another name", this::rename, redraw));
+        menu.addSeparator();
+        menu.add(item("Delete", "Take the picked box or bar off the chart", this::delete, redraw));
+        menu.addSeparator();
+        menu.add(item("Undo", "Take back the last change", model()::undo, redraw));
+        menu.add(item("Redo", "Put back the change that was taken back", model()::redo,
+                redraw));
+    }
+
+    /**
+     * Whether there is anything to draw under the given step.
+     *
+     * <p>A step whose kind holds a chart does, whether it has one yet or not, so it is offered even
+     * when nothing has been made for it. A last-level step has nothing under it at all.
+     *
+     * @param step the picked step, may be {@code null}
+     * @return whether the chart action has anything to lead to
+     */
+    private static boolean holdsAChart(S88RecipeElement step) {
+        return step != null && RecipeLevels.allowsSubChart(step.getKind());
+    }
+
+    /**
+     * Draws the chart of the step the picked box works on, and brings the drawing up to date.
+     *
+     * @param after what to call once the chart on show is the new one
+     */
+    private void openChartOfSelection(Runnable after) {
+        S88RecipeElement step = pickedStep();
+        if (step == null) {
+            return;
+        }
+        if (step.getProcedureLogic() == null
+                && !RecipeLevels.allowsSubChart(step.getKind())) {
+            JOptionPane.showMessageDialog(bar(), "Step '" + step.getId() + "' is a "
+                    + step.getKind() + ", which is the last level and holds no chart of its own.",
+                    "Nothing under it", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        model().editChartOf(step);
+        after.run();
+    }
+
+    /**
+     * Puts one action in a menu, with the drawing brought up to date after it runs.
+     *
+     * <p>The undo and redo of the model are not offered in a menu, because taking a change back
+     * puts the recipe where it was and the chart on show with it.
+     */
+    private static JMenuItem item(String name, String hint, Runnable what, Runnable after) {
+        JMenuItem item = new JMenuItem(name);
+        item.setToolTipText(hint);
+        item.addActionListener(event -> {
+            what.run();
+            after.run();
+        });
+        return item;
     }
 
     /**

@@ -54,42 +54,43 @@ public final class BindRecipeStepUseCase {
      * @param byClass whether the recipe names classes of equipment or the equipment itself
      * @return the names an operator can choose from, which are class names or equipment ids
      */
-    public static List<String> choices(S88PlantSnapshot plant, boolean byClass) {
-        if (plant == null) {
+    public static List<String> choices(S88PlantSnapshot plant, boolean byClass,
+                                       S88RecipeElementKind kind) {
+        if (plant == null || RecipeLevels.boundTo(kind) == null) {
             return List.of();
         }
-        return byClass ? classesFor(plant) : equipmentFor(plant);
+        return byClass
+                ? classesFor(plant, RecipeLevels.boundTo(kind))
+                : equipmentFor(plant, RecipeLevels.boundTo(kind));
     }
 
     /**
-     * The classes a step of a class recipe can stand for.
+     * The classes of the given level a step can stand for.
      */
-    private static List<String> classesFor(S88PlantSnapshot plant) {
+    private static List<String> classesFor(S88PlantSnapshot plant, S88Level level) {
         Map<String, String> byName = new LinkedHashMap<>();
-        for (S88ElementClass elementClass : plant.getClassesForChildLevel(S88Level.EQUIPMENTMODULE)) {
-            byName.putIfAbsent(elementClass.getName(), elementClass.getName());
-        }
-        for (S88ElementClass elementClass : plant.getClassesForChildLevel(S88Level.UNIT)) {
+        for (S88ElementClass elementClass : plant.getClassesForChildLevel(level)) {
             byName.putIfAbsent(elementClass.getName(), elementClass.getName());
         }
         return List.copyOf(byName.values());
     }
 
     /**
-     * The equipment a step of one piece of equipment recipe can stand for, in the order they sit in the plant.
+     * The equipment of the given level a step can stand for, in the order they sit in the plant.
      */
-    private static List<String> equipmentFor(S88PlantSnapshot plant) {
+    private static List<String> equipmentFor(S88PlantSnapshot plant, S88Level level) {
         return plant.getRoot() == null
                 ? List.of()
-                : equipmentUnder(plant.getRoot(), new java.util.ArrayList<>());
+                : equipmentUnder(plant.getRoot(), new java.util.ArrayList<>(), level);
     }
 
-    private static List<String> equipmentUnder(S88Element element, List<String> found) {
-        if (element.getLevel() == S88Level.EQUIPMENTMODULE) {
+    private static List<String> equipmentUnder(S88Element element, List<String> found,
+                                               S88Level level) {
+        if (element.getLevel() == level) {
             found.add(element.getId());
         }
         for (S88Element child : element.getChildren()) {
-            equipmentUnder(child, found);
+            equipmentUnder(child, found, level);
         }
         return found;
     }
@@ -116,6 +117,7 @@ public final class BindRecipeStepUseCase {
         }
         S88RecipeElement element = elementOn(recipe, chart, boxId);
         requireNotStopped(element);
+        requireTheRightLevel(element, equipmentClass.getTargetLevel(), className);
 
         element.setEquipmentUid(null);
         removeEveryEquipment(element);
@@ -146,6 +148,7 @@ public final class BindRecipeStepUseCase {
                         + equipmentId + "'."));
         S88RecipeElement element = elementOn(recipe, chart, boxId);
         requireNotStopped(element);
+        requireTheRightLevel(element, equipment.getLevel(), equipmentId);
         element.setEquipmentClassId(null);
         removeEveryEquipment(element);
         element.addActualEquipmentId(equipmentId);
@@ -294,6 +297,24 @@ public final class BindRecipeStepUseCase {
                 box.setRecipeElementId(newId);
             }
         }
+    }
+
+    /**
+     * A step works on the plant level its own level calls for, and nothing else.
+     *
+     * @param element step being bound
+     * @param level   level of the plant it is being bound to
+     * @param name    name it is being bound to
+     * @throws IllegalStateException when the levels do not agree
+     */
+    private static void requireTheRightLevel(S88RecipeElement element, S88Level level, String name) {
+        if (RecipeLevels.bindsTo(element.getKind(), level)) {
+            return;
+        }
+        throw new IllegalStateException("Step '" + element.getId() + "' is an "
+                + element.getKind() + ", which works on "
+                + RecipeLevels.boundTo(element.getKind()) + ", and '" + name + "' is a " + level
+                + ". Bind it to the level its own calls for.");
     }
 
     /**

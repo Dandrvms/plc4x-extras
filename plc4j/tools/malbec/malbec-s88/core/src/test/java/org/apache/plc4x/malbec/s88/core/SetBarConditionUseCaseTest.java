@@ -82,9 +82,12 @@ class SetBarConditionUseCaseTest {
 
     private static S88MasterRecipe recipeOf(S88RecipeKind kind) {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", kind);
-        S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_" + empty.getId(),
-                "CALENTAMIENTO", plant());
+        Levels.unitProcedure(recipe, "TRAMO", null);
+        Levels.operation(recipe, "TRAMO", "PASO");
+        S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe,
+                Levels.owner(recipe, "PASO"), "BEGIN");
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"),
+                "BOX_" + empty.getId(), "CALENTAMIENTO", plant());
         return recipe;
     }
 
@@ -200,9 +203,12 @@ class SetBarConditionUseCaseTest {
 
     private static S88MasterRecipe recipeWithAStateReport(S88RecipeKind kind) {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", kind);
-        S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_" + empty.getId(),
-                "CALENTAMIENTO", plantWithAStateReport());
+        Levels.unitProcedure(recipe, "TRAMO", null);
+        Levels.operation(recipe, "TRAMO", "PASO");
+        S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe,
+                Levels.owner(recipe, "PASO"), "BEGIN");
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"),
+                "BOX_" + empty.getId(), "CALENTAMIENTO", plantWithAStateReport());
         return recipe;
     }
 

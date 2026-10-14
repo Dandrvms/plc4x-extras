@@ -20,14 +20,34 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.function.Consumer;
+import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
+import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.api.S88ElementClass;
+import org.apache.plc4x.malbec.s88.api.S88Level;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateRecipeElementUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
+import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
+import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,12 +59,44 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecipeEditorModelTest {
 
-    /** Adds a step after the start, which is what the Add step button does. */
+    /**
+     * Adds a step into the chart the editor has open, which is what the Add step button does.
+     *
+     * <p>Where it goes is found in that chart rather than given, so the same helper works on the
+     * chart of the recipe and on one of its subcharts, which are born with different names for
+     * their start.
+     */
     private static void addStep(RecipeEditorModel model, String name) {
+        String after = startBoxOf(model);
+        String classId = model.chartBeingEdited().getSteps().stream()
+                .map(S88ProcedureStep::getRecipeElementId)
+                .filter(element -> model.getRecipe().findElement(element)
+                        .map(one -> one.getEquipmentClassId() != null)
+                        .orElse(false))
+                .findFirst()
+                .map(element -> model.getRecipe().findElement(element).orElseThrow()
+                        .getEquipmentClassId())
+                .orElse(name + "_CLASS");
         model.edit("Add step " + name,
-                () -> EditProcedureLogicUseCase.insertStepAfter(
-                        model.getRecipe(), null, "BOX_BEGIN", name, "BOX_" + name,
-                        "T_" + name, name + "_CLASS"));
+                () -> EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(),
+                        model.currentStep(), after, name, "BOX_" + name, "T_" + name, classId));
+    }
+
+    /** The name of the box the flow leaves in the chart the editor has open. */
+    private static String startBoxOf(RecipeEditorModel model) {
+        String firstBox = model.chartBeingEdited().getSteps().stream()
+                .map(S88ProcedureStep::getRecipeElementId)
+                .filter(element -> model.getRecipe().findElement(element)
+                        .map(one -> one.getKind() == S88RecipeElementKind.BEGIN)
+                        .orElse(false))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "the chart on show has no start to put a step after"));
+        return model.chartBeingEdited().getSteps().stream()
+                .filter(box -> firstBox.equals(box.getRecipeElementId()))
+                .findFirst()
+                .map(S88ProcedureStep::getId)
+                .orElseThrow();
     }
 
     /** Adds a step whose name is already in the recipe, which the core refuses. */
@@ -61,6 +113,213 @@ class RecipeEditorModelTest {
         } catch (IOException failure) {
             throw new AssertionError("a recipe that was just written could not be read", failure);
         }
+    }
+
+    /**
+     * A recipe with a unit procedure holding an operation, which is the shape the editor goes into.
+     */
+    private static S88MasterRecipe tree() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
+                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", null);
+        CreateChartUseCase.forStep(recipe, tramo);
+        S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
+                "BEGIN", "PASO", "BOX_PASO", "T_PASO", "PASO_CLASS");
+        CreateChartUseCase.forStep(recipe, paso);
+        return recipe;
+    }
+
+    private static RecipeEditorModel openOverATree() {
+        try {
+            return RecipeBytes.openOn(RecipeBytes.holding(tree()));
+        } catch (IOException failure) {
+            throw new AssertionError("a recipe that was just written could not be read", failure);
+        }
+    }
+
+    /**
+     * Edits inside a subchart keep the editor on that subchart.
+     * <p>
+     * Every edit puts a new recipe in place of the old one, so a step held as it stands would be a
+     * step of a recipe that is no longer the one on show. Holding its name instead is what keeps
+     * the drawing and the changes on the same chart.
+     */
+    @Test
+    void anEditInsideASubchartKeepsTheEditorOnIt() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+
+        addStep(model, "PRIMERO");
+        addStep(model, "SEGUNDO");
+
+        assertEquals(model.getRecipe().findElement("TRAMO").orElseThrow(), model.currentStep(),
+                "and the chart on show is still the one that was gone into");
+        assertTrue(model.getRecipe().findElement("PRIMERO").isPresent()
+                        && model.getRecipe().findElement("SEGUNDO").isPresent(),
+                "and both steps are in the recipe the editor is holding");
+    }
+
+    /**
+     * Taking an edit back leaves the editor on the chart it was made in.
+     * <p>
+     * The step the chart belongs to is still on the recipe, which is what happens when what is
+     * taken back is a step inside the chart rather than the one holding it.
+     */
+    @Test
+    void takingAnEditBackLeavesTheEditorOnTheChartItWasMadeIn() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+        addStep(model, "PRIMERO");
+
+        model.undo();
+
+        assertEquals("TRAMO", model.currentStep().getId(),
+                "and the chart on show is still the one that was gone into");
+        assertTrue(model.getRecipe().findElement("PRIMERO").isEmpty(),
+                "and the step that was added is off the recipe again");
+    }
+
+    /**
+     * A step taken off the recipe leaves the editor back out of its chart.
+     * <p>
+     * The editor holds the name of the step rather than the step itself, so a name that leads
+     * nowhere leaves nothing to draw and the chart of the recipe comes back.
+     */
+    @Test
+    void aStepTakenOffTheRecipeLeavesTheEditorBackOutOfIt() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+
+        model.edit("Delete TRAMO", () -> ChartDeletionUseCase.deleteBox(
+                model.getRecipe(), null, "BOX_TRAMO"));
+
+        assertNull(model.currentStep(), "and the step that held the chart has gone");
+        assertEquals(model.getRecipe().getProcedureLogic(), model.chartBeingEdited(),
+                "so the chart drawn is the one the editor started on");
+        assertEquals(S88RecipeElementKind.UNIT_PROCEDURE, model.levelBeingEdited(),
+                "and the buttons act on the steps of that chart");
+    }
+
+    /**
+     * Redoing an edit brings the chart it was made on back with it.
+     */
+    @Test
+    void redoingAnEditBringsTheChartItWasMadeOnBack() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        S88RecipeElement tramo = model.getRecipe().findElement("TRAMO").orElseThrow();
+        model.editChartOf(tramo);
+        addStep(model, "PRIMERO");
+        model.undo();
+
+        model.redo();
+
+        assertEquals(tramo.getId(), model.currentStep().getId(),
+                "and the chart on show is the one the edit was made in");
+        assertTrue(model.getRecipe().findElement("PRIMERO").isPresent(),
+                "and the step it added is in the recipe again");
+    }
+
+    /**
+     * A condition written on a bar of a subchart lands on that bar.
+     * <p>
+     * Every chart is born with a bar called T1, so a bar picked in a subchart is a name the chart of
+     * the recipe also has. The step that holds the chart is what tells them apart.
+     */
+    @Test
+    void aConditionLandsOnTheBarOfTheChartBeingEdited() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+
+        model.edit("Condition of T1", () -> SetBarConditionUseCase.waitUntil(
+                model.getRecipe(), model.currentStep(), "T1", plantWithAReport(), null,
+                "TEMPERATURA_ACTUAL", ">", "80"));
+
+        assertNull(conditionOf(model.getRecipe().getProcedureLogic(), "T1"),
+                "and the bar of the same name in the chart of the recipe is left alone");
+        assertNotNull(conditionOf(model.chartBeingEdited(), "T1"),
+                "and the bar that was picked is the one that is written");
+    }
+
+    /**
+     * The comparison a bar is waiting on, or {@code null} when it waits for nothing.
+     */
+    private static String conditionOf(S88ProcedureLogic chart, String barId) {
+        return chart.findTransition(barId).orElseThrow().getCondition();
+    }
+
+    private static S88PlantSnapshot plantWithAReport() {
+        S88ElementClass heater = new S88ElementClass();
+        heater.setName("CALENTAMIENTO");
+        heater.setTargetLevel(S88Level.EQUIPMENTMODULE);
+        heater.setProperty("Reports", Map.of("TEMPERATURA_ACTUAL",
+                Map.of("Type", "REAL", "Eng_Units/Enum", "C")));
+        S88Element root = new S88Element();
+        root.setId("PLANT");
+        root.setLevel(S88Level.AREA);
+        S88ElementClass work = new S88ElementClass();
+        work.setName("PASO_CLASS");
+        work.setTargetLevel(S88Level.UNIT);
+        work.setProperty("Reports", Map.of("TEMPERATURA_ACTUAL",
+                Map.of("Type", "REAL", "Eng_Units/Enum", "C")));
+        S88PlantModel model = new S88PlantModel(root);
+        model.registerClass(heater);
+        model.registerClass(work);
+        return PlantSnapshotUseCase.of(model);
+    }
+
+    @Test
+    void goingIntoAStepDrawsTheChartThatStepHolds() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        S88RecipeElement tramo = model.getRecipe().findElement("TRAMO").orElseThrow();
+
+        model.editChartOf(tramo);
+
+        assertSame(tramo, model.currentStep(), "and the model says which chart is on show");
+        assertEquals(tramo.getProcedureLogic(), model.chartBeingEdited(),
+                "and that is the chart the drawing puts on the screen");
+        assertEquals(S88RecipeElementKind.OPERATION, model.levelBeingEdited(),
+                "and the steps in it are the kind that level holds");
+    }
+
+    @Test
+    void goingUpDrawsTheChartThatHoldsTheOneOnShow() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        S88RecipeElement paso = model.getRecipe().findElement("PASO").orElseThrow();
+        model.editChartOf(paso);
+
+        model.editChartOf(paso.getParent());
+
+        assertSame(model.getRecipe().findElement("TRAMO").orElseThrow(), model.currentStep(),
+                "and the chart on show is the one that held it, one level up");
+        assertEquals(S88RecipeElementKind.OPERATION, model.levelBeingEdited(),
+                "so the buttons act on the steps of that chart");
+    }
+
+    @Test
+    void aStepAtTheTopGoesBackToTheChartOfTheRecipe() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        S88RecipeElement tramo = model.getRecipe().findElement("TRAMO").orElseThrow();
+        model.editChartOf(tramo);
+
+        model.editChartOf(tramo.getParent());
+
+        assertNull(model.currentStep(), "and that is the chart the editor opened on");
+        assertEquals(model.getRecipe().getProcedureLogic(), model.chartBeingEdited(),
+                "which is where every chart of the recipe starts");
+        assertEquals(S88RecipeElementKind.UNIT_PROCEDURE, model.levelBeingEdited(),
+                "so the steps put in it are the ones the recipe holds directly");
+    }
+
+    @Test
+    void theStepJustAddedIsMarkedUntilItHasSomethingToDo() throws IOException {
+        RecipeEditorModel model = open();
+
+        model.markEmptyStep("HEAT");
+        assertEquals("HEAT", model.justAddedStep(),
+                "so the drawing marks the one with nothing behind it");
+
+        model.forgetEmptyStep();
+        assertNull(model.justAddedStep(), "and it stops being marked once it has something to do");
     }
 
     @Test

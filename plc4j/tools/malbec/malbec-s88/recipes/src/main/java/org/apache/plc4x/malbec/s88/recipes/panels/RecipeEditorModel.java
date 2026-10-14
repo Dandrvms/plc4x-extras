@@ -27,11 +27,16 @@ import javax.swing.undo.CannotRedoException;
 import javax.swing.undo.CannotUndoException;
 
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
+import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
+import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
 import org.apache.plc4x.malbec.s88.recipes.services.RecipeSetPlantSnapshot;
 import org.apache.plc4x.malbec.s88.recipes.services.S88RecipeProjectServices;
@@ -52,6 +57,17 @@ public final class RecipeEditorModel {
     private final RecipeUndoRedo undoRedo = new RecipeUndoRedo();
     private S88MasterRecipe recipe;
     private int savedPosition;
+
+    /**
+     * The name of the step whose chart is being edited, {@code null} for the chart of the recipe.
+     * <p>
+     * A name rather than the step itself, because the recipe is taken apart and put back together
+     * by every edit.
+     */
+    private String currentStepId;
+
+    /** The step that was just added and has no equipment behind it yet. */
+    private String justAdded;
 
     private RecipeEditorModel(FileObject recipeFile, S88MasterRecipe recipe,
                               S88RecipeRepository repository, S88PlantSnapshot plant) {
@@ -151,6 +167,70 @@ public final class RecipeEditorModel {
      */
     public S88MasterRecipe getRecipe() {
         return recipe;
+    }
+
+    /**
+     * The step whose chart the editor is drawing.
+     * <p>
+     * The step is held by its name and found again in the recipe each time, because every edit
+     * replaces the recipe with another object. Holding the step itself would leave the editor
+     * drawing and changing a tree that is no longer the one on show.
+     *
+     * <p>A step an undo has taken off the recipe is left behind, and the chart of the recipe is
+     * drawn in its place.
+     *
+     * @return the step, or {@code null} for the chart of the recipe
+     */
+    public S88RecipeElement currentStep() {
+        return currentStepId == null ? null
+                : recipe.findElement(currentStepId).orElse(null);
+    }
+
+    /**
+     * The chart the editor is drawing.
+     *
+     * @return the chart of the recipe when no step is being edited
+     */
+    public S88ProcedureLogic chartBeingEdited() {
+        return EditProcedureLogicUseCase.existingChart(recipe, currentStep());
+    }
+
+    /**
+     * Draws the chart of the given step, or the chart of the recipe again when it is {@code null}.
+     *
+     * @param step step whose chart to draw, {@code null} for the chart of the recipe
+     */
+    public void editChartOf(S88RecipeElement step) {
+        this.currentStepId = step == null ? null : step.getId();
+        fireChanged();
+    }
+
+    /**
+     * The level of the chart being drawn, which is what the steps in it are.
+     *
+     * @return the kind its steps are
+     */
+    public S88RecipeElementKind levelBeingEdited() {
+        return RecipeLevels.levelOf(currentStep());
+    }
+
+    /**
+     * Remembers which step was just added, so the drawing marks the one with nothing behind it.
+     *
+     * @param elementId id of the step, {@code null} for none
+     */
+    public void markEmptyStep(String elementId) {
+        this.justAdded = elementId;
+    }
+
+    /** Forgets which step was empty, once it has been given something to do. */
+    public void forgetEmptyStep() {
+        this.justAdded = null;
+    }
+
+    /** The step that was added and has nothing behind it, {@code null} when there is none. */
+    public String justAddedStep() {
+        return justAdded;
     }
 
     /**

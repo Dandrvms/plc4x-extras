@@ -156,10 +156,12 @@ class CreateMasterRecipeUseCaseTest {
     @Test
     void aStepNamedOnTheChartOfTheRecipeItselfIsNotDeletedOutFromUnderIt() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("CAFE_NEGRO", S88RecipeKind.CLASS);
-        S88RecipeElement heat = CreateRecipeElementUseCase.forEquipmentClass(recipe, null, "HEAT",
-                S88RecipeElementKind.OPERATION, "HEATER");
+        Levels.unitProcedure(recipe, "TRAMO", null);
+        Levels.operation(recipe, "TRAMO", "PASO");
+        S88RecipeElement heat = Levels.phase(recipe, "PASO", "HEAT", "HEATER");
 
-        EditProcedureLogicUseCase.addStep(recipe, null, "BOX", heat.getId());
+        EditProcedureLogicUseCase.addStep(recipe, Levels.owner(recipe, "PASO"), "BOX",
+                heat.getId());
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> DeleteRecipeElementUseCase.execute(recipe, heat));
@@ -196,12 +198,14 @@ class CreateMasterRecipeUseCaseTest {
     @Test
     void anotherStepCanBeAddedToTheChartOfANewRecipe() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("CAFE_NEGRO", S88RecipeKind.CLASS);
-        S88RecipeElement heat = CreateRecipeElementUseCase.forEquipmentClass(recipe, null, "HEAT",
-                S88RecipeElementKind.OPERATION, "HEATER");
-        EditProcedureLogicUseCase.addStep(recipe, null, "BOX", heat.getId());
+        Levels.unitProcedure(recipe, "TRAMO", null);
+        Levels.operation(recipe, "TRAMO", "PASO");
+        S88RecipeElement heat = Levels.phase(recipe, "PASO", "HEAT", "HEATER");
+        EditProcedureLogicUseCase.addStep(recipe, Levels.owner(recipe, "PASO"), "BOX",
+                heat.getId());
 
-        assertEquals(3, recipe.getProcedureLogic().getSteps().size(),
-                "the chart of the recipe takes new boxes, so a recipe can be built outwards from"
+        assertEquals(3, Levels.chartOf(recipe, "PASO").getSteps().size(),
+                "the chart of a step takes new boxes, so a recipe can be built outwards from"
                         + " the start it was created with");
     }
 }

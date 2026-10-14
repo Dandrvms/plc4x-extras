@@ -21,11 +21,16 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 import java.awt.BorderLayout;
 import java.util.List;
 import javax.swing.JComponent;
+import javax.swing.JPopupMenu;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
+import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 
 /**
  * The chart of a recipe, drawn as boxes and bars.
@@ -44,13 +49,17 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     private final RecipeChartScene scene = new RecipeChartScene();
 
+    /** The buttons that act on the chart on show, which move as that chart moves. */
+    private RecipeChartToolbar toolbar;
+
     public RecipeChartView(RecipeEditorModel model) {
         super(model);
         scene.setOnConnected(this::onConnected);
         view = scene.createView();
         pickWithThePointer();
         zoomWithControlAndWheel(view, scene);
-        new RecipeChartToolbar(this, scene).addTo(toolBar());
+        this.toolbar = new RecipeChartToolbar(this, scene);
+        toolbar.addTo(toolBar());
         add(new JScrollPane(view), BorderLayout.CENTER);
 
         problems = new RecipeProblems();
@@ -67,6 +76,9 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     /**
      * Picks a box, a bar or a line when the operator clicks on it.
+     *
+     * <p>A double click draws the chart of the step the box works on, which is the only way in.
+     * A right click offers the actions of the toolbar on whatever was picked.
      */
     private void pickWithThePointer() {
         view.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -74,7 +86,63 @@ public final class RecipeChartView extends AbstractRecipeView {
             public void mousePressed(java.awt.event.MouseEvent event) {
                 scene.pickAtInView(view, event.getPoint());
             }
+
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent event) {
+                if (event.getClickCount() == 2) {
+                    openChartOfPickedBox();
+                }
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent event) {
+                if (event.isPopupTrigger()) {
+                    showMenuFor(event);
+                }
+            }
         });
+    }
+
+    /**
+     * Draws the chart of the step the picked box works on.
+     *
+     * <p>A step that holds no chart of its own is told apart from one whose chart has not been made
+     * yet: a unit procedure or an operation is meant to have one, so it is offered here rather than
+     * being told it is the last level when it is not.
+     */
+    private void openChartOfPickedBox() {
+        String box = scene.pickedBox();
+        if (box == null) {
+            return;
+        }
+        S88ProcedureStep picked = model.chartBeingEdited().findStep(box).orElse(null);
+        if (picked == null) {
+            return;
+        }
+        S88RecipeElement step = model.getRecipe()
+                .findElement(picked.getRecipeElementId()).orElse(null);
+        if (step == null) {
+            return;
+        }
+        if (step.getProcedureLogic() == null && !RecipeLevels.allowsSubChart(step.getKind())) {
+            JOptionPane.showMessageDialog(this, "Step '" + step.getId() + "' is a "
+                    + step.getKind() + ", which is the last level and holds no chart of its own.",
+                    "Nothing under it", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        model.editChartOf(step);
+    }
+
+    /**
+     * Offers the actions of the toolbar on whatever the pointer is over.
+     *
+     * @param event where the right button went down, which is where the menu comes up
+     */
+    private void showMenuFor(java.awt.event.MouseEvent event) {
+        scene.pickAtInView(view, event.getPoint());
+        JPopupMenu menu = new JPopupMenu();
+        RecipeChartToolbar.buildMenu(menu, model, scene, this::redraw);
+        menu.show(view, event.getX(), event.getY());
     }
 
     /**
@@ -112,13 +180,19 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     /** The chart being drawn, {@code null} for a recipe that has none. */
     S88ProcedureLogic chart() {
-        return model.getRecipe().getProcedureLogic();
+        return model.chartBeingEdited();
     }
 
+    /** The step whose chart is being drawn, {@code null} for the chart of the recipe. */
+    S88RecipeElement owner() {
+        return model.currentStep();
+    }
 
     @Override
     protected void redraw() {
-        scene.draw(model.getRecipe());
+        scene.draw(model.getRecipe(), model.currentStep());
+        scene.markEmpty(model.justAddedStep());
+        toolbar.refreshUpButton();
         problems.show(model.conformance());
     }
 
@@ -128,18 +202,13 @@ public final class RecipeChartView extends AbstractRecipeView {
      * @param elementId id of the step that was added
      */
     void markEmptyStep(String elementId) {
-        emptyStep = elementId;
-        scene.markEmpty(elementId);
+        model.markEmptyStep(elementId);
     }
 
     /** Forgets which step was empty, once it has been given something to do. */
     void forgetEmptyStep() {
-        emptyStep = null;
-        scene.markEmpty(null);
+        model.forgetEmptyStep();
     }
-
-    /** The step that was added and has nothing behind it yet, {@code null} when there is none. */
-    private String emptyStep;
 
     /**
      * The problems panel of this view, for a test that reads what it is saying.
@@ -162,7 +231,8 @@ public final class RecipeChartView extends AbstractRecipeView {
         }
         model.edit("Join " + from + " to " + to,
                 () -> EditProcedureLogicUseCase.addLink(
-                        model.getRecipe(), null, nextLinkId(model.getRecipe().getProcedureLogic()),
+                        model.getRecipe(), model.currentStep(),
+                        nextLinkId(model.chartBeingEdited()),
                         List.of(from), List.of(to), S88LinkType.CONTROL_LINK));
     }
 

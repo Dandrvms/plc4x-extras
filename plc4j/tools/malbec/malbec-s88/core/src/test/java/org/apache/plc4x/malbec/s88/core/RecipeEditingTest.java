@@ -23,6 +23,9 @@ import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
+import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
@@ -64,7 +67,7 @@ class RecipeEditingTest {
         S88Recipe recipe = master();
 
         S88RecipeElement step = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         assertEquals("HEAT", step.getId());
         assertEquals(List.of("HEAT"), step.getActualEquipmentIds(),
@@ -77,7 +80,7 @@ class RecipeEditingTest {
         S88Recipe recipe = master();
 
         S88RecipeElement step = CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, null, "HEATING", S88RecipeElementKind.OPERATION, "HEATER");
+                recipe, operationOf(recipe), "HEATING", S88RecipeElementKind.PHASE, "HEATER");
 
         assertEquals("HEATER", step.getEquipmentClassId());
         assertTrue(step.getActualEquipmentIds().isEmpty());
@@ -86,12 +89,11 @@ class RecipeEditingTest {
     @Test
     void aStepGoesIntoTheRecipeOnlyOnceHoweverDeepItIs() {
         S88Recipe recipe = new S88MasterRecipe("REC", S88RecipeKind.CLASS);
-        S88RecipeElement procedure = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "PROC", S88RecipeElementKind.PROCEDURE);
+        S88RecipeElement procedure = operationOf(recipe);
         S88RecipeElement nested = CreateRecipeElementUseCase.forEquipment(
-                recipe, procedure, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, procedure, "HEAT", S88RecipeElementKind.PHASE);
 
-        assertEquals(List.of("PROC"), recipe.getRecipeElements().stream()
+        assertEquals(List.of("TRAMO"), recipe.getRecipeElements().stream()
                 .map(S88RecipeElement::getId).toList(),
                 "a step added inside another is not also a step of the recipe, or the tree would"
                         + " show it twice");
@@ -99,7 +101,7 @@ class RecipeEditingTest {
         assertFalse(nested.isTopLevel());
         assertTrue(recipe.findElement("HEAT").isPresent(),
                 "and it is still reachable by name from the top, which is what a chart needs");
-        assertEquals(2, recipe.getAllElements().size());
+        assertEquals(3, recipe.getAllElements().size());
     }
 
     @Test
@@ -114,10 +116,10 @@ class RecipeEditingTest {
     @Test
     void twoStepsCannotBeCalledTheSameThing() {
         S88Recipe recipe = master();
-        CreateRecipeElementUseCase.forEquipment(recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+        CreateRecipeElementUseCase.forEquipment(recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         assertThrows(IllegalArgumentException.class, () -> CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION));
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE));
     }
 
     // ========== Renaming follows every pointer to it ==========
@@ -130,20 +132,20 @@ class RecipeEditingTest {
         RenameRecipeElementUseCase.execute(recipe, heat, "HEAT_2");
 
         assertEquals("HEAT_2", heat.getId());
-        assertEquals("HEAT_2", chartOf(recipe).findStep("BOX_HEAT").orElseThrow()
+        assertEquals("HEAT_2", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow()
                 .getRecipeElementId(), "the box on the chart now works on the step's new name");
     }
 
     @Test
     void renamingAStepLeavesTheNamesOfTheBoxesAndTheLinesAlone() {
         S88Recipe recipe = completeChart();
-        var line = chartOf(recipe).findLink("L1").orElseThrow();
+        var line = chartOfPaso(recipe).findLink("L1").orElseThrow();
         String fromBefore = line.getFrom().get(0).getValue();
         String toBefore = line.getTo().get(0).getValue();
 
         RenameRecipeElementUseCase.execute(recipe, recipe.findElement("HEAT").orElseThrow(), "HEAT_2");
 
-        assertEquals("BOX_HEAT", chartOf(recipe).findStep("BOX_HEAT").orElseThrow().getId(),
+        assertEquals("BOX_HEAT", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow().getId(),
                 "a box is the chart's own naming and not the step's, so a step that changes what it"
                         + " is called leaves the box that works on it as it was");
         assertEquals(fromBefore, line.getFrom().get(0).getValue(),
@@ -154,14 +156,15 @@ class RecipeEditingTest {
     @Test
     void aRenameThatIsRefusedLeavesTheRecipeExactlyAsItWas() {
         S88Recipe recipe = completeChart();
-        CreateRecipeElementUseCase.forEquipment(recipe, null, "MIX", S88RecipeElementKind.OPERATION);
+        CreateRecipeElementUseCase.forEquipment(recipe, operationOf(recipe), "MIX", S88RecipeElementKind.PHASE);
 
         assertThrows(IllegalArgumentException.class, () -> RenameRecipeElementUseCase.execute(
                 recipe, recipe.findElement("HEAT").orElseThrow(), "MIX"),
                 "a name the recipe already has is refused by the name check, before anything moves");
 
         assertEquals("HEAT", recipe.findElement("HEAT").orElseThrow().getId());
-        assertEquals("HEAT", chartOf(recipe).findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
+        assertEquals("HEAT", Levels.chartOf(recipe, "PROC").findStep("BOX_HEAT").orElseThrow()
+                .getRecipeElementId(),
                 "with the chart still pointing at the name it had, rather than half renamed and"
                         + " left to be found broken");
     }
@@ -174,7 +177,7 @@ class RecipeEditingTest {
         RenameRecipeElementUseCase.execute(recipe, heat, "HEAT");
 
         assertEquals("HEAT", heat.getId());
-        assertEquals("HEAT", chartOf(recipe).findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
+        assertEquals("HEAT", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
                 "the one name the recipe already has is the name it is being called, so asking for"
                         + " it again is not a clash with itself");
     }
@@ -183,7 +186,7 @@ class RecipeEditingTest {
     void aRecipeThatAlreadyHasTwoStepsOfOneNameIsNotRenamedIntoIt() {
         S88Recipe recipe = master();
         S88RecipeElement first = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
         recipe.addRecipeElement(new S88RecipeElement("HEAT", S88RecipeElementKind.OPERATION));
 
         assertThrows(IllegalStateException.class,
@@ -196,7 +199,7 @@ class RecipeEditingTest {
     void aStepNothingPointsAtCanBeTakenAway() {
         S88Recipe recipe = master();
         S88RecipeElement heat = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         DeleteRecipeElementUseCase.execute(recipe, heat);
 
@@ -224,13 +227,12 @@ class RecipeEditingTest {
     @Test
     void takingAStepAwayTakesWhatWasUnderItToo() {
         S88Recipe recipe = master();
-        S88RecipeElement procedure = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "PROC", S88RecipeElementKind.PROCEDURE);
-        CreateRecipeElementUseCase.forEquipment(recipe, procedure, "HEAT", S88RecipeElementKind.OPERATION);
+        S88RecipeElement procedure = operationOf(recipe);
+        CreateRecipeElementUseCase.forEquipment(recipe, procedure, "HEAT", S88RecipeElementKind.PHASE);
 
         DeleteRecipeElementUseCase.execute(recipe, procedure);
 
-        assertTrue(recipe.findElement("PROC").isEmpty());
+        assertTrue(recipe.findElement("PASO").isEmpty());
         assertTrue(recipe.findElement("HEAT").isEmpty(),
                 "a phase with no operations under it is not a phase");
     }
@@ -241,7 +243,7 @@ class RecipeEditingTest {
     void aValueIsFiledAgainstTheVariableItIsFor() {
         S88Recipe recipe = master();
         S88RecipeElement heat = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Reports/STATE", "IDLE",
                 DataType.ENUMERATION, null);
@@ -255,7 +257,7 @@ class RecipeEditingTest {
     void settingAValueTwiceLeavesOneValueAndNotTwo() {
         S88Recipe recipe = master();
         S88RecipeElement heat = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Reports/STATE", "IDLE",
                 DataType.ENUMERATION, null);
@@ -274,7 +276,7 @@ class RecipeEditingTest {
     void aValueCanBeRemovedAndIsNotThereAfterwards() {
         S88Recipe recipe = master();
         S88RecipeElement heat = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+                recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Parameters/TARGET", "75", DataType.REAL, "degC");
 
         assertTrue(UpdateRecipeParameterUseCase.remove(recipe, heat, "Parameters/TARGET"));
@@ -288,35 +290,31 @@ class RecipeEditingTest {
     @Test
     void aChartIsDrawnByNamingTheStepsItWorksOn() {
         S88Recipe recipe = master();
-        S88RecipeElement procedure = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "PROC", S88RecipeElementKind.PROCEDURE);
-        CreateRecipeElementUseCase.forEquipment(recipe, procedure, "HEAT", S88RecipeElementKind.OPERATION);
-        S88RecipeElement end = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "END", S88RecipeElementKind.END);
+        S88RecipeElement procedure = operationOf(recipe);
+        Levels.phase(recipe, "PASO", "HEAT", null);
+        recipe.addRecipeElement(new S88RecipeElement("END", S88RecipeElementKind.END));
 
-        EditProcedureLogicUseCase.addStep(recipe, procedure, "BOX_HEAT", "HEAT");
-        EditProcedureLogicUseCase.addStep(recipe, procedure, "BOX_END", "END");
-        EditProcedureLogicUseCase.addTransition(recipe, procedure, "T1");
-        EditProcedureLogicUseCase.addLink(recipe, procedure, "L1", List.of("BOX_HEAT"),
-                List.of("T1"), null);
-        EditProcedureLogicUseCase.addLink(recipe, procedure, "L2", List.of("T1"),
-                List.of("BOX_END"), null);
+        S88ProcedureLogic chart = new S88ProcedureLogic();
+        chart.addStep(new S88ProcedureStep("BOX_HEAT", "HEAT"));
+        chart.addStep(new S88ProcedureStep("BOX_END", "END"));
+        chart.addTransition(new S88ProcedureTransition("T1", null));
+        link(chart, "BOX_HEAT", "T1");
+        link(chart, "T1", "BOX_END");
+        procedure.setProcedureLogic(chart);
 
-        S88ProcedureLogic chart = procedure.getProcedureLogic();
         assertEquals(2, chart.getSteps().size());
         assertEquals(2, chart.getLinks().size());
         assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart));
         assertEquals("HEAT", chart.findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
                 "and the chart says which step each box works on, by the name the plant gave it");
         assertTrue(EditProcedureLogicUseCase.hasChart(procedure));
-        assertFalse(EditProcedureLogicUseCase.hasChart(end));
+        assertFalse(EditProcedureLogicUseCase.hasChart(Levels.owner(recipe, "END")));
     }
 
     @Test
     void aBoxCannotWorkOnAStepTheRecipeDoesNotHave() {
         S88Recipe recipe = master();
-        S88RecipeElement procedure = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "PROC", S88RecipeElementKind.PROCEDURE);
+        S88RecipeElement procedure = operationOf(recipe);
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> EditProcedureLogicUseCase.addStep(recipe, procedure, "BOX", "NOT_THERE"));
@@ -378,7 +376,7 @@ class RecipeEditingTest {
         EditProcedureLogicUseCase.addLink(recipe, proc, "LEXT", List.of("!BOX_OUTSIDE"),
                 List.of("T_TEMP_OK"), null);
 
-        var external = chartOf(recipe).findLink("LEXT").orElseThrow().getFrom().get(0);
+        var external = chartOfPaso(recipe).findLink("LEXT").orElseThrow().getFrom().get(0);
         assertFalse(external.isInternal(),
                 "which is how a line says it refers to a box of another part of the process rather"
                         + " than one of its own");
@@ -391,7 +389,7 @@ class RecipeEditingTest {
 
         assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_HEAT"));
-        assertTrue(chartOf(recipe).findStep("BOX_HEAT").isPresent());
+        assertTrue(chartOfPaso(recipe).findStep("BOX_HEAT").isPresent());
     }
 
     @Test
@@ -406,10 +404,10 @@ class RecipeEditingTest {
         EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT2", List.of("T_SPLIT"),
                 List.of("BOX_MIX", "BOX_END"), S88LinkType.PARALLEL_DIVERGENT);
 
-        var split = chartOf(recipe).findLink("LSPLIT2").orElseThrow();
+        var split = chartOfPaso(recipe).findLink("LSPLIT2").orElseThrow();
         assertEquals(2, split.getTo().size());
         assertTrue(split.isDivergent());
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chartOf(recipe)),
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chartOfPaso(recipe)),
                 "and a chart with a split in it is still a chart where every line crosses a bar");
     }
 
@@ -422,7 +420,7 @@ class RecipeEditingTest {
 
         EditProcedureLogicUseCase.addTransition(recipe, proc, "T_STATE", expression);
 
-        var bar = chartOf(recipe).findTransition("T_STATE").orElseThrow();
+        var bar = chartOfPaso(recipe).findTransition("T_STATE").orElseThrow();
         assertTrue(bar.isGuarded());
         assertFalse(bar.crossesAlways());
         assertEquals(expression, bar.expression(),
@@ -438,7 +436,7 @@ class RecipeEditingTest {
 
         EditProcedureLogicUseCase.addTransition(recipe, proc, "T_ALWAYS");
 
-        var bar = chartOf(recipe).findTransition("T_ALWAYS").orElseThrow();
+        var bar = chartOfPaso(recipe).findTransition("T_ALWAYS").orElseThrow();
         assertFalse(bar.isGuarded());
         assertTrue(bar.crossesAlways(),
                 "an ordinary bar and not a missing one: a chart draws a bar between two steps that"
@@ -515,9 +513,9 @@ class RecipeEditingTest {
         });
         recipe.addChangeListener(seen::add);
 
-        CreateRecipeElementUseCase.forEquipment(recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+        Levels.unitProcedure(recipe, "TRAMO", null);
 
-        assertEquals(1, seen.size(),
+        assertEquals(3, seen.size(),
                 "the change has already happened, so a tree left out of step with it is worse than"
                         + " one broken view");
     }
@@ -530,7 +528,7 @@ class RecipeEditingTest {
         recipe.addChangeListener(listener);
         recipe.removeChangeListener(listener);
 
-        CreateRecipeElementUseCase.forEquipment(recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
+        CreateRecipeElementUseCase.forEquipment(recipe, operationOf(recipe), "HEAT", S88RecipeElementKind.PHASE);
 
         assertTrue(seen.isEmpty());
     }
@@ -545,11 +543,11 @@ class RecipeEditingTest {
         S88RecipeElement copy = RecipeDeepCopy.copyElement(proc);
 
         assertNotSame(proc, copy);
-        assertNotSame(chartOf(recipe).getLinks().get(0).getFrom().get(0),
+        assertNotSame(chartOfPaso(recipe).getLinks().get(0).getFrom().get(0),
                 copy.getProcedureLogic().getLinks().get(0).getFrom().get(0),
                 "a line whose ends were still the original's would take a rename of one chart as a"
                         + " rename of the other");
-        assertNotSame(chartOf(recipe), copy.getProcedureLogic());
+        assertNotSame(chartOfPaso(recipe), copy.getProcedureLogic());
     }
 
     @Test
@@ -613,6 +611,30 @@ class RecipeEditingTest {
         return recipe.findElement("PROC").orElseThrow().getProcedureLogic();
     }
 
+    /** The chart these tests draw in, whichever operation the test made it on. */
+    private static S88ProcedureLogic chartOfPaso(S88Recipe recipe) {
+        return Levels.chartOf(recipe,
+                recipe.findElement("PASO").isPresent() ? "PASO" : "PROC");
+    }
+
+    private static void link(S88ProcedureLogic chart, String from, String to) {
+        S88ProcedureLink line = new S88ProcedureLink("");
+        boolean fromIsBox = chart.findStep(from).isPresent();
+        line.addFrom(fromIsBox ? S88IdRef.step(from) : S88IdRef.transition(from));
+        line.addTo(fromIsBox ? S88IdRef.transition(to) : S88IdRef.step(to));
+        chart.addLink(line);
+    }
+
+    /** The step whose chart most of these tests draw on, made if it is not there. */    private static S88RecipeElement operationOf(S88Recipe recipe) {
+        if (recipe.findElement("TRAMO").isEmpty()) {
+            Levels.unitProcedure(recipe, "TRAMO", null);
+        }
+        if (recipe.findElement("PASO").isEmpty()) {
+            Levels.operation(recipe, "TRAMO", "PASO");
+        }
+        return Levels.owner(recipe, "PASO");
+    }
+
     /** An empty recipe written by class, which is what most of these start from. */
     private static S88MasterRecipe master() {
         return new S88MasterRecipe("REC_CALENTAMIENTO", S88RecipeKind.CLASS);
@@ -624,11 +646,12 @@ class RecipeEditingTest {
      */
     private static S88Recipe completeChart() {
         S88Recipe recipe = master();
-        S88RecipeElement proc = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "PROC", S88RecipeElementKind.PROCEDURE);
+        Levels.unitProcedure(recipe, "TRAMO", null);
+        S88RecipeElement proc = Levels.operationBare(recipe, "TRAMO", "PROC");
+        proc.setProcedureLogic(new S88ProcedureLogic());
         S88RecipeElement heat = CreateRecipeElementUseCase.forEquipment(
-                recipe, null, "HEAT", S88RecipeElementKind.OPERATION);
-        CreateRecipeElementUseCase.forEquipment(recipe, null, "END", S88RecipeElementKind.END);
+                recipe, proc, "HEAT", S88RecipeElementKind.PHASE);
+        recipe.addRecipeElement(new S88RecipeElement("END", S88RecipeElementKind.END));
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Reports/STATE", "IDLE",
                 DataType.ENUMERATION, null);
 

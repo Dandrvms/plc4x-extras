@@ -52,6 +52,11 @@ public class CreateRecipeElementUseCase {
             throw new IllegalArgumentException("Recipe cannot be null");
         }
         RecipeNameValidator.validate(recipe, id);
+        if (!RecipeLevels.belongsIn(parent, kind)) {
+            throw new IllegalArgumentException("A '" + kind + "' does not go in the chart of "
+                    + (parent == null ? "the recipe" : "'" + parent.getId() + "'") + ", which holds "
+                    + RecipeLevels.levelOf(parent) + " steps.");
+        }
 
         S88RecipeElement element = new S88RecipeElement(id, kind);
         if (parent == null) {
@@ -63,6 +68,7 @@ public class CreateRecipeElementUseCase {
             }
             recipe.attachUnder(parent, element);
         }
+        CreateChartUseCase.forStep(recipe, element);
         recipe.fireChangeEvent(new S88RecipeChangeEvent(S88RecipeChangeEvent.Type.ADDED, element));
         return element;
     }

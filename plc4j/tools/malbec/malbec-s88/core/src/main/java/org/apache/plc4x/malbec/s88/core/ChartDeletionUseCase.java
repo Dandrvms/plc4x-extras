@@ -75,7 +75,7 @@ public final class ChartDeletionUseCase {
         refuseIfEnd(recipe, box);
         String elementId = box.getRecipeElementId();
 
-        refuseIfNestedChartsNameIt(recipe, elementId);
+        refuseIfNestedChartsNameIt(recipe, chart, boxId, elementId);
 
         S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
         takeStepOff(joined, boxId);
@@ -88,11 +88,19 @@ public final class ChartDeletionUseCase {
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
-    private static void refuseIfNestedChartsNameIt(S88Recipe recipe, String elementId) {
+    /**
+     * Refuses a deletion that would leave a box in another chart working on a step that is gone.
+     *
+     * <p>The chart being edited is left out, because the box being taken off is the one thing that
+     * chart no longer has afterwards, and a box of the same step on another chart is a line that
+     * would go to nothing.
+     */
+    private static void refuseIfNestedChartsNameIt(S88Recipe recipe, S88ProcedureLogic editing,
+                                                   String boxId, String elementId) {
         List<String> pointing = new ArrayList<>();
-        collectBoxes(pointing, elementId, recipe.getProcedureLogic());
+        collectBoxes(pointing, elementId, recipe.getProcedureLogic(), editing, boxId);
         for (S88RecipeElement element : recipe.getAllElements()) {
-            collectBoxes(pointing, elementId, element.getProcedureLogic());
+            collectBoxes(pointing, elementId, element.getProcedureLogic(), editing, boxId);
         }
         if (!pointing.isEmpty()) {
             throw new IllegalStateException("Step '" + elementId + "' is still drawn in "
@@ -101,8 +109,9 @@ public final class ChartDeletionUseCase {
         }
     }
 
-    private static void collectBoxes(List<String> pointing, String elementId, S88ProcedureLogic chart) {
-        if (chart == null) {
+    private static void collectBoxes(List<String> pointing, String elementId, S88ProcedureLogic chart,
+                                     S88ProcedureLogic editing, String boxId) {
+        if (chart == null || chart == editing) {
             return;
         }
         chart.getSteps().stream()
@@ -260,7 +269,7 @@ public final class ChartDeletionUseCase {
         for (int pass = 0; pass < ceiling; pass++) {
             List<S88ProcedureStep> unreached = new ArrayList<>();
             for (S88ProcedureStep box : chart.getSteps()) {
-                if (arrivalsOf(chart, box.getId()).isEmpty() || !box.getId().equals("BEGIN")) {
+                if (arrivalsOf(chart, box.getId()).isEmpty() && !box.getId().equals("BEGIN")) {
                     unreached.add(box);
                 }
             }

@@ -73,6 +73,9 @@ public class EditProcedureLogicUseCase {
      * A recipe can carry a chart of its own, and that chart is where the process as a whole is
      * drawn.
      *
+     * <p>For a step, use this only where the recipe is being changed on purpose. To read, use
+     * {@link #existingChart}.
+     *
      * @param recipe recipe the chart would belong to, may be {@code null}
      * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
      * @return the chart, or {@code null} when neither a recipe nor a step was given
@@ -95,12 +98,16 @@ public class EditProcedureLogicUseCase {
 
     /**
      * The chart being read.
+     * <p>
+     * A step with no chart of its own has nothing to read. Reading one is not the time to give it
+     * one: that is a change, it belongs to an edit, and a chart made here would carry no start and
+     * no stop for nothing to have asked for.
      *
      * @param recipe recipe the chart would belong to, may be {@code null}
      * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
      * @return the chart if there is one, otherwise {@code null}
      */
-    private static S88ProcedureLogic existingChart(S88Recipe recipe, S88RecipeElement step) {
+    public static S88ProcedureLogic existingChart(S88Recipe recipe, S88RecipeElement step) {
         return step != null ? step.getProcedureLogic() : (recipe != null ? recipe.getProcedureLogic() : null);
     }
 
@@ -281,7 +288,7 @@ public class EditProcedureLogicUseCase {
         S88ProcedureLink shared = detachEnd(chart, onward.isEmpty() ? null : onward.get(0), afterBoxId);
 
         S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, step, newStepId, S88RecipeElementKind.OPERATION, classId);
+                recipe, step, newStepId, RecipeLevels.levelOf(step), classId);
         addStep(recipe, step, newBoxId, newStepId);
         addTransition(recipe, step, barId);
         addLink(recipe, step, afterBoxId + "_TO_" + barId,
@@ -498,9 +505,9 @@ public class EditProcedureLogicUseCase {
         List<S88ProcedureLink> wasLeadingTo = linksLeaving(chart, fromBarId);
 
         CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, step, firstId, S88RecipeElementKind.OPERATION, null);
+                recipe, step, firstId, RecipeLevels.levelOf(step), null);
         CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, step, secondId, S88RecipeElementKind.OPERATION, null);
+                recipe, step, secondId, RecipeLevels.levelOf(step), null);
         addStep(recipe, step, firstBox, firstId);
         addStep(recipe, step, secondBox, secondId);
         if (!wasLeadingTo.isEmpty()) {

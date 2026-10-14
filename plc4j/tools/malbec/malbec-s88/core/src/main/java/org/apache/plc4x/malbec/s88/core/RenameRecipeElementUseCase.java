@@ -88,9 +88,8 @@ public class RenameRecipeElementUseCase {
             if (element == step) {
                 renames.add(() -> element.setId(newId));
             }
-            collectBoxes(renames, recipe.getProcedureLogic(), oldId, newId);
+            collectBoxes(renames, element.getProcedureLogic(), oldId, newId);
         }
-        collectBoxes(renames, recipe.getProcedureLogic(), oldId, newId);
         return renames;
     }
 

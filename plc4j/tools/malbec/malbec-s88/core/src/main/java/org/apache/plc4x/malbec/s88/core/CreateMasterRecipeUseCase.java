@@ -66,30 +66,7 @@ public final class CreateMasterRecipeUseCase {
         S88MasterRecipe recipe = new S88MasterRecipe(id, kind);
         recipe.addRecipeElement(new S88RecipeElement(BEGIN_ID, S88RecipeElementKind.BEGIN));
         recipe.addRecipeElement(new S88RecipeElement(END_ID, S88RecipeElementKind.END));
-        recipe.setProcedureLogic(startToStopChart());
+        recipe.setProcedureLogic(CreateChartUseCase.empty());
         return recipe;
-    }
-
-    /**
-     * The chart a new recipe starts with: a box at the start, a box at the stop, and a bar between
-     * them with a line to each side.
-     */
-    private static S88ProcedureLogic startToStopChart() {
-        S88ProcedureLogic chart = new S88ProcedureLogic();
-        chart.addStep(new S88ProcedureStep(BEGIN_ID, BEGIN_ID));
-        chart.addStep(new S88ProcedureStep(END_ID, END_ID));
-        chart.addTransition(new S88ProcedureTransition(FIRST_TRANSITION_ID, null));
-
-        S88ProcedureLink first = new S88ProcedureLink(FIRST_LINK_ID);
-        first.addFrom(S88IdRef.step(BEGIN_ID));
-        first.addTo(S88IdRef.transition(FIRST_TRANSITION_ID));
-        chart.addLink(first);
-
-        S88ProcedureLink last = new S88ProcedureLink(LAST_LINK_ID);
-        last.addFrom(S88IdRef.transition(FIRST_TRANSITION_ID));
-        last.addTo(S88IdRef.step(END_ID));
-        chart.addLink(last);
-
-        return chart;
     }
 }

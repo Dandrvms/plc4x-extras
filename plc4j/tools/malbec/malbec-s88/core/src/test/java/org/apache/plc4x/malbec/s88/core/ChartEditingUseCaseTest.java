@@ -52,10 +52,10 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         S88RecipeElement added = EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
+                recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
 
         assertEquals("AGITATOR", added.getEquipmentClassId());
-        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
         assertTrue(chart.findStep("BOX_MIX").isPresent(), "and it has a box on the chart");
         assertTrue(chart.findTransition("T_MIX").isPresent(), "waiting on a bar of its own");
     }
@@ -64,9 +64,9 @@ class ChartEditingUseCaseTest {
     void aStepAddedAfterAnotherTakesOverWhereTheFlowWasGoing() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
+                recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
 
-        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
         assertEquals(List.of("T_MIX"), targetsOf(chart, "BEGIN"),
                 "the flow leaves the start for the new step's bar");
         assertEquals(List.of("T1"), targetsOf(chart, "BOX_MIX"),
@@ -79,9 +79,9 @@ class ChartEditingUseCaseTest {
     void onlyOneBarIsAddedBecauseTheOneThatWasThereIsTheOneToWaitAtNext() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
+                recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
 
-        assertEquals(2, recipe.getProcedureLogic().getTransitions().size(),
+        assertEquals(2, Levels.chartOf(recipe, "PASO").getTransitions().size(),
                 "the one that was there and the new one. Two more would leave the flow going from a"
                         + " bar to a bar, which a chart cannot have");
     }
@@ -90,11 +90,12 @@ class ChartEditingUseCaseTest {
     void theFlowStillRunsFromTheStartToTheStopAfterAStepIsPutIn() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
+                recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
 
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(recipe.getProcedureLogic()));
-        assertTrue(RecipeConformance.of(recipe).deficit().isEmpty(),
-                "and nothing is reported missing, because the start and the stop are still joined");
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(Levels.chartOf(recipe, "PASO")));
+        assertTrue(RecipeConformance.of(recipe).excess().isEmpty(),
+                "and nothing is reported wrong, because the step went into the chart its level"
+                        + " calls for");
     }
 
     @Test
@@ -104,9 +105,9 @@ class ChartEditingUseCaseTest {
         addOperation(recipe, "COOL");
 
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BOX_COOL", "DRY", "BOX_DRY", "T_DRY", "DRYER");
+                recipe, operationOf(recipe), "BOX_COOL", "DRY", "BOX_DRY", "T_DRY", "DRYER");
 
-        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
         assertEquals(List.of("T_DRY"), targetsOf(chart, "BOX_COOL"),
                 "the box that had nothing now waits at the new bar");
         assertTrue(targetsOf(chart, "BOX_DRY").isEmpty(),
@@ -117,11 +118,11 @@ class ChartEditingUseCaseTest {
     @Test
     void aStepThatCannotBePutAfterABoxThatAlreadySplitsInTwo() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
-        EditProcedureLogicUseCase.selectiveFork(recipe, null, "BEGIN", "T_ONE", "T_TWO");
+        EditProcedureLogicUseCase.selectiveFork(recipe, operationOf(recipe), "BEGIN", "T_ONE", "T_TWO");
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_A", "AGITATOR"));
+                        recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_A", "AGITATOR"));
 
         assertTrue(failure.getMessage().contains("places"),
                 "and it says why, because which side the step belongs on is the author's choice");
@@ -131,14 +132,14 @@ class ChartEditingUseCaseTest {
     void aStepThatCannotBePutAfterChangesNothing() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         addOperation(recipe, "MIX");
-        var chart = recipe.getProcedureLogic();
+        var chart = Levels.chartOf(recipe, "PASO");
         var before = List.copyOf(chart.getLinks());
 
         // "MIX" is already a step of the recipe, so this cannot be done. The line that leaves BEGIN
         // used to be taken off first, which left a chart with the flow going nowhere.
         assertThrows(IllegalArgumentException.class,
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, null, "BEGIN", "MIX", "BOX_QUENCH", "T_QUENCH", "QUENCHER"));
+                        recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_QUENCH", "T_QUENCH", "QUENCHER"));
 
         assertEquals(before, List.copyOf(chart.getLinks()),
                 "a change that was refused may not have taken anything off the chart");
@@ -150,12 +151,12 @@ class ChartEditingUseCaseTest {
     void aStepWithABoxNameAlreadyTakenChangesNothing() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         addOperation(recipe, "MIX");
-        var chart = recipe.getProcedureLogic();
+        var chart = Levels.chartOf(recipe, "PASO");
         var before = List.copyOf(chart.getLinks());
 
         assertThrows(IllegalArgumentException.class,
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, null, "BEGIN", "QUENCH", "BOX_MIX", "T_QUENCH", "QUENCHER"));
+                        recipe, operationOf(recipe), "BEGIN", "QUENCH", "BOX_MIX", "T_QUENCH", "QUENCHER"));
 
         assertEquals(before, List.copyOf(chart.getLinks()),
                 "a box name that is taken is refused before the chart is touched");
@@ -167,18 +168,18 @@ class ChartEditingUseCaseTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, null, "NOPE", "MIX", "BOX_MIX", "T_A", "AGITATOR"));
+                        recipe, operationOf(recipe), "NOPE", "MIX", "BOX_MIX", "T_A", "AGITATOR"));
     }
 
     @Test
     void aStepAddedToTheChartIsAlsoAddedToTheRecipe() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
+                recipe, operationOf(recipe), "BEGIN", "MIX", "BOX_MIX", "T_MIX", "AGITATOR");
 
         assertEquals(3, recipe.getRecipeElements().size(),
                 "the start, the new step and the stop");
-        assertEquals(S88RecipeElementKind.OPERATION, recipe.findElement("MIX").orElseThrow().getKind());
+        assertEquals(S88RecipeElementKind.PHASE, recipe.findElement("MIX").orElseThrow().getKind());
     }
 
     // ========== Splitting and joining, in the two shapes there are ==========
@@ -189,7 +190,7 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         S88ProcedureLink split = EditProcedureLogicUseCase.selectiveFork(
-                recipe, null, "BEGIN", "T_ONE", "T_TWO");
+                recipe, operationOf(recipe), "BEGIN", "T_ONE", "T_TWO");
 
         assertEquals(List.of("BEGIN"), split.getFrom().stream().map(S88IdRef::getValue).toList());
         assertEquals(List.of("T_ONE", "T_TWO"),
@@ -198,7 +199,7 @@ class ChartEditingUseCaseTest {
         assertEquals(S88LinkType.SERIAL_DIVERGENT, split.getLinkType(),
                 "and the type is what says which one, rather than that both are");
         assertFalse(split.getLinkType().isParallel(), "which is the whole difference between them");
-        assertEquals(1, linksLeaving(recipe.getProcedureLogic(), "BEGIN").stream()
+        assertEquals(1, linksLeaving(Levels.chartOf(recipe, "PASO"), "BEGIN").stream()
                         .filter(line -> line.getTo().contains(S88IdRef.transition("T_ONE")))
                         .count(),
                 "one line out of the step rather than two, because two lines out of a step say"
@@ -211,7 +212,7 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         S88ProcedureLink split = EditProcedureLogicUseCase.parallelFork(
-                recipe, null, "T1", "HEAT", "COOL");
+                recipe, operationOf(recipe), "T1", "HEAT", "COOL");
 
         assertEquals(S88LinkType.PARALLEL_DIVERGENT, split.getLinkType());
         assertTrue(split.getLinkType().isParallel(), "both branches run at once");
@@ -222,7 +223,7 @@ class ChartEditingUseCaseTest {
                 "and the steps the branches work on are steps of the recipe, or the chart would be"
                         + " naming boxes that work on nothing");
         assertTrue(recipe.findElement("COOL").isPresent(), "both of them");
-        assertTrue(recipe.getProcedureLogic().findStep("BOX_HEAT").orElseThrow()
+        assertTrue(Levels.chartOf(recipe, "PASO").findStep("BOX_HEAT").orElseThrow()
                         .getRecipeElementId().equals("HEAT"),
                 "and each box works on the step it was named after");
     }
@@ -234,21 +235,22 @@ class ChartEditingUseCaseTest {
     @Test
     void aSplitOfABarThatAlreadyLedSomewhereCarriesItOn() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
-        assertEquals(List.of("END"), targetsOf(recipe.getProcedureLogic(), "T1"),
+        operationOf(recipe);
+        assertEquals(List.of("END"), targetsOf(Levels.chartOf(recipe, "PASO"), "T1"),
                 "and the bar does lead somewhere to begin with");
 
-        EditProcedureLogicUseCase.parallelFork(recipe, null, "T1", "HEAT", "COOL");
+        EditProcedureLogicUseCase.parallelFork(recipe, operationOf(recipe), "T1", "HEAT", "COOL");
 
         assertEquals(List.of("BOX_HEAT", "BOX_COOL"),
-                targetsOf(recipe.getProcedureLogic(), "T1"),
+                targetsOf(Levels.chartOf(recipe, "PASO"), "T1"),
                 "so both branches leave it");
-        String carriedOn = targetsOf(recipe.getProcedureLogic(), "BOX_HEAT").get(0);
-        assertEquals(carriedOn, targetsOf(recipe.getProcedureLogic(), "BOX_COOL").get(0),
+        String carriedOn = targetsOf(Levels.chartOf(recipe, "PASO"), "BOX_HEAT").get(0);
+        assertEquals(carriedOn, targetsOf(Levels.chartOf(recipe, "PASO"), "BOX_COOL").get(0),
                 "and the two of them come back together on one bar, because two branches that never"
                         + " meet are two recipes rather than one");
-        assertEquals(List.of("END"), targetsOf(recipe.getProcedureLogic(), carriedOn),
+        assertEquals(List.of("END"), targetsOf(Levels.chartOf(recipe, "PASO"), carriedOn),
                 "and what the bar used to lead to is now behind that, rather than stranded");
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(recipe.getProcedureLogic()),
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(Levels.chartOf(recipe, "PASO")),
                 "and a chart with a parallel branch in it is still one where every line crosses a"
                         + " bar");
     }
@@ -261,13 +263,13 @@ class ChartEditingUseCaseTest {
         addOperation(recipe, "COOL");
 
         S88ProcedureLink join = EditProcedureLogicUseCase.joinOnto(
-                recipe, null, "BOX_HEAT", "BOX_COOL", "T_BOTH", S88LinkType.PARALLEL_CONVERGENT);
+                recipe, operationOf(recipe), "BOX_HEAT", "BOX_COOL", "T_BOTH", S88LinkType.PARALLEL_CONVERGENT);
 
         assertEquals(2, join.getFrom().size(), "one line with two departures");
         assertEquals(List.of("T_BOTH"), join.getTo().stream().map(S88IdRef::getValue).toList());
         assertEquals(S88LinkType.PARALLEL_CONVERGENT, join.getLinkType(),
                 "which is what says both are waited for rather than whichever gets there first");
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(recipe.getProcedureLogic()),
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(Levels.chartOf(recipe, "PASO")),
                 "and a chart with a join in it is still one where every line crosses a bar");
     }
 
@@ -279,13 +281,13 @@ class ChartEditingUseCaseTest {
         addOperation(recipe, "COOL");
 
         EditProcedureLogicUseCase.joinOnto(
-                recipe, null, "BOX_HEAT", "BOX_COOL", "T_BOTH", S88LinkType.PARALLEL_CONVERGENT);
+                recipe, operationOf(recipe), "BOX_HEAT", "BOX_COOL", "T_BOTH", S88LinkType.PARALLEL_CONVERGENT);
 
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BOX_HEAT",
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "BOX_HEAT",
                 "and each of them now leads into the join", "T_BOTH");
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BOX_COOL",
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "BOX_COOL",
                 "and the other one too", "T_BOTH");
-        assertTrue(targetsOf(recipe.getProcedureLogic(), "T_BOTH").isEmpty(),
+        assertTrue(targetsOf(Levels.chartOf(recipe, "PASO"), "T_BOTH").isEmpty(),
                 "and the join leads nowhere until the author says where the flow goes on, because"
                         + " a step always leads to a bar and so there is nothing here that could be"
                         + " carried on for them");
@@ -298,7 +300,7 @@ class ChartEditingUseCaseTest {
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.joinOnto(
-                        recipe, null, "BOX_MIX", "BOX_MIX", "T_X", null));
+                        recipe, operationOf(recipe), "BOX_MIX", "BOX_MIX", "T_X", null));
 
         assertTrue(failure.getMessage().contains("itself"),
                 "a join of one box with itself is a box with nowhere to go");
@@ -308,9 +310,9 @@ class ChartEditingUseCaseTest {
     @Test
     void everySplitTheModuleCanMakeIsStillAReadableChart() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
-        EditProcedureLogicUseCase.selectiveFork(recipe, null, "BEGIN", "T_A", "T_B");
+        EditProcedureLogicUseCase.selectiveFork(recipe, operationOf(recipe), "BEGIN", "T_A", "T_B");
 
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(recipe.getProcedureLogic()),
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(Levels.chartOf(recipe, "PASO")),
                 "a selective split still crosses a bar on the way out");
         RecipeConformance report = RecipeConformance.of(recipe);
         assertTrue(report.excess().isEmpty(),
@@ -324,28 +326,28 @@ class ChartEditingUseCaseTest {
     void aBoxIsGivenAnotherNameAndTheLinesIntoItFollow() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
-        EditProcedureLogicUseCase.renameStep(recipe, null, "BEGIN", "START");
+        EditProcedureLogicUseCase.renameStep(recipe, operationOf(recipe), "BEGIN", "START");
 
-        assertTrue(recipe.getProcedureLogic().findStep("BEGIN").isEmpty(),
+        assertTrue(Levels.chartOf(recipe, "PASO").findStep("BEGIN").isEmpty(),
                 "and the old name is not left behind as a second box");
-        assertTrue(recipe.getProcedureLogic().findStep("START").isPresent(),
+        assertTrue(Levels.chartOf(recipe, "PASO").findStep("START").isPresent(),
                 "and the chart finds it under the new name");
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "START",
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "START",
                 "and the line leaving it goes on as before, because a line naming a box that is"
                         + " not there is not a chart anybody can draw", "T1");
-        assertTrue(EditProcedureLogicUseCase.isChartBipartite(recipe.getProcedureLogic()));
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(Levels.chartOf(recipe, "PASO")));
     }
 
     @Test
     void aBarIsGivenAnotherNameAndTheLinesIntoItFollow() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
-        EditProcedureLogicUseCase.renameTransition(recipe, null, "T1", "WHEN_HOT");
+        EditProcedureLogicUseCase.renameTransition(recipe, operationOf(recipe), "T1", "WHEN_HOT");
 
-        assertTrue(recipe.getProcedureLogic().findTransition("T1").isEmpty());
-        assertEquals(List.of("WHEN_HOT"), targetsOf(recipe.getProcedureLogic(), "BEGIN"),
+        assertTrue(Levels.chartOf(recipe, "PASO").findTransition("T1").isEmpty());
+        assertEquals(List.of("WHEN_HOT"), targetsOf(Levels.chartOf(recipe, "PASO"), "BEGIN"),
                 "and the line leaving the box before it follows it");
-        assertEquals(List.of("END"), targetsOf(recipe.getProcedureLogic(), "WHEN_HOT"),
+        assertEquals(List.of("END"), targetsOf(Levels.chartOf(recipe, "PASO"), "WHEN_HOT"),
                 "and so does the line leaving it");
     }
 
@@ -355,7 +357,7 @@ class ChartEditingUseCaseTest {
         addOperation(recipe, "HEAT");
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> EditProcedureLogicUseCase.renameStep(recipe, null, "BEGIN", "T1"));
+                () -> EditProcedureLogicUseCase.renameStep(recipe, operationOf(recipe), "BEGIN", "T1"));
 
         assertTrue(failure.getMessage().contains("already has a box"),
                 "and it says which, rather than swapping two boxes behind the operator's back");
@@ -366,7 +368,7 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
-                () -> EditProcedureLogicUseCase.removeStep(recipe, null, "BEGIN"));
+                () -> EditProcedureLogicUseCase.removeStep(recipe, operationOf(recipe), "BEGIN"));
 
         assertTrue(failure.getMessage().contains("Take those off first"),
                 "and it says what to do about it, because taking the box would leave lines with"
@@ -378,7 +380,7 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
-                () -> EditProcedureLogicUseCase.removeTransition(recipe, null, "T1"));
+                () -> EditProcedureLogicUseCase.removeTransition(recipe, operationOf(recipe), "T1"));
 
         assertTrue(failure.getMessage().contains("Take those off first"),
                 "a bar is no different from a box here, and taking one would strand its lines");
@@ -387,10 +389,10 @@ class ChartEditingUseCaseTest {
     @Test
     void aBarNothingIsJoinedToIsTakenOffAndItSaysSo() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
-        EditProcedureLogicUseCase.addTransition(recipe, null, "T_SPARE");
+        EditProcedureLogicUseCase.addTransition(recipe, operationOf(recipe), "T_SPARE");
 
-        assertTrue(EditProcedureLogicUseCase.removeTransition(recipe, null, "T_SPARE"));
-        assertFalse(EditProcedureLogicUseCase.removeTransition(recipe, null, "T_SPARE"),
+        assertTrue(EditProcedureLogicUseCase.removeTransition(recipe, operationOf(recipe), "T_SPARE"));
+        assertFalse(EditProcedureLogicUseCase.removeTransition(recipe, operationOf(recipe), "T_SPARE"),
                 "and asking again says there was no such bar rather than failing");
     }
 
@@ -400,9 +402,9 @@ class ChartEditingUseCaseTest {
     void aBarIsGivenWhatItWaitsOn() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
-        EditProcedureLogicUseCase.setCondition(recipe, null, "T1", "Reports/STATE#=#COMPLETE");
+        EditProcedureLogicUseCase.setCondition(recipe, operationOf(recipe), "T1", "Reports/STATE#=#COMPLETE");
 
-        S88ProcedureTransition bar = recipe.getProcedureLogic().findTransition("T1").orElseThrow();
+        S88ProcedureTransition bar = Levels.chartOf(recipe, "PASO").findTransition("T1").orElseThrow();
         assertTrue(bar.isGuarded(), "so it is not crossed straight away");
         assertEquals("Reports/STATE#=#COMPLETE", bar.getCondition(),
                 "and the text it carries is the text that was asked for");
@@ -411,11 +413,11 @@ class ChartEditingUseCaseTest {
     @Test
     void aBarCanBeGivenNothingToWaitOn() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
-        EditProcedureLogicUseCase.setCondition(recipe, null, "T1", "Reports/STATE#=#COMPLETE");
+        EditProcedureLogicUseCase.setCondition(recipe, operationOf(recipe), "T1", "Reports/STATE#=#COMPLETE");
 
-        EditProcedureLogicUseCase.setCondition(recipe, null, "T1", "  ");
+        EditProcedureLogicUseCase.setCondition(recipe, operationOf(recipe), "T1", "  ");
 
-        S88ProcedureTransition bar = recipe.getProcedureLogic().findTransition("T1").orElseThrow();
+        S88ProcedureTransition bar = Levels.chartOf(recipe, "PASO").findTransition("T1").orElseThrow();
         assertFalse(bar.isGuarded(), "and then it is crossed as soon as the step before is done");
     }
 
@@ -424,18 +426,29 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> EditProcedureLogicUseCase.setCondition(recipe, null, "T1", "just some words"));
+                () -> EditProcedureLogicUseCase.setCondition(recipe, operationOf(recipe), "T1", "just some words"));
 
         assertTrue(failure.getMessage().contains("ADDRESS"),
                 "and it says how a comparison is written, because a bar that waits on something"
                         + " nobody can read is a recipe nobody can run");
     }
 
+    /** The step whose chart these tests draw on, made if it is not there. */
+    private static S88RecipeElement operationOf(S88MasterRecipe recipe) {
+        if (recipe.findElement("TRAMO").isEmpty()) {
+            Levels.unitProcedure(recipe, "TRAMO", null);
+        }
+        if (recipe.findElement("PASO").isEmpty()) {
+            Levels.operation(recipe, "TRAMO", "PASO");
+        }
+        return Levels.owner(recipe, "PASO");
+    }
+
         /** A box on the chart working on a step of the recipe of the same name. */
     private static void addOperation(S88MasterRecipe recipe, String id) {
-        CreateRecipeElementUseCase.forEquipmentClass(
-                recipe, null, id, S88RecipeElementKind.OPERATION, "MACHINE");
-        EditProcedureLogicUseCase.addStep(recipe, null, "BOX_" + id, id);
+        S88RecipeElement operation = operationOf(recipe);
+        Levels.phase(recipe, "PASO", id, "MACHINE");
+        EditProcedureLogicUseCase.addStep(recipe, operation, "BOX_" + id, id);
     }
 
     /**
@@ -451,14 +464,14 @@ class ChartEditingUseCaseTest {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
 
         EditProcedureLogicUseCase.insertStepAfter(
-                recipe, null, "BEGIN", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS");
+                recipe, operationOf(recipe), "BEGIN", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS");
 
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BEGIN", "and it waits at a new bar", "T_QUENCH");
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "T_QUENCH",
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "BEGIN", "and it waits at a new bar", "T_QUENCH");
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "T_QUENCH",
                 "and the new bar is crossed into the new step", "BOX_QUENCH");
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "BOX_QUENCH",
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "BOX_QUENCH",
                 "and the new step leads on to the bar that was already there", "T1");
-        assertLeadsOnlyTo(recipe.getProcedureLogic(), "T1", "and the flow goes on as before", "END");
+        assertLeadsOnlyTo(Levels.chartOf(recipe, "PASO"), "T1", "and the flow goes on as before", "END");
     }
 
     /** A step that works on nothing has nothing to do after the stop of the process. */
@@ -468,11 +481,11 @@ class ChartEditingUseCaseTest {
 
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, null, "END", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS"));
+                        recipe, operationOf(recipe), "END", "QUENCH", "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS"));
 
         assertTrue(failure.getMessage().contains("stops"),
                 "and it says why, because a step after the stop is a process with a second end");
-        assertEquals(2, recipe.getRecipeElements().size(),
+        assertEquals(4, recipe.getAllElements().size(),
                 "and nothing was added, because the refusal comes before anything is touched");
     }
 

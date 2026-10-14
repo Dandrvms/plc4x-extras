@@ -78,7 +78,7 @@ class RecipeChartSceneTest {
     void theSameChartCanBeDrawnTwice() {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
-            scene.draw(SfcFixtures.lineal());
+            scene.draw(SfcFixtures.lineal(), null);
         });
     }
 
@@ -87,7 +87,7 @@ class RecipeChartSceneTest {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
             for (int i = 0; i < 50; i++) {
-                scene.draw(SfcFixtures.lineal());
+                scene.draw(SfcFixtures.lineal(), null);
             }
         });
     }
@@ -98,7 +98,7 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
             int afterFirst = scene.widgetCount();
             for (int i = 0; i < 10; i++) {
-                scene.draw(SfcFixtures.lineal());
+                scene.draw(SfcFixtures.lineal(), null);
             }
             assertEquals(afterFirst, scene.widgetCount(),
                     "a widget left in a layer keeps it growing on every redraw");
@@ -117,7 +117,7 @@ class RecipeChartSceneTest {
             assertTrue(EditProcedureLogicUseCase.removeTransition(recipe, null, "T_HEAT"),
                     "and the bar can only go once nothing runs into it any more, or its lines would"
                             + " be left with nothing at one end");
-            scene.draw(recipe);
+            scene.draw(recipe, null);
 
             assertTrue(scene.widgetCount() < before,
                     "the bar and its line left the chart, so their widgets left the layer too");
@@ -135,7 +135,7 @@ class RecipeChartSceneTest {
 
             recipe.findElement("HEAT").orElseThrow().setKind(
                     org.apache.plc4x.malbec.s88.api.S88RecipeElementKind.PROCEDURE);
-            scene.draw(recipe);
+            scene.draw(recipe, null);
 
             assertEquals(before, scene.widgetCount(),
                     "a box drawn as a different shape is a different widget and the old one is gone,"
@@ -204,7 +204,7 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
             Map<String, java.awt.Point> first = scene.positions();
 
-            scene.draw(SfcFixtures.lineal());
+            scene.draw(SfcFixtures.lineal(), null);
 
             assertEquals(first, scene.positions(),
                     "nothing about the recipe changed, so nothing on the chart may either");
@@ -255,7 +255,7 @@ class RecipeChartSceneTest {
             scene.select("BOX_MIX");
             assertEquals("BOX_MIX", scene.selected());
 
-            scene.draw(SfcFixtures.parallelDivergence());
+            scene.draw(SfcFixtures.parallelDivergence(), null);
 
             assertNull(scene.selected(),
                     "the box is gone, so nothing is picked, rather than the last one that was");
@@ -298,7 +298,7 @@ class RecipeChartSceneTest {
             int withSplit = scene.widgetCount();
 
             EditProcedureLogicUseCase.removeLink(recipe, null, "L4");
-            scene.draw(recipe);
+            scene.draw(recipe, null);
 
             assertTrue(scene.widgetCount() < withSplit,
                     "the split had a bar across its branches, and taking the split off takes the"
@@ -418,7 +418,7 @@ class RecipeChartSceneTest {
             String line = scene.selected();
 
             EditProcedureLogicUseCase.removeLink(recipe, null, line);
-            scene.draw(recipe);
+            scene.draw(recipe, null);
 
             assertNull(scene.selected(),
                     "and nothing stays picked that is no longer on the chart");
@@ -441,7 +441,7 @@ class RecipeChartSceneTest {
             scene.selectWhenDrawn("BOX_QUENCH");
             assertNull(scene.selected(), "and before the drawing there is nothing to pick");
 
-            scene.draw(recipe);
+            scene.draw(recipe, null);
 
             assertEquals("BOX_QUENCH", scene.selected(),
                     "and after it there is, or every button that adds something would leave the"
@@ -455,7 +455,7 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
 
             scene.selectWhenDrawn("BOX_NOT_HERE");
-            scene.draw(SfcFixtures.lineal());
+            scene.draw(SfcFixtures.lineal(), null);
 
             assertNull(scene.selected(),
                     "and a pick that never comes is a change that was taken back, not a frame on"

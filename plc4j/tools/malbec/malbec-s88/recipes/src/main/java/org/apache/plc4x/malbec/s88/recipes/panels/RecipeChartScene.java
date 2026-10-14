@@ -33,6 +33,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.netbeans.api.visual.action.ActionFactory;
 import org.netbeans.api.visual.action.WidgetAction;
 import org.netbeans.api.visual.anchor.Anchor;
@@ -111,14 +112,16 @@ final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     /**
-     * Reads a recipe in and draws it.
+     * Reads a recipe in and draws the chart of the given step.
      *
      * @param recipe the recipe to draw
+     * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
      */
-    void draw(S88MasterRecipe recipe) {
-        Map<String, NodeSpec> what = nodesOf(recipe);
+    void draw(S88MasterRecipe recipe, S88RecipeElement owner) {
+        Map<String, NodeSpec> what = nodesOf(recipe, owner);
         placeBoxes(what);
-        SfcLayoutEngine.Placement at = new SfcLayoutEngine(recipe.getProcedureLogic(),
+        SfcLayoutEngine.Placement at = new SfcLayoutEngine(
+                EditProcedureLogicUseCase.existingChart(recipe, owner),
                 shapesOf(what), labelWidthsOf(what)).place();
         applyLayout(at);
         addSyncBars(at.syncBars());
@@ -150,7 +153,20 @@ final class RecipeChartScene extends GraphScene<String, String> {
      */
     static RecipeChartScene forRecipe(S88MasterRecipe recipe) {
         RecipeChartScene scene = new RecipeChartScene();
-        scene.draw(recipe);
+        scene.draw(recipe, null);
+        return scene;
+    }
+
+    /**
+     * Reads a recipe in and draws the chart of the given step.
+     *
+     * @param recipe the recipe to draw
+     * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
+     * @return a scene holding that chart
+     */
+    static RecipeChartScene forRecipe(S88MasterRecipe recipe, S88RecipeElement owner) {
+        RecipeChartScene scene = new RecipeChartScene();
+        scene.draw(recipe, owner);
         return scene;
     }
 
@@ -169,9 +185,9 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @param recipe the recipe to read
      * @return one entry per box and per bar, keyed by the name the chart knows them by
      */
-    static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe) {
+    static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner) {
         Map<String, NodeSpec> what = new LinkedHashMap<>();
-        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.existingChart(recipe, owner);
         if (chart == null) {
             return what;
         }
@@ -609,6 +625,11 @@ final class RecipeChartScene extends GraphScene<String, String> {
     /** Which node the buttons on the toolbar will act on, {@code null} when nothing is picked. */
     String selected() {
         return selected;
+    }
+
+    /** The picked node when it is a box on the chart, {@code null} when it is a bar or a line. */
+    String pickedBox() {
+        return selected != null && isNode(selected) ? selected : null;
     }
 
     /**

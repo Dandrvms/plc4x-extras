@@ -36,7 +36,9 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
+import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 
 /**
  * The six charts the drawing code has to get right, built in code.
@@ -49,6 +51,77 @@ final class SfcFixtures {
     private SfcFixtures() {
     }
 
+    /**
+     * The charts the toolbar buttons build, one press at a time.
+     * <p>
+     * Every one of these calls the same use cases a button press calls, so each picture is the
+     * recipe for the presses that make it, written down rather than described. A step they have
+     * just added is empty, which is why they are not part of {@link #structures()}.
+     */
+    static List<S88MasterRecipe> buttons() {
+        return List.of(
+                Buttons.lineal("BOTONES_LINEAL"),
+                Buttons.parallel(),
+                Buttons.parallelThreeBranches(),
+                Buttons.parallelStepInsideABranch(),
+                Buttons.bifurcation(),
+                Buttons.bifurcationStepInsideABranch());
+    }
+
+    /**
+     * Lays a chart out the way the drawing lays it out, with no window anywhere.
+     *
+     * <p>Both the layout tests and the structure tests want this, so it is here once rather than
+     * in each of them.
+     *
+     * @param recipe whose chart to lay out
+     * @return where everything landed
+     */
+    static SfcLayoutEngine.Placement arranged(S88MasterRecipe recipe) {
+        return new SfcLayoutEngine(recipe.getProcedureLogic(), shapesOf(recipe),
+                labelWidthsOf(recipe)).place();
+    }
+
+    /** The shape each node or bar of a chart is drawn in, which comes from the step behind it. */
+    private static java.util.Map<String, RecipeShapes.Shape> shapesOf(S88MasterRecipe recipe) {
+        java.util.Map<String, RecipeShapes.Shape> shapes = new java.util.HashMap<>();
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        for (S88ProcedureStep step : chart.getSteps()) {
+            shapes.put(step.getId(), recipe.findElement(step.getRecipeElementId())
+                    .map(element -> RecipeShapes.shapeOf(element.getKind()))
+                    .orElse(RecipeShapes.Shape.BOX));
+        }
+        for (S88ProcedureTransition bar : chart.getTransitions()) {
+            shapes.put(bar.getId(), RecipeShapes.Shape.TRANSITION);
+        }
+        return shapes;
+    }
+
+    /** How wide the text of each bar is, measured the same way the drawing measures it. */
+    private static java.util.Map<String, Integer> labelWidthsOf(S88MasterRecipe recipe) {
+        java.awt.image.BufferedImage scratch =
+                new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = scratch.createGraphics();
+        try {
+            java.util.Map<String, Integer> widths = new java.util.LinkedHashMap<>();
+            recipe.getProcedureLogic().getTransitions().forEach(bar -> widths.put(
+                    bar.getId(), RecipeShapes.textWidth(g, bar.getCondition())));
+            return widths;
+        } finally {
+            g.dispose();
+        }
+    }
+
+    /**
+     * The structures that are drawn so they can be shown not to hold together.
+     * <p>
+     * A test that walks every fixture skips these, because their complaint is the thing they are
+     * for. {@link SfcStructureTest} is the one that says what is wrong with them.
+     */
+    static List<S88MasterRecipe> refused() {
+        return List.of(optionalBranch());
+    }
+
     /** The name each recipe of {@link #all()} is written under, in the same order. */
     static List<String> names() {
         return List.of(
@@ -58,13 +131,46 @@ final class SfcFixtures {
                 "divergencia-paralela",
                 "paralela-dentro-de-selectiva",
                 "referencias-externas",
+                "paralela-tres-ramas",
+                "selectiva-tres-ramas",
+                "selectiva-dentro-de-paralela",
+                "paralela-dentro-de-paralela",
+                "selectiva-dentro-de-selectiva",
+                "rama-opcional",
+                "bucle-con-paralela",
+                "dos-niveles-de-subgrafico",
                 "botones-lineal",
                 "botones-paralela",
                 "botones-paralela-tres-ramas",
                 "botones-paralela-paso-en-una-rama",
                 "botones-bifurcacion",
-                "botones-bifurcacion-tres-ramas",
                 "botones-bifurcacion-paso-en-una-rama");
+    }
+
+    /** Every fixture, in the order {@link #names()} lists them. */
+    /**
+     * The structures of {@link SfcStructureTest}, in the order {@link #names()} lists them.
+     * <p>
+     * Every step of one of these is a step of its own, so the conformance has nothing to say about
+     * it. The ones {@link #buttons()} builds are left out, because a step the buttons have just
+     * added is empty until it is given something to work on.
+     */
+    static List<S88MasterRecipe> structures() {
+        return List.of(
+                lineal(),
+                withBackwardsLoop(),
+                selectiveDivergence(),
+                parallelDivergence(),
+                nestedParallelInsideSelective(),
+                withExternalReferences(),
+                parallelWithThreeBranches(),
+                selectiveWithThreeBranches(),
+                selectiveInsideParallel(),
+                parallelInsideParallel(),
+                selectiveInsideSelective(),
+                optionalBranch(),
+                loopAroundParallel(),
+                twoLevelsOfSubchart());
     }
 
     /** Every fixture, in the order {@link #names()} lists them. */
@@ -76,12 +182,19 @@ final class SfcFixtures {
                 parallelDivergence(),
                 nestedParallelInsideSelective(),
                 withExternalReferences(),
+                parallelWithThreeBranches(),
+                selectiveWithThreeBranches(),
+                selectiveInsideParallel(),
+                parallelInsideParallel(),
+                selectiveInsideSelective(),
+                optionalBranch(),
+                loopAroundParallel(),
+                twoLevelsOfSubchart(),
                 Buttons.lineal("BOTONES_LINEAL"),
                 Buttons.parallel(),
                 Buttons.parallelThreeBranches(),
                 Buttons.parallelStepInsideABranch(),
                 Buttons.bifurcation(),
-                Buttons.bifurcationThreeBranches(),
                 Buttons.bifurcationStepInsideABranch());
     }
 
@@ -140,7 +253,14 @@ static final class Buttons {
         return recipe;
     }
 
-    /** The same, pressing Add branch once more. */
+    /**
+     * The same, pressing Add branch once more.
+     * <p>
+     * Not in {@link #all()}. A second alternative pressed on a step that already stands on the shared
+     * convergence is refused by {@link ChartBranchingUseCase}, which is finding N6 of the review: a
+     * branch that starts inside a block and finishes outside it. It goes back in when the use case
+     * is rewritten over blocks, phase C.1.
+     */
     static S88MasterRecipe bifurcationThreeBranches() {
         S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION_TRES");
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
@@ -389,6 +509,23 @@ static final class Buttons {
             return this;
         }
 
+        /**
+         * One line leaving a box towards any number of bars, for a split with three or more sides.
+         *
+         * <p>A split is one line, never one line per side, so a third side is another end on the
+         * line the other two sides already share.
+         */
+        Chart split(String elementId, S88LinkType type, String... bars) {
+            S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
+            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            for (String bar : bars) {
+                link.addTo(S88IdRef.transition(bar));
+            }
+            link.setLinkType(type);
+            chart.addLink(link);
+            return this;
+        }
+
         /** One line leaving a bar towards two boxes, which is the parallel split. */
         Chart splitFromBar(String barId, String first, String second, S88LinkType type) {
             box(first);
@@ -397,6 +534,24 @@ static final class Buttons {
             link.addFrom(S88IdRef.transition(barId));
             link.addTo(S88IdRef.step("BOX_" + first));
             link.addTo(S88IdRef.step("BOX_" + second));
+            link.setLinkType(type);
+            chart.addLink(link);
+            return this;
+        }
+
+        /**
+         * One line leaving a bar towards any number of boxes, for a parallel split with three or
+         * more branches.
+         */
+        Chart splitFromBar(String barId, S88LinkType type, String... boxes) {
+            for (String box : boxes) {
+                box(box);
+            }
+            S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
+            link.addFrom(S88IdRef.transition(barId));
+            for (String box : boxes) {
+                link.addTo(S88IdRef.step("BOX_" + box));
+            }
             link.setLinkType(type);
             chart.addLink(link);
             return this;
@@ -413,6 +568,35 @@ static final class Buttons {
             return this;
         }
 
+        /** One line bringing any number of boxes together onto a bar. */
+        Chart join(String barId, S88LinkType type, String... boxes) {
+            for (String box : boxes) {
+                box(box);
+            }
+            S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
+            for (String box : boxes) {
+                link.addFrom(S88IdRef.step("BOX_" + box));
+            }
+            link.addTo(S88IdRef.transition(barId));
+            link.setLinkType(type);
+            chart.addLink(link);
+            return this;
+        }
+
+        /**
+         * A line straight from one bar to another.
+         * <p>
+         * A chart with nothing on one side of a split has to draw one of these, which is why the
+         * structure that needs it does not hold together.
+         */
+        Chart barToBar(String fromBar, String toBar) {
+            S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
+            link.addFrom(S88IdRef.transition(fromBar));
+            link.addTo(S88IdRef.transition(toBar));
+            chart.addLink(link);
+            return this;
+        }
+
         /** A line whose arrival is outside this chart. */
         Chart to(String fromBar, S88IdRef arrival) {
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
@@ -422,7 +606,7 @@ static final class Buttons {
             return this;
         }
 
-        /** A line whose departure is outside this chart. */
+    /** A line whose departure is outside this chart. */
         Chart from(S88IdRef departure, String toElementId) {
             box(toElementId);
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
@@ -446,5 +630,211 @@ static final class Buttons {
         private String nextLinkId() {
             return "L" + (chart.getLinks().size() + 1);
         }
+    }
+    
+
+    /**
+     * A parallel split with three branches.
+     * <p>
+     * Nothing else builds one of these yet. The Add parallel branch button acts on the line the
+     * picked step already stands on, so a third branch opens a second fork beside the first
+     * instead of a third side of the same one. Finding N6.
+     */
+    static S88MasterRecipe parallelWithThreeBranches() {
+        Chart chart = new Chart("PARALELA_TRES");
+        chart.bar("T_START");
+        chart.bar("T_SPLIT");
+        chart.bar("T_MERGE");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.down("CHARGE", "T_SPLIT");
+        chart.splitFromBar("T_SPLIT", S88LinkType.PARALLEL_DIVERGENT, "HEAT", "COOL", "WASH");
+        chart.join("T_MERGE", S88LinkType.PARALLEL_CONVERGENT, "HEAT", "COOL", "WASH");
+        chart.up("T_MERGE", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /** A selective split with three branches. */
+    static S88MasterRecipe selectiveWithThreeBranches() {
+        Chart chart = new Chart("SELECTIVA_TRES");
+        chart.bar("T_START");
+        chart.bar("T_HOT");
+        chart.bar("T_COLD");
+        chart.bar("T_WARM");
+        chart.bar("T_PACKED");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.split("CHARGE", S88LinkType.SERIAL_DIVERGENT, "T_HOT", "T_COLD", "T_WARM");
+        chart.up("T_HOT", "HEAT");
+        chart.up("T_COLD", "COLD");
+        chart.up("T_WARM", "WARM");
+        chart.join("T_PACKED", S88LinkType.SERIAL_CONVERGENT, "HEAT", "COLD", "WARM");
+        chart.up("T_PACKED", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /**
+     * A selective split on one branch of a parallel split.
+     * <p>
+     * The alternative opens and closes on that one branch, so everything it does stays inside the
+     * parallel block that holds it.
+     */
+    static S88MasterRecipe selectiveInsideParallel() {
+        Chart chart = new Chart("SELECTIVA_EN_PARALELA");
+        chart.bar("T_START");
+        chart.bar("T_SPLIT");
+        chart.bar("T_SELECT");
+        chart.bar("T_DONE");
+        chart.bar("T_SKIPPED");
+        chart.bar("T_BRANCH_DONE");
+        chart.bar("T_STIR_DONE");
+        chart.bar("T_MERGE");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.down("CHARGE", "T_SPLIT");
+        chart.splitFromBar("T_SPLIT", S88LinkType.PARALLEL_DIVERGENT, "HEAT", "STIR");
+        chart.down("HEAT", "T_SELECT");
+        chart.split("HEAT", S88LinkType.SERIAL_DIVERGENT, "T_DONE", "T_SKIPPED");
+        chart.up("T_DONE", "HEAT_DONE");
+        chart.up("T_SKIPPED", "HEAT_SKIPPED");
+        chart.join("T_BRANCH_DONE", S88LinkType.SERIAL_CONVERGENT, "HEAT_DONE", "HEAT_SKIPPED");
+        chart.down("STIR", "T_STIR_DONE");
+        chart.join("T_MERGE", S88LinkType.PARALLEL_CONVERGENT, "HEAT", "STIR");
+        chart.up("T_MERGE", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /** A parallel split on one branch of another parallel split. */
+    static S88MasterRecipe parallelInsideParallel() {
+        Chart chart = new Chart("PARALELA_EN_PARALELA");
+        chart.bar("T_START");
+        chart.bar("T_SPLIT");
+        chart.bar("T_SPLIT_INNER");
+        chart.bar("T_MERGE_INNER");
+        chart.bar("T_INNER_DONE");
+        chart.bar("T_STIR_DONE");
+        chart.bar("T_MERGE");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.down("CHARGE", "T_SPLIT");
+        chart.splitFromBar("T_SPLIT", S88LinkType.PARALLEL_DIVERGENT, "HEAT", "STIR");
+        chart.down("HEAT", "T_SPLIT_INNER");
+        chart.splitFromBar("T_SPLIT_INNER", S88LinkType.PARALLEL_DIVERGENT, "ADD", "SPRAY");
+        chart.join("T_MERGE_INNER", S88LinkType.PARALLEL_CONVERGENT, "ADD", "SPRAY");
+        chart.up("T_MERGE_INNER", "INNER_DONE");
+        chart.down("STIR", "T_STIR_DONE");
+        chart.join("T_MERGE", S88LinkType.PARALLEL_CONVERGENT, "HEAT", "STIR");
+        chart.up("T_MERGE", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /** A selective split on one branch of another selective split. */
+    static S88MasterRecipe selectiveInsideSelective() {
+        Chart chart = new Chart("SELECTIVA_EN_SELECTIVA");
+        chart.bar("T_START");
+        chart.bar("T_HOT");
+        chart.bar("T_COLD");
+        chart.bar("T_SPLIT_INNER");
+        chart.bar("T_HOT_DONE");
+        chart.bar("T_SKIPPED");
+        chart.bar("T_INNER_DONE");
+        chart.bar("T_COLD_DONE");
+        chart.bar("T_PACKED");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.split("CHARGE", S88LinkType.SERIAL_DIVERGENT, "T_HOT", "T_COLD");
+        chart.up("T_HOT", "HEAT");
+        chart.down("HEAT", "T_SPLIT_INNER");
+        chart.split("HEAT", S88LinkType.SERIAL_DIVERGENT, "T_HOT_DONE", "T_SKIPPED");
+        chart.up("T_HOT_DONE", "HEAT_DONE");
+        chart.up("T_SKIPPED", "HEAT_SKIPPED");
+        chart.join("T_INNER_DONE", S88LinkType.SERIAL_CONVERGENT, "HEAT_DONE", "HEAT_SKIPPED");
+        chart.up("T_INNER_DONE", "INNER_DONE");
+        chart.up("T_COLD", "COLD");
+        chart.join("T_PACKED", S88LinkType.SERIAL_CONVERGENT, "INNER_DONE", "COLD");
+        chart.up("T_PACKED", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /**
+     * A branch that is there so it can be taken or jumped.
+     * <p>
+     * One side of the split carries the work, the other goes straight to the bar the flow joins
+     * at. That is what makes it optional, and it is also why it does not hold together: the jumped
+     * side is a line from one bar to another, and the model draws no line that does not cross.
+     * Finding N6.
+     */
+    static S88MasterRecipe optionalBranch() {
+        Chart chart = new Chart("RAMA_OPCIONAL");
+        chart.bar("T_START");
+        chart.bar("T_WORK");
+        chart.bar("T_SKIP");
+        chart.bar("T_JOIN");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.split("CHARGE", S88LinkType.SERIAL_DIVERGENT, "T_WORK", "T_SKIP");
+        chart.up("T_WORK", "WORK");
+        chart.down("WORK", "T_JOIN");
+        chart.barToBar("T_SKIP", "T_JOIN");
+        chart.up("T_JOIN", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /**
+     * A loop that goes back round a whole parallel block.
+     * <p>
+     * The flow leaves the end of the block, splits again, and one side goes back to the step before
+     * the block started. A loop that reached into one branch of a parallel block would be outside
+     * the rule, so it goes round the whole of it.
+     */
+    static S88MasterRecipe loopAroundParallel() {
+        Chart chart = new Chart("BUCLE_CON_PARALELA");
+        chart.bar("T_START");
+        chart.bar("T_SPLIT");
+        chart.bar("T_MERGE");
+        chart.bar("T_END");
+        chart.bar("T_AGAIN");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "MIX");
+        chart.down("MIX", "T_SPLIT");
+        chart.splitFromBar("T_SPLIT", S88LinkType.PARALLEL_DIVERGENT, "HEAT", "COOL");
+        chart.join("T_MERGE", S88LinkType.PARALLEL_CONVERGENT, "HEAT", "COOL");
+        chart.up("T_MERGE", "PACK");
+        chart.split("PACK", S88LinkType.SERIAL_DIVERGENT, "T_END", "T_AGAIN");
+        chart.up("T_AGAIN", "MIX");
+        return chart.finishFrom("T_END");
+    }
+
+    /**
+     * A recipe with two charts under the one it starts with.
+     * <p>
+     * The top chart holds a unit procedure, the chart of that one holds an operation, and the
+     * chart of the operation is the last one there is. Nothing else here draws a subchart, so this
+     * one is built through the same use cases a press of the Chart button uses.
+     */
+    static S88MasterRecipe twoLevelsOfSubchart() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("SUB_GRAFICOS",
+                S88RecipeKind.CLASS);
+        S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
+                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", "TRAMO_CLASS");
+        CreateChartUseCase.forStep(recipe, tramo);
+        S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
+                "BEGIN", "PASO", "BOX_PASO", "T_PASO", "PASO_CLASS");
+        CreateChartUseCase.forStep(recipe, paso);
+        EditProcedureLogicUseCase.insertStepAfter(recipe, paso, "BEGIN", "PULSO",
+                "BOX_PULSO", "T_PULSO", "PULSO_CLASS");
+        return recipe;
     }
 }

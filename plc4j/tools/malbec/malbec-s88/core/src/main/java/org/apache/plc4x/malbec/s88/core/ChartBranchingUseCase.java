@@ -228,7 +228,7 @@ public final class ChartBranchingUseCase {
         String elementId = freeName(recipe, chart, STEP_STEM);
         String box = "BOX_" + elementId;
         CreateRecipeElementUseCase.forEquipmentClass(recipe, step, elementId,
-                S88RecipeElementKind.OPERATION, null);
+                RecipeLevels.levelOf(step), null);
         EditProcedureLogicUseCase.addStep(recipe, step, box, elementId);
         return box;
     }
