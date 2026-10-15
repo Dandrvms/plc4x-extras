@@ -39,6 +39,7 @@ import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateRecipeElementUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
+import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.junit.jupiter.api.Test;
 
@@ -138,12 +139,101 @@ class RecipeEditorModelTest {
     }
 
     /**
+     * A recipe whose unit procedure is meant to hold a chart and has not been given one, which is
+     * what a recipe read from an older file looks like.
+     */
+    private static S88MasterRecipe treeWithAnUnbornChart() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
+                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", null);
+        tramo.setProcedureLogic(null);
+        return recipe;
+    }
+
+    private static RecipeEditorModel openOverAnUnbornChart() {
+        try {
+            return RecipeBytes.openOn(RecipeBytes.holding(treeWithAnUnbornChart()));
+        } catch (IOException failure) {
+            throw new AssertionError("a recipe that was just written could not be read", failure);
+        }
+    }
+
+    /**
      * Edits inside a subchart keep the editor on that subchart.
      * <p>
      * Every edit puts a new recipe in place of the old one, so a step held as it stands would be a
      * step of a recipe that is no longer the one on show. Holding its name instead is what keeps
      * the drawing and the changes on the same chart.
      */
+    /**
+     * A step meant to hold a chart has nothing to draw until it is given one.
+     * <p>
+     * Reading it is not the time to make one: the chart that comes of that has no start and no stop,
+     * and nothing to take back to.
+     */
+    @Test
+    void goingIntoAStepWithNoChartDrawsNothingRatherThanMakingOne() throws IOException {
+        RecipeEditorModel model = openOverAnUnbornChart();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+
+        assertNull(model.chartBeingEdited(),
+                "and the step being edited has no chart of its own to draw");
+        assertNull(model.getRecipe().findElement("TRAMO").get().getProcedureLogic(),
+                "and going into it made nothing that nothing asked for");
+    }
+
+    /**
+     * The chart a step is meant to have is made by an order, and can be taken back.
+     * <p>
+     * It goes through an edit, so undoing it leaves the recipe as it was rather than leaving a
+     * chart behind that the operator never asked for.
+     */
+    @Test
+    void creatingTheChartOfAStepCanBeTakenBack() throws IOException {
+        RecipeEditorModel model = openOverAnUnbornChart();
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+
+        model.createChartForCurrentStep();
+
+        assertNotNull(model.chartBeingEdited(),
+                "and the chart the step was meant to have is there to be drawn");
+        assertEquals(2, model.chartBeingEdited().getSteps().size(),
+                "and it is born with a start and a stop");
+        assertEquals(1, model.chartBeingEdited().getTransitions().size(),
+                "and with the bar the flow waits at between them");
+        assertEquals(0, model.chartBeingEdited().getTransitions().stream()
+                        .filter(bar -> bar.getCondition() != null)
+                        .count(),
+                "and nothing waits on anything yet");
+
+        model.undo();
+
+        assertNull(model.chartBeingEdited(),
+                "and taking it back leaves the step with no chart again, as it was");
+        assertTrue(model.getRecipe().findElement("TRAMO").isPresent(),
+                "and the recipe still holds the step itself");
+    }
+
+    /**
+     * A step of the last level is offered no chart to create.
+     * <p>
+     * It holds nothing, so there is nothing to make.
+     */
+    @Test
+    void aLastLevelStepIsGivenNoChart() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        model.editChartOf(model.getRecipe().findElement("PASO").orElseThrow());
+        EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(), model.currentStep(),
+                "BEGIN", "PULSO", "BOX_PULSO", "T_PULSO", "PULSO_CLASS");
+
+        model.editChartOf(model.getRecipe().findElement("PULSO").orElseThrow());
+        model.createChartForCurrentStep();
+
+        assertNull(model.chartBeingEdited(), "and a phase holds no chart of its own");
+        assertFalse(RecipeLevels.allowsSubChart(model.levelBeingEdited()),
+                "so the recipe says there is nothing under it to draw");
+    }
+
     @Test
     void anEditInsideASubchartKeepsTheEditorOnIt() throws IOException {
         RecipeEditorModel model = openOverATree();

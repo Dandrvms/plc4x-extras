@@ -33,6 +33,7 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
+import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
@@ -188,11 +189,28 @@ public final class RecipeEditorModel {
 
     /**
      * The chart the editor is drawing.
+     * <p>
+     * A step whose chart has not been made yet has nothing to draw, so this is {@code null}. To
+     * give it one, use {@link #createChartForCurrentStep()}.
      *
-     * @return the chart of the recipe when no step is being edited
+     * @return the chart of the recipe when no step is being edited, or {@code null} when the step
+     *         being edited has no chart of its own
      */
     public S88ProcedureLogic chartBeingEdited() {
         return EditProcedureLogicUseCase.existingChart(recipe, currentStep());
+    }
+
+    /**
+     * Gives the step being edited the chart its level calls for, when it does not have one yet.
+     *
+     * <p>A chart made here can be taken back, unlike one that a read makes on its own, because the
+     * operator asked for it and it goes through an edit.
+     *
+     * @throws RecipeEditException when the change could not be made, after the recipe was put back
+     */
+    public void createChartForCurrentStep() {
+        edit("Create chart",
+                () -> CreateChartUseCase.forStep(getRecipe(), currentStep()));
     }
 
     /**

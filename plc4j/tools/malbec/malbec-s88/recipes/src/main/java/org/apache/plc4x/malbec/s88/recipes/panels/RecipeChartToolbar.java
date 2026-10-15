@@ -33,6 +33,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
@@ -596,9 +597,19 @@ final class RecipeChartToolbar {
                 () -> branch(this::addParallelBranch, "parallel branch"), redraw));
         menu.add(item("Add branch", "Put a step beside the one that is picked, with a bar of its own",
                 () -> branch(this::addAlternativeBranch, "branch"), redraw));
-        if (holdsAChart(pickedStep())) {
-            menu.add(item("Chart", "Draw what the picked step does, step by step",
-                    () -> openChartOfSelection(redraw), redraw));
+        S88RecipeElement picked = pickedStep();
+        if (holdsAChart(picked)) {
+            if (picked.getProcedureLogic() == null) {
+                menu.add(item("Create chart", "Put the chart this step is meant to have under it",
+                        () -> openOrCreateChartOf(picked), redraw));
+            } else {
+                menu.add(item("Chart", "Draw what the picked step does, step by step",
+                        () -> openChartOfSelection(redraw), redraw));
+            }
+        }
+        if (holdingAnUnbornChart()) {
+            menu.add(item("Create chart", "Put the chart the step on show is meant to have",
+                    this::createChartOfCurrentStep, redraw));
         }
         menu.add(item("Equipment", "Give the picked step the equipment it works on",
                 this::bindEquipment, redraw));
@@ -626,6 +637,48 @@ final class RecipeChartToolbar {
      */
     private static boolean holdsAChart(S88RecipeElement step) {
         return step != null && RecipeLevels.allowsSubChart(step.getKind());
+    }
+
+    /**
+     * Whether the step on show is meant to hold a chart and has not been given one yet.
+     *
+     * <p>Going into such a step leaves an empty drawing with nothing on it, so the way out is to
+     * make the chart rather than only to go back up.
+     *
+     * @return whether creating a chart is what the step on show is waiting for
+     */
+    private boolean holdingAnUnbornChart() {
+        S88RecipeElement current = model().currentStep();
+        return holdsAChart(current) && current.getProcedureLogic() == null;
+    }
+
+    /**
+     * Makes the chart the step on show is meant to have, and draws it.
+     *
+     * <p>The chart goes through an edit, so taking it back is the same as taking any other change
+     * back.
+     */
+    private void createChartOfCurrentStep() {
+        try {
+            model().createChartForCurrentStep();
+        } catch (RecipeEditException refused) {
+            JOptionPane.showMessageDialog(bar(), reasonWithing(refused),
+                    "No chart to create", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /** Makes the chart of the given step if it has none, then draws that step's chart. */
+    private void openOrCreateChartOf(S88RecipeElement step) {
+        try {
+            if (step.getProcedureLogic() == null) {
+                model().edit("Create chart of " + step.getId(),
+                        () -> CreateChartUseCase.forStep(model().getRecipe(), step));
+            }
+            model().editChartOf(step);
+        } catch (RecipeEditException refused) {
+            JOptionPane.showMessageDialog(bar(), reasonWithing(refused),
+                    "No chart to create", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     /**
