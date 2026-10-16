@@ -29,7 +29,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -500,6 +501,126 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
 
     private static S88ProcedureLogic chartOf(S88MasterRecipe recipe) {
         return recipe.getProcedureLogic();
+    }
+
+    /**
+     * A chart whose flow splits in three.
+     *
+     * <p>Two calls widen the block that is already there, because a step on a branch of it can be
+     * given another side of the same block.
+     */
+    private static S88MasterRecipe withAParallelBlockOfThree() {
+        S88MasterRecipe recipe = withAParallelBlock();
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        return recipe;
+    }
+
+    /** Taking one side off a block of three leaves a block of two. */
+    @Test
+    void takingABranchOffABlockOfThreeLeavesABlockOfTwo() {
+        S88MasterRecipe recipe = withAParallelBlockOfThree();
+
+        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_2");
+
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+                "and the bar that split has one branch fewer");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+                "and the bar that comes back together has one branch fewer as well");
+        assertEquals(S88LinkType.PARALLEL_DIVERGENT, arriving(recipe, "BOX_STEP").getLinkType(),
+                "and it is still a parallel block, because two branches are still a block");
+    }
+
+    /** Taking one side off a block of two leaves nothing that splits at all. */
+    @Test
+    void takingABranchOffABlockOfTwoCollapsesIt() {
+        S88MasterRecipe recipe = withAParallelBlock();
+
+        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_1");
+
+        assertEquals(List.of("BOX_STEP"), departuresOf(recipe, "T_STEP"),
+                "and the bar that split has only the one branch left");
+        assertFalse(arriving(recipe, "BOX_STEP").getLinkType().isDivergent(),
+                "and it is no longer a bar that splits, because one branch is not a block");
+        assertFalse(leaving(recipe, "BOX_STEP").getLinkType().isConvergent(),
+                "and neither is the bar that used to close the block");
+        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T1", "END"), flowOf(recipe),
+                "and what is left is the straight line the chart was before the block went in");
+    }
+
+    /**
+     * A step that holds a block of its own is a whole branch of that block.
+     *
+     * <p>It is arrived at by the bar that splits and leaves by the bar that closes, which is the
+     * same shape as any other whole branch. Removing it as a branch therefore collapses the block
+     * under it and leaves the other side carrying on.
+     */
+    @Test
+    void takingAwayAStepThatHoldsABlockCollapsesThatBlock() {
+        S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
+        ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP_2");
+
+        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_2");
+
+        assertFalse(boxOf(recipe, "BOX_STEP_2"), "and so does the step that went");
+        assertTrue(boxOf(recipe, "BOX_STEP_4"), "and the other side of the block under it is left");
+        assertEquals(List.of("BOX_STEP_4"), departuresOf(recipe, "T_STEP_2"),
+                "and the bar that split under the step now has the one branch left");
+        assertFalse(leaving(recipe, "BOX_STEP_4").getLinkType().isConvergent(),
+                "and nothing closes a block under the step any more");
+    }
+
+    /** A step in the middle of a branch is taken off as a step, not as a branch. */
+    @Test
+    void aStepInTheMiddleOfABranchIsNotABranchToRemove() {
+        S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
+
+        IllegalStateException refusal = assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_3"),
+                "because that step has bars of its own, and removing it would leave the bar the"
+                        + " block split into going to nothing");
+
+        assertEquals("Step 'BOX_STEP_3' is not a whole branch of a block, so there is no branch"
+                + " there to remove. A step in the middle of a branch is taken off as a step.",
+                refusal.getMessage(), "and it says so in the words it is told");
+        assertTrue(boxOf(recipe, "BOX_STEP_3"), "and the chart is as it was");
+    }
+
+    /** A branch changes lane in both bars at once, so it keeps its place in the drawing. */
+    @Test
+    void aBranchMovesOneLaneSideways() {
+        S88MasterRecipe recipe = withAParallelBlockOfThree();
+
+        ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP_1", true);
+
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_2", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+                "and the bar that splits lists the branches in the new order");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_2", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+                "and the bar that comes back together lists them the same way, which is what keeps"
+                        + " the branch in one lane rather than two");
+    }
+
+    /** The last branch has nothing beyond it to swap with. */
+    @Test
+    void theLastBranchHasNothingToMovePast() {
+        S88MasterRecipe recipe = withAParallelBlockOfThree();
+
+        IllegalStateException refusal = assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP_2", true));
+
+        assertTrue(refusal.getMessage().contains("already the last branch"),
+                "and it says there is no other branch to move past");
+    }
+
+    /** The first branch has nothing before it to swap with. */
+    @Test
+    void theFirstBranchHasNothingToMovePast() {
+        S88MasterRecipe recipe = withAParallelBlockOfThree();
+
+        IllegalStateException refusal = assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP", false));
+
+        assertTrue(refusal.getMessage().contains("already the first branch"),
+                "and it says the same at the other end");
     }
 
 }

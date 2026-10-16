@@ -26,6 +26,7 @@ import javax.swing.*;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
@@ -37,6 +38,7 @@ import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
+import org.apache.plc4x.malbec.s88.core.StructureQueries;
 
 /**
  * The buttons that change the chart of a recipe.
@@ -183,6 +185,14 @@ final class RecipeChartToolbar {
 
     private S88RecipeElement addAlternativeBranch(String box) {
         return ChartBranchingUseCase.addAlternativeBranch(model().getRecipe(), actionStep(), box);
+    }
+
+    private S88RecipeElement nestParallelBranch(String box) {
+        return ChartBranchingUseCase.nestParallelBranch(model().getRecipe(), actionStep(), box);
+    }
+
+    private S88RecipeElement nestAlternativeBranch(String box) {
+        return ChartBranchingUseCase.nestAlternativeBranch(model().getRecipe(), actionStep(), box);
     }
 
     /**
@@ -607,6 +617,14 @@ final class RecipeChartToolbar {
                 () -> branch(this::addParallelBranch, "parallel branch"), redraw));
         menu.add(item("Add branch", "Put a step beside the one that is picked, with a bar of its own",
                 () -> branch(this::addAlternativeBranch, "branch"), redraw));
+        if (canHaveABlockUnderIt(pickedBox())) {
+            menu.add(item("Parallel branch here", "Put a parallel block under the step that is"
+                            + " picked, inside the branch it is in",
+                    () -> branch(this::nestParallelBranch, "parallel branch here"), redraw));
+            menu.add(item("Selective branch here", "Put a block under the step that is picked where"
+                            + " only one side is taken, inside the branch it is in",
+                    () -> branch(this::nestAlternativeBranch, "selective branch here"), redraw));
+        }
         S88RecipeElement picked = pickedStep();
         if (holdsAChart(picked)) {
             if (picked.getProcedureLogic() == null) {
@@ -634,6 +652,34 @@ final class RecipeChartToolbar {
         menu.add(item("Undo", "Take back the last change", model()::undo, redraw));
         menu.add(item("Redo", "Put back the change that was taken back", model()::redo,
                 redraw));
+    }
+
+    /**
+     * Whether a block can be put under the box that is picked.
+     *
+     * <p>A box has to sit between two bars of its own for that. A box that is a whole branch of a
+     * block has none: it is arrived at by the line the block splits on and leaves by the line the
+     * block comes back together on, so there is no flow of its own to put a block under.
+     *
+     * <p>This is the same question {@code ChartBranchingUseCase} asks before it refuses, so the two
+     * offered here are the two that would go through.
+     *
+     * @param boxId box of the picked step, may be {@code null}
+     * @return whether a block would go under it
+     */
+    private boolean canHaveABlockUnderIt(String boxId) {
+        if (boxId == null) {
+            return false;
+        }
+        S88ProcedureLogic chart = model().chartBeingEdited();
+        if (chart == null) {
+            return false;
+        }
+        S88ProcedureLink arriving = StructureQueries.arrivingAt(chart, boxId);
+        S88ProcedureLink leaving = StructureQueries.leavingFrom(chart, boxId);
+        return arriving != null && leaving != null
+                && !arriving.isDivergent() && !arriving.isConvergent()
+                && !leaving.isDivergent() && !leaving.isConvergent();
     }
 
     /**

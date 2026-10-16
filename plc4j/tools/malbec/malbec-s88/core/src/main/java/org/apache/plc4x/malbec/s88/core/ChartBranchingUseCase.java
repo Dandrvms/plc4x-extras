@@ -268,6 +268,197 @@ public final class ChartBranchingUseCase {
     }
 
     /**
+     * Moves a whole branch one lane sideways, keeping it in the same block.
+     *
+     * <p>Which lane a branch is in is held by the order of the ends of two lines: the bar that
+     * splits the block, and the bar that comes back together. Moving the branch means moving its
+     * end in both of them by the same amount, because they are the same set of branches seen from
+     * either end.
+     *
+     * <p>Nothing else changes. The branch is still the same steps in the same order, and the block
+     * is still the same block.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart the branch is on, {@code null} for the recipe's own
+     * @param boxId  box of any step of the branch to move
+     * @param toTheRight whether to move towards the last branch rather than the first
+     * @throws IllegalArgumentException when there is no chart or no such box
+     * @throws IllegalStateException    when the step is not on a branch of a block, or when the
+     *                                  branch is already at that end and there is no room to move
+     * @see #removeBranch(S88Recipe, S88RecipeElement, String)
+     */
+    public static void moveBranch(S88Recipe recipe, S88RecipeElement step, String boxId,
+                                  boolean toTheRight) {
+        S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        String first = firstOfItsBranch(chart, boxId);
+        String last = lastOfItsBranch(chart, boxId);
+        S88ProcedureLink splitting = StructureQueries.arrivingAt(chart, first);
+        S88ProcedureLink closing = StructureQueries.leavingFrom(chart, last);
+        requireAWholeBranchOfABlock(splitting, closing, boxId);
+
+        int here = laneOf(splitting, first);
+        if (here != laneOf(closing, last)) {
+            throw new IllegalStateException("Step '" + boxId + "' is on a branch of a block whose two"
+                    + " bars do not list its branches in the same order, so moving it sideways would"
+                    + " put it in one lane at the top and another at the bottom.");
+        }
+        int wanted = toTheRight ? here + 1 : here - 1;
+        if (wanted < 0 || wanted >= branchEnds(splitting).size()) {
+            throw new IllegalStateException("Step '" + boxId + "' is already the "
+                    + (toTheRight ? "last" : "first") + " branch of its block, so it has no other"
+                    + " branch to move past.");
+        }
+        put(chart, splitting, withLanesSwapped(splitting, here, wanted));
+        put(chart, closing, withLanesSwapped(closing, here, wanted));
+        announce(recipe);
+    }
+
+    /**
+     * The first step of the branch the box is on.
+     *
+     * <p>A branch may be a run of steps between two bars. Which lane it is in is held by the bar
+     * that splits the block, and that bar points at the first step of each branch rather than at
+     * whichever one was picked. So this walks back over plain lines until the bar that splits shows
+     * up.
+     */
+    private static String firstOfItsBranch(S88ProcedureLogic chart, String boxId) {
+        String step = boxId;
+        while (true) {
+            S88ProcedureLink arriving = StructureQueries.arrivingAt(chart, step);
+            if (arriving == null || splitsInto(arriving)) {
+                return step;
+            }
+            step = arriving.getFrom().getFirst().getValue();
+        }
+    }
+
+    /**
+     * The last step of the branch the box is on.
+     *
+     * <p>The mirror of {@link #firstOfItsBranch}, walking forward over plain lines until the bar
+     * that comes back together shows up.
+     */
+    private static String lastOfItsBranch(S88ProcedureLogic chart, String boxId) {
+        String step = boxId;
+        while (true) {
+            S88ProcedureLink leaving = StructureQueries.leavingFrom(chart, step);
+            if (leaving == null || comesBackTogetherIn(leaving)) {
+                return step;
+            }
+            step = leaving.getTo().getFirst().getValue();
+        }
+    }
+
+    /**
+     * The ends of a bar that stand for the branches of the block.
+     *
+     * <p>A bar names its branches at the end it splits towards: the bar that splits the block has
+     * them going out, and the bar that comes back together has them coming in. The other end is the
+     * single node on the far side of the block.
+     */
+    private static List<S88IdRef> branchEnds(S88ProcedureLink bar) {
+        return comesBackTogetherIn(bar) ? bar.getFrom() : bar.getTo();
+    }
+
+    /** Where in a bar's branches the given node sits, which is the lane its branch is in. */
+    private static int laneOf(S88ProcedureLink bar, String nodeId) {
+        int lane = branchEnds(bar).stream().map(S88IdRef::getValue).toList().indexOf(nodeId);
+        if (lane < 0) {
+            throw new IllegalStateException("Bar '" + bar.getId() + "' does not reach '" + nodeId
+                    + "', so its branches cannot be counted.");
+        }
+        return lane;
+    }
+
+    /** The same bar with two of its branches the other way round. */
+    private static S88ProcedureLink withLanesSwapped(S88ProcedureLink bar, int one, int other) {
+        List<S88IdRef> branches = new ArrayList<>(branchEnds(bar));
+        S88IdRef moved = branches.remove(one);
+        branches.add(other, moved);
+        S88ProcedureLink swapped = new S88ProcedureLink(bar.getId());
+        if (comesBackTogetherIn(bar)) {
+            branches.forEach(swapped::addFrom);
+            bar.getTo().forEach(swapped::addTo);
+        } else {
+            bar.getFrom().forEach(swapped::addFrom);
+            branches.forEach(swapped::addTo);
+        }
+        swapped.setLinkType(bar.getLinkType());
+        return swapped;
+    }
+
+    /**
+     * Takes a whole branch off the chart.
+     *
+     * <p>Only a step that is a branch on its own can go this way. It is arrived at by the bar that
+     * split and leaves by the bar that comes back together, and taking it off leaves those bars
+     * with one end fewer. A block of three branches is left with two, and a block of two is left
+     * with one, which is no longer a block at all.
+     *
+     * <p>A step that has steps of its own on the same branch has bars of its own, so it is not a
+     * whole branch and is refused. Taking a run of steps off is a different order and is not done
+     * here.
+     *
+     * <p>The bars are put back together by {@link ChartDeletionUseCase#deleteBox}, which already
+     * drops the kind of line once only one end is left. That is what collapses a block of two.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart the branch is on, {@code null} for the recipe's own
+     * @param boxId  box of the step to take off
+     * @throws IllegalArgumentException when there is no chart or no such box
+     * @throws IllegalStateException    when the step is not a whole branch of a block, because
+     *                                  taking it off would leave lines going to nothing
+     * @see ChartDeletionUseCase#deleteBox
+     */
+    public static void removeBranch(S88Recipe recipe, S88RecipeElement step, String boxId) {
+        S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        requireAWholeBranchOfABlock(StructureQueries.arrivingAt(chart, boxId),
+                StructureQueries.leavingFrom(chart, boxId), boxId);
+        ChartDeletionUseCase.deleteBox(recipe, step, boxId);
+        announce(recipe);
+    }
+
+    /**
+     * Whether the box is a branch of a block all by itself.
+     *
+     * <p>That is what makes it removable as a branch. A step in the middle of a branch has bars of
+     * its own and is removed as a step, not as a branch, and a step outside any block is not a
+     * branch at all.
+     *
+     * @param chart chart the box is on
+     * @param boxId box to look at
+     * @throws IllegalStateException when it is not a whole branch
+     */
+    private static void requireAWholeBranchOfABlock(S88ProcedureLink splitting,
+                                                     S88ProcedureLink closing, String boxId) {
+        if (!splitsInto(splitting) || !comesBackTogetherIn(closing)) {
+            throw new IllegalStateException("Step '" + boxId + "' is not a whole branch of a block,"
+                    + " so there is no branch there to remove. A step in the middle of a branch is"
+                    + " taken off as a step.");
+        }
+    }
+
+    /**
+     * Whether this line is the bar that splits a block into the side the step is on.
+     *
+     * <p>A step in the middle of a branch is arrived at by a plain line, or by the bar that closes
+     * a block further back, and neither is a split.
+     */
+    private static boolean splitsInto(S88ProcedureLink link) {
+        return link != null && link.getLinkType() != null && link.getLinkType().isDivergent();
+    }
+
+    /**
+     * Whether this line is the bar that closes a block on the side the step is on.
+     *
+     * <p>A step that opens a block of its own leaves by the bar that splits that one, and a step in
+     * the middle of a branch leaves by a plain line, so neither is a close.
+     */
+    private static boolean comesBackTogetherIn(S88ProcedureLink link) {
+        return link != null && link.getLinkType() != null && link.getLinkType().isConvergent();
+    }
+
+    /**
      * A parallel block beside the step, made by widening the two lines the step already has.
      *
      * <p>A step that has bars of its own is arrived at by one line and leaves by one line, and those
