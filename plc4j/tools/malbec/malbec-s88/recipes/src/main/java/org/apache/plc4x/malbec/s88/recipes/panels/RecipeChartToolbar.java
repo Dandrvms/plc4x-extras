@@ -194,17 +194,27 @@ final class RecipeChartToolbar {
         button.addActionListener(event -> {
             try {
                 what.run();
-            } catch (RecipeEditException failure) {
-                showFailure(failure);
-            } catch (RuntimeException failure) {
-                showFailure(new RecipeEditException(name, failure));
+            } catch (RecipeEditException refused) {
+                showFailureOf(name, refused);
+            } catch (RuntimeException refused) {
+                showFailureOf(name, new RecipeEditException(name, refused));
             }
         });
         return button;
     }
 
-    private void showFailure(RecipeEditException failure) {
-        JOptionPane.showMessageDialog(bar(), failure.getMessage(), failure.getEditName() + " failed", JOptionPane.ERROR_MESSAGE);
+    /**
+     * Says what an action could not do, and why.
+     *
+     * <p>An edit that could not be made carries what went wrong underneath, and that is what the
+     * operator has to read. The name of the edit is only in the title of the box.
+     *
+     * @param action  name of the action that was refused
+     * @param refused the refusal, wrapped or as it was thrown
+     */
+    private void showFailureOf(String action, RecipeEditException refused) {
+        JOptionPane.showMessageDialog(bar(), reasonWithing(refused), action + " failed",
+                JOptionPane.ERROR_MESSAGE);
     }
 
     /**
@@ -705,15 +715,27 @@ final class RecipeChartToolbar {
     /**
      * Puts one action in a menu, with the drawing brought up to date after it runs.
      *
-     * <p>The undo and redo of the model are not offered in a menu, because taking a change back
-     * puts the recipe where it was and the chart on show with it.
+     * <p>A menu action is refused in the same way a button is, because it runs the same code: a step
+     * inside a block of the other kind is refused, and a refused edit throws rather than returning.
+     * Catching it here is what keeps it from reaching the thread that draws, where it would arrive
+     * with nothing to read and nothing to show it in.
+     *
+     * <p>The drawing is brought up to date whether the action went through or not, so a refused one
+     * leaves the chart as it was rather than as it was left.
      */
-    private static JMenuItem item(String name, String hint, Runnable what, Runnable after) {
+    private JMenuItem item(String name, String hint, Runnable what, Runnable after) {
         JMenuItem item = new JMenuItem(name);
         item.setToolTipText(hint);
         item.addActionListener(event -> {
-            what.run();
-            after.run();
+            try {
+                what.run();
+            } catch (RecipeEditException refused) {
+                showFailureOf(name, refused);
+            } catch (RuntimeException refused) {
+                showFailureOf(name, new RecipeEditException(name, refused));
+            } finally {
+                after.run();
+            }
         });
         return item;
     }

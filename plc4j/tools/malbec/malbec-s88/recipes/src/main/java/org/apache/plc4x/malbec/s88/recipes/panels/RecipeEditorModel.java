@@ -89,7 +89,25 @@ public final class RecipeEditorModel {
     }
 
     /**
+     * What to say about a recipe that can be drawn but not bound to anything.
+     * <p>
+     * The recipe set of this recipe has no plant frozen into it, so what its steps work on cannot be
+     * said and none of the actions that need the plant are offered.
+     *
+     * @return one line to say, or {@code null} when the plant is there
+     */
+    public String warning() {
+        return recipeFile == null || plant != null ? null
+                : "'" + recipeFile.getNameExt() + "' belongs to a recipe set with no plant frozen"
+                        + " into it, so what its steps work on cannot be said. Create the recipe"
+                        + " set again with a plant to write against.";
+    }
+
+    /**
      * Reads a recipe file so that it can be edited.
+     * <p>
+     * A recipe whose recipe set has no plant frozen into it still opens, and the view says what that
+     * means rather than the recipe being closed unread.
      *
      * @param recipeFile the recipe to open
      * @return the editor state for it
@@ -101,21 +119,27 @@ public final class RecipeEditorModel {
 
     /**
      * The frozen plant of the recipe set a recipe file belongs to.
+     * <p>
+     * A recipe set with no plant frozen into it still holds recipes that can be read and drawn. What
+     * cannot be said is what their steps are attached to, so the plant comes back empty and the view
+     * says so rather than the recipe being closed unread.
      *
      * @param recipeFile the recipe being opened
-     * @return the plant, {@code null} when there is no file to find a recipe set with
-     * @throws IOException when the recipe set has no plant frozen into it
+     * @return the plant, or {@code null} when the recipe set has none
      */
-    private static S88PlantSnapshot plantUnder(FileObject recipeFile) throws IOException {
+    private static S88PlantSnapshot plantUnder(FileObject recipeFile) {
         if (recipeFile == null) {
             return null;
         }
         FileObject folder = recipeFile.getParent();
-        Project recipeSet = folder == null ? null : ProjectManager.getDefault().findProject(folder);
+        Project recipeSet;
+        try {
+            recipeSet = folder == null ? null : ProjectManager.getDefault().findProject(folder);
+        } catch (IOException notAProject) {
+            return null;
+        }
         if (recipeSet == null || !RecipeSetPlantSnapshot.isTaken(recipeSet)) {
-            throw new IOException("'" + recipeFile.getNameExt() + "' belongs to a recipe set with no"
-                    + " plant frozen into it, so what its steps are attached to cannot be said."
-                    + " Create the recipe set again with a plant to write against.");
+            return null;
         }
         return RecipeSetPlantSnapshot.required(recipeSet);
     }
@@ -271,6 +295,10 @@ public final class RecipeEditorModel {
     /**
      * Makes a change that can be taken back.
      *
+     * <p>The change works on the recipe as it stands. The recipe is then copied, and the copy the
+     * change left behind is the one kept for taking it back again, so this holds no more than one
+     * live recipe and one snapshot per edit rather than three of each.
+     *
      * @param name  how the undo button names this change, such as "Add step"
      * @param apply what the change does
      * @throws RecipeEditException when the change could not be made, after the recipe was put back
@@ -280,14 +308,12 @@ public final class RecipeEditorModel {
         try {
             apply.run();
         } catch (RuntimeException failure) {
-            replaceRecipe(RecipeDeepCopy.copyMasterRecipe(before));
+            replaceRecipe(before);
             fireChanged();
             throw new RecipeEditException(name, failure);
         }
-        S88MasterRecipe after = RecipeDeepCopy.copyMasterRecipe(recipe);
-
-        replaceRecipe(RecipeDeepCopy.copyMasterRecipe(after));
-        undoRedo.add(new SnapshotEdit(before, after), name);
+        undoRedo.add(new SnapshotEdit(before, recipe), name);
+        replaceRecipe(RecipeDeepCopy.copyMasterRecipe(recipe));
         fireChanged();
     }
 

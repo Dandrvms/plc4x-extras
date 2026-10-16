@@ -63,7 +63,15 @@ final class RecipeProblems extends JPanel {
      * @param report what is wrong with the recipe
      */
     void show(RecipeConformance report) {
-        List<String> said = saidBy(report);
+        show(saidBy(report));
+    }
+
+    /**
+     * Says what is wrong, and takes up no room when nothing is.
+     *
+     * @param said one line per thing to say
+     */
+    void show(List<String> said) {
         lines.clear();
         said.forEach(lines::addElement);
         heading.setText(headingFor(said.size()));
@@ -76,7 +84,7 @@ final class RecipeProblems extends JPanel {
      * @param report what is wrong with the recipe
      * @return one line per finding
      */
-    private static List<String> saidBy(RecipeConformance report) {
+    static List<String> saidBy(RecipeConformance report) {
         List<String> said = new java.util.ArrayList<>();
         for (String excess : report.excess()) {
             said.add("Not runnable: " + excess);

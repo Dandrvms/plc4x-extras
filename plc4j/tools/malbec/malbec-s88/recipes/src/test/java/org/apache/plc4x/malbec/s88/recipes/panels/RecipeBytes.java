@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
 import org.apache.plc4x.malbec.s88.data.impl.BatchMLRecipeRepositoryImpl;
 
@@ -72,6 +73,17 @@ final class RecipeBytes {
      */
     static RecipeEditorModel openOn(Memory storage) throws IOException {
         return RecipeEditorModel.open(null, storage);
+    }
+
+    /**
+     * Opens an editor on a recipe held in a storage, written against a plant.
+     *
+     * @param storage where the recipe is
+     * @param plant   the plant the recipe is bound against
+     * @return the editor state
+     */
+    static RecipeEditorModel openOn(Memory storage, S88PlantSnapshot plant) throws IOException {
+        return RecipeEditorModel.open(null, storage, plant);
     }
 
     /**

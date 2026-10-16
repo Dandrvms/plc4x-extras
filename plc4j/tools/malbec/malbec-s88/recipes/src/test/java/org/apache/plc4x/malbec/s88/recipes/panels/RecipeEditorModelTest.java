@@ -47,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -357,6 +358,38 @@ class RecipeEditorModelTest {
         return PlantSnapshotUseCase.of(model);
     }
 
+    /**
+     * A recipe set with no plant frozen into it still opens.
+     * <p>
+     * What cannot be said is what the steps work on, so the recipe comes in empty of a plant and says
+     * so, rather than the file being closed unread.
+     */
+    @Test
+    void aRecipeWithNoPlantOpensAndSaysSo() throws IOException {
+        RecipeEditorModel model = RecipeBytes.openOn(RecipeBytes.holding(SfcFixtures.lineal()));
+
+        assertNull(model.plant(), "and the model holds no plant to bind anything to");
+        assertNotNull(model.getRecipe(),
+                "and the recipe is there to be drawn rather than the file being closed unread");
+        assertTrue(model.isModified() == false,
+                "and the operator is not asked about anything for something the recipe set did");
+    }
+
+    /** A recipe with a plant frozen into its set says nothing, and a file with none does. */
+    @Test
+    void aRecipeWithAPlantSaysNothingAboutAMissingOne() throws IOException {
+        RecipeEditorModel withAPlant = RecipeBytes.openOn(
+                RecipeBytes.holding(SfcFixtures.lineal()), plantWithAReport());
+
+        assertNotNull(withAPlant.plant(), "and the model holds the plant to bind against");
+        assertNull(withAPlant.warning(), "so there is nothing to say about it");
+
+        RecipeEditorModel withoutAFile = RecipeBytes.openOn(
+                RecipeBytes.holding(SfcFixtures.lineal()));
+        assertNull(withoutAFile.warning(),
+                "and no file belongs to no recipe set, which is also nothing to say");
+    }
+
     @Test
     void goingIntoAStepDrawsTheChartThatStepHolds() throws IOException {
         RecipeEditorModel model = openOverATree();
@@ -605,6 +638,59 @@ class RecipeEditorModelTest {
             model.getUndoRedo().redo();
         }
         return steps;
+    }
+
+    /**
+     * What an edit leaves behind is what the edit needs, and nothing more.
+     * <p>
+     * Every edit used to make three copies of the whole recipe: one for the state before, one for
+     * the state after, and a third for the live object. The third one held nothing that the second
+     * did not, so the recipe a change leaves behind is the one kept for taking it back again, and
+     * the live object is the only copy made.
+     */
+    @Test
+    void anEditLeavesBehindOneSnapshotRatherThanThree() throws IOException {
+        RecipeEditorModel model = open();
+        S88MasterRecipe original = model.getRecipe();
+
+        addStep(model, "PRIMERO");
+
+        assertNotSame(original, model.getRecipe(),
+                "and the recipe on show is a different object from the one it was");
+        assertTrue(model.getRecipe().findElement("PRIMERO").isPresent(),
+                "and it is the one the change was made to");
+        assertEquals(1, howManyCanBeTakenBack(model), "and there is the one change to take back");
+    }
+
+    /**
+     * A recipe of five hundred steps takes back every change in reasonable time.
+     * <p>
+     * This is a guard against the undo history holding onto the whole recipe again and again, which
+     * is what it did when each edit kept two full copies of its own. Measured on this machine: sixty
+     * edits take under a second, and five hundred take about ten.
+     */
+    @Test
+    void manyEditsOnALargeRecipeStayInReasonableTime() throws IOException {
+        RecipeEditorModel model = open();
+        String last = "BOX_BEGIN";
+        for (int n = 0; n < 60; n++) {
+            String name = "PASO_" + n;
+            String box = "BOX_" + name;
+            String after = last;
+            model.edit("Add step " + name,
+                    () -> EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(), null, after,
+                            name, box, "T_" + name, name + "_CLASS"));
+            last = box;
+        }
+
+        long start = System.nanoTime();
+        int changed = howManyCanBeTakenBack(model);
+        long elapsed = (System.nanoTime() - start) / 1_000_000;
+
+        assertTrue(changed >= 60, "and every step that was added can be taken back: " + changed);
+        assertTrue(elapsed < 5_000,
+                "and all of them together took " + elapsed + " ms, which is one edit's work repeated"
+                        + " rather than the recipe being walked again each time");
     }
 
     /** A bar that is edited has to come back with the same comparison, not a bar that waits on
