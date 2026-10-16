@@ -23,6 +23,7 @@ import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +47,34 @@ class ChartBranchingUseCaseTest {
     private static S88MasterRecipe withOneStep() {
         S88MasterRecipe recipe = recipe();
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
+        return recipe;
+    }
+
+    /** A chart whose flow goes one of two ways, with a step on each side. */
+    private static S88MasterRecipe withAnAlternativeBlock() {
+        S88MasterRecipe recipe = withOneStep();
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        return recipe;
+    }
+
+    /** A chart whose flow splits in two and both sides run at once. */
+    private static S88MasterRecipe withAParallelBlock() {
+        S88MasterRecipe recipe = withOneStep();
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        return recipe;
+    }
+
+    /**
+     * A chart whose flow splits in two, with steps on the side picked that have bars of their own.
+     *
+     * <p>A step alone on its branch has no flow of its own to put a block under, because the block
+     * outside splits into it and comes back together out of it. Two more steps give that branch a
+     * bar of its own after each, which is what a block can be put under.
+     */
+    private static S88MasterRecipe withAParallelBlockAndStepsOnOneSide() {
+        S88MasterRecipe recipe = withAParallelBlock();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_1");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
         return recipe;
     }
 
@@ -224,18 +253,193 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
                         + "author's back");
     }
 
+    /**
+     * A parallel branch can be asked for on a step inside a selective block, but it does not get
+     * there by changing what the block it is in is.
+     *
+     * <p>The line the flow gets to that step by is the one the block opens with, so widening it
+     * with a third side and marking it parallel says the three branches run at once. The operator
+     * asked for the opposite of that.
+     */
     @Test
-    void aStepThatIsAlreadyOnAParallelBranchCanBeBranchedAgain() {
+    void aParallelBranchInsideASelectiveBlockIsRefusedRatherThanChangingTheBlock() {
+        S88MasterRecipe recipe = withAnAlternativeBlock();
+
+        assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1"),
+                "and it says so instead of turning the block the step is in into the other kind");
+    }
+
+    /** The other way round: a selective branch thrown at a step inside a parallel block. */
+    @Test
+    void aSelectiveBranchInsideAParallelBlockIsRefusedRatherThanChangingTheBlock() {
+        S88MasterRecipe recipe = withAParallelBlock();
+
+        assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1"),
+                "and it says so instead of writing over what the block it is in says");
+    }
+
+    /**
+     * A step on no block at all has a branch made beside it either way, which is what opens a
+     * block in the first place.
+     */
+    @Test
+    void aStepOnNoBlockIsBranchedEitherWay() {
+        S88MasterRecipe byTurns = withOneStep();
+        ChartBranchingUseCase.addAlternativeBranch(byTurns, null, "BOX_STEP");
+        assertEquals(List.of("BOX_STEP"), departuresOf(byTurns, "T_STEP"),
+                "and the branch by turns keeps the step it was made on the bar it already had");
+        assertEquals(List.of("BOX_STEP_1"), departuresOf(byTurns, "T_BRANCH"),
+                "and puts the new one on a bar of its own");
+        assertEquals(List.of("T1", "T_BRANCH_1"), arrivalsOf(byTurns, "END"),
+                "and both come back together on the stop");
+
+        S88MasterRecipe atOnce = withOneStep();
+        ChartBranchingUseCase.addParallelBranch(atOnce, null, "BOX_STEP");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(atOnce, "T_STEP"),
+                "and the parallel one runs the step and the new one at the same time, off the bar");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(atOnce, "T1"),
+                "and they come back together where the step already ended");
+    }
+    
+    /**
+     * A step on a parallel branch is given another side of that same block, and not one of any
+     * block it happens to sit next to.
+     *
+     * <p>What is under the step is a block of its own, which used to widen the block the step is
+     * already in. Widening it there said the branches of the outer block ran at once when they go
+     * one at a time, which is what the block of its own is for.
+     */
+    /**
+     * A block put under a step keeps the step on its branch and gives it one beside it.
+     *
+     * <p>The block opens where the step already was and closes where the step already led to, so
+     * everything it does stays inside the branch the step was on.
+     */
+    @Test
+    void aBlockPutUnderAStepKeepsTheStepAndGivesItOneBesideIt() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+
+        S88RecipeElement added = ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP");
+
+        assertTrue(boxOf(recipe, "BOX_STEP"),
+                "and the step the block goes under is still there");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+                "and both sides come off the bar the step already had");
+        assertEquals("STEP_1", added.getId(),
+                "and the added step is the second side");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+                "and they come back together on the bar the step already ended on");
+        assertEquals(1, StructureQueries.enclosingBlocks(
+                recipe.getProcedureLogic(), "BOX_STEP").size(),
+                "and the step is inside the block that was put under it");
+    }
+
+    /**
+     * A block put under a step inside a branch stays in that branch.
+     *
+     * <p>The outer block is untouched: the new block opens and closes inside the branch, so what
+     * comes back together is a bar of its own rather than the one the outer block uses.
+     */
+    @Test
+    void aBlockPutUnderAStepInsideABranchStaysInThatBranch() {
+        S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
+
+        S88RecipeElement added =
+                ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP_2");
+
+        assertEquals(2, StructureQueries.enclosingBlocks(
+                        recipe.getProcedureLogic(), "BOX_STEP_2").size(),
+                "and the step is inside the block it was on and the one put under it");
+        assertEquals(S88LinkType.PARALLEL_DIVERGENT,
+                StructureQueries.enclosingBlocks(recipe.getProcedureLogic(), added.getId() == null
+                        ? "" : "BOX_" + added.getId()).get(0),
+                "and the one put under it is the innermost, which is the one opened last");
+        assertEquals(List.of("BOX_STEP_2", "BOX_" + added.getId()),
+                arrivalsOf(recipe, "T_STEP_3"),
+                "and both sides of the block come back to the bar the step already went to");
+    }
+
+    /**
+     * A block put under a step of a branch by turns gives each side its own bar.
+     *
+     * <p>That is what makes it a block where only one side is taken, rather than one where both run.
+     */
+    @Test
+    void aBlockOfTurnsPutUnderAStepGivesEachSideItsOwnBar() {
+        S88MasterRecipe recipe = withOneStep();
+
+        S88RecipeElement added =
+                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "BOX_STEP");
+
+        assertEquals("STEP_1", added.getId(), "and the added step is the second side");
+        assertEquals(List.of("BOX_STEP"), departuresOf(recipe, "T_STEP"),
+                "and the step keeps the bar it already had");
+        assertEquals(List.of("BOX_STEP_1"), departuresOf(recipe, "T_BRANCH"),
+                "and the new step has a bar of its own");
+        assertEquals(List.of("T1", "T_BRANCH_1"), arrivalsOf(recipe, "END"),
+                "and both come back together before the stop");
+    }
+
+    /** The other way round: a branch by turns put under a step of a parallel branch. */
+    @Test
+    void aBlockOfTurnsUnderAStepOfAParallelBranchStaysInThatBranch() {
+        S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
+
+        S88RecipeElement added =
+                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "BOX_STEP_2");
+
+        assertEquals("STEP_4", added.getId(), "and there is one new step in it");
+        List<S88LinkType> held = StructureQueries.enclosingBlocks(
+                recipe.getProcedureLogic(), "BOX_" + added.getId());
+        assertEquals(2, held.size(),
+                "and it is inside the block it was made in and the one put under it");
+        assertEquals(S88LinkType.SERIAL_DIVERGENT, held.get(0),
+                "and the one put under it is the turns kind, which is the one asked for");
+        assertEquals(S88LinkType.PARALLEL_DIVERGENT, held.get(1),
+                "and the one it is inside of is the parallel one it was made in");
+        assertEquals(List.of("T_STEP_2", "T_BRANCH"), departuresOf(recipe, "BOX_STEP_1"),
+                "and both sides leave the step before the one picked, which is what gives each side"
+                        + " a bar of its own to wait on");
+        assertEquals(List.of("T_BRANCH"), arrivalsOf(recipe, "BOX_" + added.getId()),
+                "and the new step has a bar of its own where it starts");
+        assertEquals(List.of("T_BRANCH_1"), departuresOf(recipe, "BOX_" + added.getId()),
+                "and another where it ends, which is what makes it a branch of its own");
+    }
+
+    /**
+     * A step that is already on a branch point has nothing to put a block under.
+     *
+     * <p>There is no single flow to split.
+     */
+    @Test
+    void aStepThatAlreadyGoesToMoreThanOnePlaceHasNothingToPutABlockUnder() {
+        S88MasterRecipe recipe = withAParallelBlock();
+
+        assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP"),
+                "and it says so rather than putting a second block on one that is not one flow");
+    }
+
+    @Test
+    void aStepOnAParallelBranchIsGivenAnotherSideOfThatBlock() {
+        S88MasterRecipe recipe = withAParallelBlock();
 
         ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
 
-        assertEquals(List.of("BOX_STEP_1", "BOX_STEP_2"), departuresOf(recipe, "T_BRANCH"),
-                "and the nested parallel hangs off that branch's bar, which is what makes one "
-                        + "branch of a branch");
-        assertEquals(List.of("T_STEP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
-                "and the branch it hangs off has not gained anything");
+        assertEquals(List.of("BOX_STEP", "BOX_STEP_1", "BOX_STEP_2"),
+                departuresOf(recipe, "T_STEP"),
+                "and the block it was already in gains a third branch, rather than a block of the"
+                        + " step's own under it");
+        assertEquals(1, StructureQueries.enclosingBlocks(recipe.getProcedureLogic(),
+                        "BOX_STEP_1").size(),
+                "and the step is inside the one block it was already in, not inside two");
+    }
+
+    /** Whether the chart carries a box of that name. */
+    private static boolean boxOf(S88MasterRecipe recipe, String boxId) {
+        return recipe.getProcedureLogic().findStep(boxId).isPresent();
     }
 
     /** The nodes the flow goes through when there is only one at a time. */

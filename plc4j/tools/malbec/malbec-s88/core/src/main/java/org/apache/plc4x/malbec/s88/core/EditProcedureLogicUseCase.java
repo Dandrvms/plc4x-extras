@@ -530,16 +530,15 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Moves what several nodes used to lead to onto one bar behind them.
-     * <p>
-     * The lines keep their identity and their arrival, so nothing about how the flow goes on changes
-     * except that it now goes on from one place rather than from several.
+     * Takes what each line was leading to and leads it to the bar it was given instead.
      *
-     * @param wasLeaving the lines to move, taken before anything was added
-     * @param carriedOn  bar they leave from now
+     * @param recipe    recipe being edited
+     * @param step      step whose chart the lines are on, {@code null} for the recipe's own
+     * @param wasLeaving the lines to read what they were leading to
+     * @param carriedOn  the bar that leads on now
      */
-    private static void carryOnAfter(S88Recipe recipe, S88RecipeElement step,
-                                     List<S88ProcedureLink> wasLeaving, String carriedOn) {
+    public static void carryOnAfter(S88Recipe recipe, S88RecipeElement step,
+                                    List<S88ProcedureLink> wasLeaving, String carriedOn) {
         for (S88ProcedureLink line : wasLeaving) {
             List<String> arrivedAt = new ArrayList<>();
             line.getTo().forEach(end -> arrivedAt.add(end.getValue()));
@@ -551,8 +550,12 @@ public class EditProcedureLogicUseCase {
 
     /**
      * The lines that leave one end of the chart, in the order the chart holds them.
+     *
+     * @param chart the chart to read
+     * @param name  id of the box or bar to look from
+     * @return the lines that start there
      */
-    private static List<S88ProcedureLink> linksLeaving(S88ProcedureLogic chart, String name) {
+    public static List<S88ProcedureLink> linksLeaving(S88ProcedureLogic chart, String name) {
         List<S88ProcedureLink> leaving = new ArrayList<>();
         for (S88ProcedureLink link : chart.getLinks()) {
             boolean startsHere = link.getFrom().stream()
@@ -573,11 +576,18 @@ public class EditProcedureLogicUseCase {
 
     /**
      * A name of that shape that this chart is not already using.
+     *
+     * @param chart  the chart the name goes on
+     * @param wanted the name to take if it is free
+     * @param what   what the name is for, used when reporting it
+     * @return the name to use
      */
-    private static String freeName(S88ProcedureLogic chart, String wanted, String what) {
+    public static String freeName(S88ProcedureLogic chart, String wanted, String what) {
         String candidate = wanted;
         int more = 2;
-        while (chart.findStep(candidate).isPresent() || chart.findTransition(candidate).isPresent()) {
+        while (chart.findStep(candidate).isPresent()
+                || chart.findTransition(candidate).isPresent()
+                || chart.findLink(candidate).isPresent()) {
             candidate = wanted + "_" + more++;
         }
         return candidate;

@@ -61,6 +61,7 @@ public final class ChartBranchingUseCase {
     public static S88RecipeElement addParallelBranch(S88Recipe recipe, S88RecipeElement step,
                                                       String boxId) {
         S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        requireTheSameKindOfBlock(chart, boxId, true);
         S88ProcedureLink entering = arrivingAt(chart, boxId);
         S88ProcedureLink leaving = leavingFrom(chart, boxId);
         if (!takesAnotherArrival(entering) || !takesAnotherDeparture(leaving)) {
@@ -90,6 +91,7 @@ public final class ChartBranchingUseCase {
     public static S88RecipeElement addAlternativeBranch(S88Recipe recipe, S88RecipeElement step,
                                                          String boxId) {
         S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        requireTheSameKindOfBlock(chart, boxId, false);
         S88ProcedureLink entering = arrivingAt(chart, boxId);
         S88ProcedureLink leaving = leavingFrom(chart, boxId);
         if (entering.getTo().size() != 1 || leaving.getTo().size() != 1) {
@@ -133,6 +135,35 @@ public final class ChartBranchingUseCase {
                     + ", so there is nothing to branch.");
         }
         return chart;
+    }
+
+    /**
+     * Whether a branch of the given kind can be made beside the picked step.
+     *
+     * <p>A step already inside a block can only be given another side of that same block. Widening
+     * the line it stands on with a side of the other kind would say the branches run at once when
+     * they go one at a time, or the other way round, so it is refused and the step is offered the
+     * button that puts a block of its own under it instead.
+     *
+     * @param chart  the chart the step is on
+     * @param boxId  box of the picked step
+     * @param wanted whether the branch asked for is the parallel kind
+     * @throws IllegalStateException when the step is inside a block of the other kind
+     */
+    private static void requireTheSameKindOfBlock(S88ProcedureLogic chart, String boxId,
+                                                  boolean wanted) {
+        S88LinkType found = StructureQueries.blockOf(chart, boxId);
+        if (found == null) {
+            return;
+        }
+        if (found.isParallel() != wanted) {
+            throw new IllegalStateException("Step '" + boxId + "' is inside a "
+                    + (found.isParallel() ? "parallel" : "selective") + " block, and a "
+                    + (wanted ? "parallel" : "selective") + " branch cannot be made beside it"
+                    + " without changing what that block is. Use "
+                    + (wanted ? "Parallel branch here" : "Selective branch here")
+                    + " to put a " + (wanted ? "parallel" : "selective") + " block under it.");
+        }
     }
 
     private static S88RecipeElementKind kindOf(S88Recipe recipe, String elementId) {
@@ -192,6 +223,155 @@ public final class ChartBranchingUseCase {
         wider.addTo(extraEnd);
         wider.setLinkType(type);
         return wider;
+    }
+
+    /**
+     * Puts a parallel block under the picked step, inside the branch it is already in.
+     *
+     * <p>The step keeps the branch it is on and becomes the first side of a block of its own, with
+     * a new empty step beside it, and both come back together where the step used to lead to. The
+     * block opens and closes inside the branch, so everything it does stays there.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId  box of the step the block goes under
+     * @return the step that was added
+     * @throws IllegalArgumentException when there is no chart or no such box
+     * @throws IllegalStateException    when the step is where the flow starts or stops
+     */
+    public static S88RecipeElement nestParallelBranch(S88Recipe recipe, S88RecipeElement step,
+                                                     String boxId) {
+        S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        return addParallel(recipe, step, chart, boxId);
+    }
+
+    /**
+     * Puts a block under the picked step inside the branch it is in, of which only one side is
+     * taken.
+     *
+     * <p>The step keeps its own bars and becomes the first side, with a new empty step and a bar of
+     * its own beside it, and both come back together on a bar they share. Each side has a bar at the
+     * start and the end, which is what makes it selective rather than parallel.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId  box of the step the block goes under
+     * @return the step that was added
+     * @throws IllegalArgumentException when there is no chart or no such box
+     * @throws IllegalStateException    when the step is where the flow starts or stops, or has no
+     *                                  bars of its own to widen
+     */
+    public static S88RecipeElement nestAlternativeBranch(S88Recipe recipe, S88RecipeElement step,
+                                                         String boxId) {
+        S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        return addAlternative(recipe, step, chart, boxId);
+    }
+
+    /**
+     * A parallel block beside the step, made by widening the two lines the step already has.
+     *
+     * <p>A step that has bars of its own is arrived at by one line and leaves by one line, and those
+     * are the lines the block widens. A step that is a whole branch has neither: its arrival is the
+     * block outside splitting and its departure is that block coming back together, and widening
+     * those would change the block outside rather than put one under the step.
+     *
+     * @param recipe recipe being edited
+     * @param step   step whose chart the block goes on, {@code null} for the recipe's own
+     * @param chart  that chart
+     * @param boxId  box of the step the block goes under
+     * @return the step that was added
+     */
+    private static S88RecipeElement addParallel(S88Recipe recipe, S88RecipeElement step,
+                                                S88ProcedureLogic chart, String boxId) {
+        S88ProcedureLink entering = arrivingAt(chart, boxId);
+        S88ProcedureLink leaving = leavingFrom(chart, boxId);
+        requireBarsOfItsOwn(boxId, entering, leaving);
+        String box = newStep(recipe, step, chart);
+        put(chart, entering, widenArrival(entering, S88IdRef.step(box),
+                S88LinkType.PARALLEL_DIVERGENT));
+        put(chart, leaving, widenDeparture(leaving, S88IdRef.step(box),
+                S88LinkType.PARALLEL_CONVERGENT));
+        announce(recipe);
+        return recipe.findElement(elementOf(box)).orElseThrow();
+    }
+
+    /**
+     * A selective block beside the step, made by widening the lines around the step and giving the
+     * new side a bar of its own at each end.
+     *
+     * @param recipe recipe being edited
+     * @param step   step whose chart the block goes on, {@code null} for the recipe's own
+     * @param chart  that chart
+     * @param boxId  box of the step the block goes under
+     * @return the step that was added
+     */
+    private static S88RecipeElement addAlternative(S88Recipe recipe, S88RecipeElement step,
+                                                   S88ProcedureLogic chart, String boxId) {
+        S88ProcedureLink entering = arrivingAt(chart, boxId);
+        S88ProcedureLink leaving = leavingFrom(chart, boxId);
+        requireBarsOfItsOwn(boxId, entering, leaving);
+        if (entering.getTo().size() != 1 || leaving.getTo().size() != 1) {
+            throw new IllegalStateException("Step '" + boxId + "' is already fed by a branch point"
+                    + " or already goes to more than one place, so there is no one line to widen.");
+        }
+        String barBehind = entering.getFrom().getFirst().getValue();
+        S88ProcedureLink feeding = arrivingAt(chart, barBehind);
+        String barAfter = leaving.getTo().getFirst().getValue();
+        S88ProcedureLink carryingOn = leavingFrom(chart, barAfter);
+
+        String branchBar = newBar(recipe, step, chart);
+        String finishBar = newBar(recipe, step, chart);
+        String box = newStep(recipe, step, chart);
+
+        chart.addLink(barToStep(branchBar + "_TO_" + box, branchBar, box));
+        chart.addLink(stepToBar(box + "_TO_" + finishBar, box, finishBar));
+        put(chart, feeding, widenArrival(feeding, S88IdRef.transition(branchBar),
+                S88LinkType.SERIAL_DIVERGENT));
+        put(chart, carryingOn, widenDeparture(carryingOn, S88IdRef.transition(finishBar),
+                S88LinkType.SERIAL_CONVERGENT));
+
+        announce(recipe);
+        return recipe.findElement(elementOf(box)).orElseThrow();
+    }
+
+    /**
+     * Whether the step has one line arriving at it and one leaving it, which is what a block can be
+     * put under.
+     *
+     * <p>A step that is a whole branch of a block has neither. It is arrived at by the line the
+     * block splits on and leaves by the line the block comes back together on, so there is no flow
+     * of its own to split in two.
+     *
+     * @param boxId    box of the picked step, named in what is said
+     * @param entering the line that arrives at the step
+     * @param leaving  the line that leaves the step
+     */
+    private static void requireBarsOfItsOwn(String boxId, S88ProcedureLink entering,
+                                            S88ProcedureLink leaving) {
+        if (entering == null || leaving == null) {
+            throw new IllegalStateException("Step '" + boxId + "' does not sit between two bars, so"
+                    + " there is no flow to put a block under.");
+        }
+        if (entering.isDivergent() || entering.isConvergent()) {
+            throw new IllegalStateException("Step '" + boxId + "' is a whole branch of the block it"
+                    + " is in, so there is no flow of its own to put a block under. Put a step beside"
+                    + " it with Add step instead.");
+        }
+        if (leaving.isDivergent() || leaving.isConvergent()) {
+            throw new IllegalStateException("Step '" + boxId + "' is where the block it is in comes"
+                    + " back together, so there is no flow of its own to put a block under. Put a"
+                    + " step beside it with Add step instead.");
+        }
+    }
+
+    /** The kind of line a block of this kind opens with. */
+    private static S88LinkType toSplitType(boolean parallel) {
+        return parallel ? S88LinkType.PARALLEL_DIVERGENT : S88LinkType.SERIAL_DIVERGENT;
+    }
+
+    /** The kind of line a block of this kind closes with. */
+    private static S88LinkType toJoinType(boolean parallel) {
+        return parallel ? S88LinkType.PARALLEL_CONVERGENT : S88LinkType.SERIAL_CONVERGENT;
     }
 
     private static S88ProcedureLink widenDeparture(S88ProcedureLink link, S88IdRef extraEnd,
