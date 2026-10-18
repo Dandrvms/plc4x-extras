@@ -21,6 +21,7 @@ package org.apache.plc4x.malbec.s88.core;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.plc4x.malbec.s88.api.*;
 
@@ -165,7 +166,7 @@ public final class BindRecipeStepUseCase {
      * it had before.
      */
     private static void removeEveryEquipment(S88RecipeElement element) {
-        for (String boundId : element.getActualEquipmentIds()) {
+        for (String boundId : List.copyOf(element.getActualEquipmentIds())) {
             element.removeActualEquipmentId(boundId);
         }
     }
@@ -211,7 +212,8 @@ public final class BindRecipeStepUseCase {
      */
     private static void nameAfter(S88Recipe recipe, S88RecipeElement step, S88ProcedureLogic chart,
                                   String boxId, String wanted) {
-        String free = freeName(recipe, chart, wanted);
+        S88RecipeElement element = elementOn(recipe, chart, boxId);
+        String free = freeName(recipe, chart, wanted, element);
         renameElement(recipe, chart, boxId, free);
         EditProcedureLogicUseCase.renameStep(recipe, step, boxId, free);
     }
@@ -258,15 +260,41 @@ public final class BindRecipeStepUseCase {
     }
 
     /**
-     * A name of that shape that nothing in the chart or in the recipe is using.
+     * A name of that shape that nothing else in the chart or in the recipe is using.
+     *
+     * <p>The step being bound is not a clash with itself: binding it to the equipment it already
+     * works on asks for the name it already has, and that is the name it keeps. A second step of
+     * the same equipment still gets a number, because that one is a different step.
+     *
+     * @param element the step being bound, whose own name and box are not clashes
      */
-    private static String freeName(S88Recipe recipe, S88ProcedureLogic chart, String wanted) {
+    private static String freeName(S88Recipe recipe, S88ProcedureLogic chart, String wanted,
+                                   S88RecipeElement element) {
         String candidate = wanted;
         int more = 1;
-        while (isTaken(recipe, chart, candidate)) {
+        while (isTakenByAnother(recipe, chart, candidate, element)) {
             candidate = wanted + "_" + more++;
         }
         return candidate;
+    }
+
+    /** Whether the name is used by something other than the step being bound. */
+    private static boolean isTakenByAnother(S88Recipe recipe, S88ProcedureLogic chart,
+                                            String candidate, S88RecipeElement element) {
+        return !belongsToThisStep(recipe, chart, candidate, element)
+                && isTaken(recipe, chart, candidate);
+    }
+
+    /** Whether the name is the one this step already answers to, in the recipe or on the chart. */
+    private static boolean belongsToThisStep(S88Recipe recipe, S88ProcedureLogic chart,
+                                             String candidate, S88RecipeElement element) {
+        if (element != null && candidate.equals(element.getId())) {
+            return true;
+        }
+        return chart.findStep(candidate)
+                .map(box -> element != null
+                        && element.getId().equals(box.getRecipeElementId()))
+                .orElse(false);
     }
 
     /**
@@ -339,9 +367,11 @@ public final class BindRecipeStepUseCase {
     private static void giveParametersFrom(S88RecipeElement element, Map<String, Object> properties) {
         Object declared = properties.get(PARAMETERS);
         if (!(declared instanceof Map<?, ?> container)) {
+            dropParametersNotDeclaredBy(element, Set.of());
             return;
         }
         Map<String, Object> byName = (Map<String, Object>) container;
+        dropParametersNotDeclaredBy(element, byName.keySet());
         for (Map.Entry<String, Object> declaredParameter : byName.entrySet()) {
             if (element.findParameter(declaredParameter.getKey()).isPresent()
                     || !(declaredParameter.getValue() instanceof Map<?, ?> raw)) {
@@ -370,6 +400,20 @@ public final class BindRecipeStepUseCase {
     private static String text(Map<String, Object> definition, String key) {
         Object value = definition.get(key);
         return value == null ? null : value.toString();
+    }
+
+    /**
+     * Takes off every parameter the equipment being bound to does not declare, so a step that
+     * changes which equipment it works on carries nothing of the one it worked on before.
+     *
+     * @param element  step being bound
+     * @param declared names of the parameters the equipment declares
+     */
+    private static void dropParametersNotDeclaredBy(S88RecipeElement element, Set<String> declared) {
+        List<S88RecipeParameter> ofAnotherEquipment = element.getParameters().stream()
+                .filter(parameter -> !declared.contains(parameter.getId()))
+                .toList();
+        ofAnotherEquipment.forEach(element::removeParameter);
     }
 
     /**

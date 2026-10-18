@@ -216,6 +216,56 @@ class BindRecipeStepUseCaseTest {
     }
 
     @Test
+    void bindingAStepToTheSameEquipmentTwiceKeepsItsName() {
+        S88MasterRecipe recipe = recipeWithAnEmptyBox();
+
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "CALENTAMIENTO",
+                "CALENTAMIENTO", plant());
+
+        assertTrue(recipe.findElement("CALENTAMIENTO").isPresent(),
+                "and the step keeps the name it already answers to");
+        assertTrue(recipe.findElement("CALENTAMIENTO_1").isEmpty(),
+                "rather than being given a number for clashing with itself");
+        assertEquals("CALENTAMIENTO",
+                Levels.chartOf(recipe, "PASO").findStep("CALENTAMIENTO").orElseThrow().getId(),
+                "and so does its box");
+    }
+
+    @Test
+    void bindingAStepToAnotherEquipmentDropsTheParametersOfTheOldOne() {
+        S88MasterRecipe recipe = recipeWithAnEmptyBox();
+
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
+        S88RecipeElement element = BindRecipeStepUseCase.bindToEquipment(
+                recipe, Levels.owner(recipe, "PASO"), "CALENTAMIENTO", "CALENTAMIENTO_TANQUE_1", plant());
+
+        assertTrue(element.findParameter("TEMPERATURA_SP").isEmpty(),
+                "and the parameter of the equipment it worked on before is gone, because it means"
+                        + " nothing to the one it works on now");
+        assertTrue(element.findParameter("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1").isPresent(),
+                "and the parameter of the equipment it works on now is there");
+    }
+
+    @Test
+    void bindingAStepThatNamesMoreThanOneEquipmentDoesNotFail() {
+        S88MasterRecipe recipe = recipeWithAnEmptyBox();
+        recipe.setKind(S88RecipeKind.INSTANCE);
+        BindRecipeStepUseCase.bindToEquipment(recipe, Levels.owner(recipe, "PASO"), "EMPTY",
+                "CALENTAMIENTO_TANQUE_1", plant());
+        S88RecipeElement element = recipe.findElement("CALENTAMIENTO_TANQUE_1").orElseThrow();
+        element.addActualEquipmentId("CALENTAMIENTO_TANQUE_2");
+
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"),
+                "CALENTAMIENTO_TANQUE_1", "CALENTAMIENTO", plant());
+
+        assertTrue(element.getActualEquipmentIds().isEmpty(),
+                "and every piece of equipment it named is taken off, without tripping over the list"
+                        + " it is reading");
+        assertEquals("CALENTAMIENTO", element.getEquipmentClassId());
+    }
+
+    @Test
     void aStepBoundToAEquipmentNamesThatEquipmentAndKeepsItsIdentity() {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
         recipe.setKind(S88RecipeKind.INSTANCE);
