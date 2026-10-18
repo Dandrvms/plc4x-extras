@@ -54,14 +54,14 @@ class ChartBranchingUseCaseTest {
     /** A chart whose flow goes one of two ways, with a step on each side. */
     private static S88MasterRecipe withAnAlternativeBlock() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
         return recipe;
     }
 
     /** A chart whose flow splits in two and both sides run at once. */
     private static S88MasterRecipe withAParallelBlock() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
         return recipe;
     }
 
@@ -74,8 +74,8 @@ class ChartBranchingUseCaseTest {
      */
     private static S88MasterRecipe withAParallelBlockAndStepsOnOneSide() {
         S88MasterRecipe recipe = withAParallelBlock();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_1");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
         return recipe;
     }
 
@@ -85,7 +85,7 @@ class ChartBranchingUseCaseTest {
 
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
 
-        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T1", "END"), flowOf(recipe),
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T1", "END"), flowOf(recipe),
                 "and the flow goes through it, with a bar on each side, and what used to follow "
                         + "carries on behind it");
     }
@@ -97,11 +97,11 @@ class ChartBranchingUseCaseTest {
 
         for (int n = 0; n < 5; n++) {
             BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, last);
-            last = n == 0 ? "BOX_STEP" : "BOX_STEP_" + n;
+            last = n == 0 ? "STEP" : "STEP_" + n;
         }
 
-        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T_STEP_1", "BOX_STEP_1",
-                "T_STEP_2", "BOX_STEP_2", "T_STEP_3", "BOX_STEP_3", "T_STEP_4", "BOX_STEP_4",
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1",
+                "T_STEP_2", "STEP_2", "T_STEP_3", "STEP_3", "T_STEP_4", "STEP_4",
                 "T1", "END"), flowOf(recipe),
                 "and five presses make five steps one under the other, each with its own bar, "
                         + "because the names move along instead of landing on the bar the previous "
@@ -115,7 +115,7 @@ class ChartBranchingUseCaseTest {
 
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
 
-        assertEquals(List.of("BEGIN", "T_STEP_1", "BOX_STEP_1", "T1", "END"), flowOf(recipe),
+        assertEquals(List.of("BEGIN", "T_STEP_1", "STEP_1", "T1", "END"), flowOf(recipe),
                 "and the step does not land on the bar that was already there, which is what used "
                         + "to stop the second press with a name already taken");
     }
@@ -124,11 +124,11 @@ class ChartBranchingUseCaseTest {
     void aParallelBranchTakesTheBarsItWasAlreadyGiven() {
         S88MasterRecipe recipe = withOneStep();
 
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_1"), departuresOf(recipe, "T_STEP"),
                 "and no bar is made: the bar that fed the step now feeds both");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP", "STEP_1"), arrivalsOf(recipe, "T1"),
                 "and the bar behind it now receives both");
         assertEquals(S88LinkType.PARALLEL_DIVERGENT, leaving(recipe, "T_STEP").getLinkType(),
                 "and the line out of that bar is the parallel kind, which is what draws one bar "
@@ -140,15 +140,15 @@ class ChartBranchingUseCaseTest {
     @Test
     void aParallelBranchGrowsByOneEachTime() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1", "BOX_STEP_2"),
+        assertEquals(List.of("STEP", "STEP_1", "STEP_2"),
                 departuresOf(recipe, "T_STEP"),
                 "and a third press adds a third step to the same bar, rather than a branch inside "
                         + "the second one");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP", "STEP_1", "STEP_2"), arrivalsOf(recipe, "T1"),
                 "and all three come back to the same bar");
     }
 
@@ -156,7 +156,7 @@ class ChartBranchingUseCaseTest {
     void anAlternativeBranchGivesEachBranchABarOfItsOwn() {
         S88MasterRecipe recipe = withOneStep();
 
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
 
         assertEquals(List.of("T_STEP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
                 "and the line that splits is the one leaving the step before the bar");
@@ -164,9 +164,9 @@ class ChartBranchingUseCaseTest {
                 "and it is the selective kind, so the drawing puts one bar across and not two");
         assertEquals(List.of("BEGIN"), arrivalsOf(recipe, "T_STEP"),
                 "and the bar the step already had arrives from where it always did");
-        assertEquals(List.of("BOX_STEP_1"), departuresOf(recipe, "T_BRANCH"),
+        assertEquals(List.of("STEP_1"), departuresOf(recipe, "T_BRANCH"),
                 "and the bar that was made leads to the new step");
-        assertEquals(List.of("BOX_STEP_1"), arrivalsOf(recipe, "T_BRANCH_1"),
+        assertEquals(List.of("STEP_1"), arrivalsOf(recipe, "T_BRANCH_1"),
                 "and the new step has a bar of its own behind it, which is where that branch's "
                         + "condition goes");
         assertEquals(List.of("END"), departuresOf(recipe, "T1"),
@@ -180,9 +180,9 @@ class ChartBranchingUseCaseTest {
     @Test
     void anAlternativeBranchGrowsByOneEachTime() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
 
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
 
         assertEquals(List.of("T_STEP", "T_BRANCH", "T_BRANCH_2"), departuresOf(recipe, "BEGIN"),
                 "and the third branch hangs off the same line as the first two");
@@ -193,29 +193,29 @@ class ChartBranchingUseCaseTest {
     @Test
     void aStepCanBeAddedInsideAParallelBranchAndItStaysThere() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_1");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
 
-assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
+assertEquals(List.of("STEP", "STEP_2"), arrivalsOf(recipe, "T1"),
                 "and the new step is the one that arrives at the bar the whole branch arrives at");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_1"), departuresOf(recipe, "T_STEP"),
                 "and the branch still leaves from the step it left from, which now carries on to"
                         + " the new step rather than straight to the convergence");
-        assertEquals(List.of("T_STEP_2"), departuresOf(recipe, "BOX_STEP_1"),
+        assertEquals(List.of("T_STEP_2"), departuresOf(recipe, "STEP_1"),
                 "and the branch carries on through a bar of its own to the step that was added");
     }
 
     @Test
     void aStepInsideAnAlternativeBranchKeepsThatBranchsOwnBar() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
 
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_1");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
 
-        assertEquals(List.of("BOX_STEP_2"), arrivalsOf(recipe, "T_BRANCH_1"),
+        assertEquals(List.of("STEP_2"), arrivalsOf(recipe, "T_BRANCH_1"),
                 "and it arrives at the bar that ends that branch, not at the bar of another one");
-        assertEquals(List.of("BOX_STEP"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP"), arrivalsOf(recipe, "T1"),
                 "and the first branch is untouched");
     }
 
@@ -242,7 +242,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     @Test
     void aStepWhereTheFlowSplitsIsRefusedAndNothingIsTakenOffTheChart() {
         S88MasterRecipe recipe = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
         List<String> before = List.copyOf(departuresOf(recipe, "BEGIN"));
 
         assertThrows(IllegalStateException.class,
@@ -267,7 +267,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAnAlternativeBlock();
 
         assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1"),
+                () -> ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1"),
                 "and it says so instead of turning the block the step is in into the other kind");
     }
 
@@ -277,7 +277,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlock();
 
         assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1"),
+                () -> ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1"),
                 "and it says so instead of writing over what the block it is in says");
     }
 
@@ -288,19 +288,19 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     @Test
     void aStepOnNoBlockIsBranchedEitherWay() {
         S88MasterRecipe byTurns = withOneStep();
-        ChartBranchingUseCase.addAlternativeBranch(byTurns, null, "BOX_STEP");
-        assertEquals(List.of("BOX_STEP"), departuresOf(byTurns, "T_STEP"),
+        ChartBranchingUseCase.addAlternativeBranch(byTurns, null, "STEP");
+        assertEquals(List.of("STEP"), departuresOf(byTurns, "T_STEP"),
                 "and the branch by turns keeps the step it was made on the bar it already had");
-        assertEquals(List.of("BOX_STEP_1"), departuresOf(byTurns, "T_BRANCH"),
+        assertEquals(List.of("STEP_1"), departuresOf(byTurns, "T_BRANCH"),
                 "and puts the new one on a bar of its own");
         assertEquals(List.of("T1", "T_BRANCH_1"), arrivalsOf(byTurns, "END"),
                 "and both come back together on the stop");
 
         S88MasterRecipe atOnce = withOneStep();
-        ChartBranchingUseCase.addParallelBranch(atOnce, null, "BOX_STEP");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(atOnce, "T_STEP"),
+        ChartBranchingUseCase.addParallelBranch(atOnce, null, "STEP");
+        assertEquals(List.of("STEP", "STEP_1"), departuresOf(atOnce, "T_STEP"),
                 "and the parallel one runs the step and the new one at the same time, off the bar");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(atOnce, "T1"),
+        assertEquals(List.of("STEP", "STEP_1"), arrivalsOf(atOnce, "T1"),
                 "and they come back together where the step already ended");
     }
     
@@ -322,18 +322,18 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     void aBlockPutUnderAStepKeepsTheStepAndGivesItOneBesideIt() {
         S88MasterRecipe recipe = withOneStep();
 
-        S88RecipeElement added = ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP");
+        S88RecipeElement added = ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP");
 
-        assertTrue(boxOf(recipe, "BOX_STEP"),
+        assertTrue(boxOf(recipe, "STEP"),
                 "and the step the block goes under is still there");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_1"), departuresOf(recipe, "T_STEP"),
                 "and both sides come off the bar the step already had");
         assertEquals("STEP_1", added.getId(),
                 "and the added step is the second side");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP", "STEP_1"), arrivalsOf(recipe, "T1"),
                 "and they come back together on the bar the step already ended on");
         assertEquals(1, StructureQueries.enclosingBlocks(
-                recipe.getProcedureLogic(), "BOX_STEP").size(),
+                recipe.getProcedureLogic(), "STEP").size(),
                 "and the step is inside the block that was put under it");
     }
 
@@ -348,16 +348,16 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
 
         S88RecipeElement added =
-                ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP_2");
+                ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP_2");
 
         assertEquals(2, StructureQueries.enclosingBlocks(
-                        recipe.getProcedureLogic(), "BOX_STEP_2").size(),
+                        recipe.getProcedureLogic(), "STEP_2").size(),
                 "and the step is inside the block it was on and the one put under it");
         assertEquals(S88LinkType.PARALLEL_DIVERGENT,
                 StructureQueries.enclosingBlocks(recipe.getProcedureLogic(), added.getId() == null
-                        ? "" : "BOX_" + added.getId()).get(0),
+                        ? "" : added.getId()).get(0),
                 "and the one put under it is the innermost, which is the one opened last");
-        assertEquals(List.of("BOX_STEP_2", "BOX_" + added.getId()),
+        assertEquals(List.of("STEP_2", added.getId()),
                 arrivalsOf(recipe, "T_STEP_3"),
                 "and both sides of the block come back to the bar the step already went to");
     }
@@ -372,12 +372,12 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withOneStep();
 
         S88RecipeElement added =
-                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "BOX_STEP");
+                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "STEP");
 
         assertEquals("STEP_1", added.getId(), "and the added step is the second side");
-        assertEquals(List.of("BOX_STEP"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP"), departuresOf(recipe, "T_STEP"),
                 "and the step keeps the bar it already had");
-        assertEquals(List.of("BOX_STEP_1"), departuresOf(recipe, "T_BRANCH"),
+        assertEquals(List.of("STEP_1"), departuresOf(recipe, "T_BRANCH"),
                 "and the new step has a bar of its own");
         assertEquals(List.of("T1", "T_BRANCH_1"), arrivalsOf(recipe, "END"),
                 "and both come back together before the stop");
@@ -389,23 +389,23 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
 
         S88RecipeElement added =
-                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "BOX_STEP_2");
+                ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "STEP_2");
 
         assertEquals("STEP_4", added.getId(), "and there is one new step in it");
         List<S88LinkType> held = StructureQueries.enclosingBlocks(
-                recipe.getProcedureLogic(), "BOX_" + added.getId());
+                recipe.getProcedureLogic(), added.getId());
         assertEquals(2, held.size(),
                 "and it is inside the block it was made in and the one put under it");
         assertEquals(S88LinkType.SERIAL_DIVERGENT, held.get(0),
                 "and the one put under it is the turns kind, which is the one asked for");
         assertEquals(S88LinkType.PARALLEL_DIVERGENT, held.get(1),
                 "and the one it is inside of is the parallel one it was made in");
-        assertEquals(List.of("T_STEP_2", "T_BRANCH"), departuresOf(recipe, "BOX_STEP_1"),
+        assertEquals(List.of("T_STEP_2", "T_BRANCH"), departuresOf(recipe, "STEP_1"),
                 "and both sides leave the step before the one picked, which is what gives each side"
                         + " a bar of its own to wait on");
-        assertEquals(List.of("T_BRANCH"), arrivalsOf(recipe, "BOX_" + added.getId()),
+        assertEquals(List.of("T_BRANCH"), arrivalsOf(recipe, added.getId()),
                 "and the new step has a bar of its own where it starts");
-        assertEquals(List.of("T_BRANCH_1"), departuresOf(recipe, "BOX_" + added.getId()),
+        assertEquals(List.of("T_BRANCH_1"), departuresOf(recipe, added.getId()),
                 "and another where it ends, which is what makes it a branch of its own");
     }
 
@@ -419,7 +419,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlock();
 
         assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP"),
+                () -> ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP"),
                 "and it says so rather than putting a second block on one that is not one flow");
     }
 
@@ -427,14 +427,14 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     void aStepOnAParallelBranchIsGivenAnotherSideOfThatBlock() {
         S88MasterRecipe recipe = withAParallelBlock();
 
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1", "BOX_STEP_2"),
+        assertEquals(List.of("STEP", "STEP_1", "STEP_2"),
                 departuresOf(recipe, "T_STEP"),
                 "and the block it was already in gains a third branch, rather than a block of the"
                         + " step's own under it");
         assertEquals(1, StructureQueries.enclosingBlocks(recipe.getProcedureLogic(),
-                        "BOX_STEP_1").size(),
+                        "STEP_1").size(),
                 "and the step is inside the one block it was already in, not inside two");
     }
 
@@ -511,7 +511,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
      */
     private static S88MasterRecipe withAParallelBlockOfThree() {
         S88MasterRecipe recipe = withAParallelBlock();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
         return recipe;
     }
 
@@ -520,13 +520,13 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     void takingABranchOffABlockOfThreeLeavesABlockOfTwo() {
         S88MasterRecipe recipe = withAParallelBlockOfThree();
 
-        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.removeBranch(recipe, null, "STEP_2");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_1"), departuresOf(recipe, "T_STEP"),
                 "and the bar that split has one branch fewer");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP", "STEP_1"), arrivalsOf(recipe, "T1"),
                 "and the bar that comes back together has one branch fewer as well");
-        assertEquals(S88LinkType.PARALLEL_DIVERGENT, arriving(recipe, "BOX_STEP").getLinkType(),
+        assertEquals(S88LinkType.PARALLEL_DIVERGENT, arriving(recipe, "STEP").getLinkType(),
                 "and it is still a parallel block, because two branches are still a block");
     }
 
@@ -535,15 +535,15 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     void takingABranchOffABlockOfTwoCollapsesIt() {
         S88MasterRecipe recipe = withAParallelBlock();
 
-        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.removeBranch(recipe, null, "STEP_1");
 
-        assertEquals(List.of("BOX_STEP"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP"), departuresOf(recipe, "T_STEP"),
                 "and the bar that split has only the one branch left");
-        assertFalse(arriving(recipe, "BOX_STEP").getLinkType().isDivergent(),
+        assertFalse(arriving(recipe, "STEP").getLinkType().isDivergent(),
                 "and it is no longer a bar that splits, because one branch is not a block");
-        assertFalse(leaving(recipe, "BOX_STEP").getLinkType().isConvergent(),
+        assertFalse(leaving(recipe, "STEP").getLinkType().isConvergent(),
                 "and neither is the bar that used to close the block");
-        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T1", "END"), flowOf(recipe),
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T1", "END"), flowOf(recipe),
                 "and what is left is the straight line the chart was before the block went in");
     }
 
@@ -557,15 +557,15 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     @Test
     void takingAwayAStepThatHoldsABlockCollapsesThatBlock() {
         S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
-        ChartBranchingUseCase.nestParallelBranch(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP_2");
 
-        ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.removeBranch(recipe, null, "STEP_2");
 
-        assertFalse(boxOf(recipe, "BOX_STEP_2"), "and so does the step that went");
-        assertTrue(boxOf(recipe, "BOX_STEP_4"), "and the other side of the block under it is left");
-        assertEquals(List.of("BOX_STEP_4"), departuresOf(recipe, "T_STEP_2"),
+        assertFalse(boxOf(recipe, "STEP_2"), "and so does the step that went");
+        assertTrue(boxOf(recipe, "STEP_4"), "and the other side of the block under it is left");
+        assertEquals(List.of("STEP_4"), departuresOf(recipe, "T_STEP_2"),
                 "and the bar that split under the step now has the one branch left");
-        assertFalse(leaving(recipe, "BOX_STEP_4").getLinkType().isConvergent(),
+        assertFalse(leaving(recipe, "STEP_4").getLinkType().isConvergent(),
                 "and nothing closes a block under the step any more");
     }
 
@@ -575,14 +575,14 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlockAndStepsOnOneSide();
 
         IllegalStateException refusal = assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.removeBranch(recipe, null, "BOX_STEP_3"),
+                () -> ChartBranchingUseCase.removeBranch(recipe, null, "STEP_3"),
                 "because that step has bars of its own, and removing it would leave the bar the"
                         + " block split into going to nothing");
 
-        assertEquals("Step 'BOX_STEP_3' is not a whole branch of a block, so there is no branch"
+        assertEquals("Step 'STEP_3' is not a whole branch of a block, so there is no branch"
                 + " there to remove. A step in the middle of a branch is taken off as a step.",
                 refusal.getMessage(), "and it says so in the words it is told");
-        assertTrue(boxOf(recipe, "BOX_STEP_3"), "and the chart is as it was");
+        assertTrue(boxOf(recipe, "STEP_3"), "and the chart is as it was");
     }
 
     /** A branch changes lane in both bars at once, so it keeps its place in the drawing. */
@@ -590,11 +590,11 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
     void aBranchMovesOneLaneSideways() {
         S88MasterRecipe recipe = withAParallelBlockOfThree();
 
-        ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP_1", true);
+        ChartBranchingUseCase.moveBranch(recipe, null, "STEP_1", true);
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_2", "BOX_STEP_1"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_2", "STEP_1"), departuresOf(recipe, "T_STEP"),
                 "and the bar that splits lists the branches in the new order");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_2", "BOX_STEP_1"), arrivalsOf(recipe, "T1"),
+        assertEquals(List.of("STEP", "STEP_2", "STEP_1"), arrivalsOf(recipe, "T1"),
                 "and the bar that comes back together lists them the same way, which is what keeps"
                         + " the branch in one lane rather than two");
     }
@@ -605,7 +605,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlockOfThree();
 
         IllegalStateException refusal = assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP_2", true));
+                () -> ChartBranchingUseCase.moveBranch(recipe, null, "STEP_2", true));
 
         assertTrue(refusal.getMessage().contains("already the last branch"),
                 "and it says there is no other branch to move past");
@@ -617,7 +617,7 @@ assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T1"),
         S88MasterRecipe recipe = withAParallelBlockOfThree();
 
         IllegalStateException refusal = assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.moveBranch(recipe, null, "BOX_STEP", false));
+                () -> ChartBranchingUseCase.moveBranch(recipe, null, "STEP", false));
 
         assertTrue(refusal.getMessage().contains("already the first branch"),
                 "and it says the same at the other end");

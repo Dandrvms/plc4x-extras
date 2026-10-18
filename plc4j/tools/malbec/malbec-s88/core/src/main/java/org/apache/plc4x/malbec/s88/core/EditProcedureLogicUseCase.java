@@ -498,8 +498,8 @@ public class EditProcedureLogicUseCase {
             throw new IllegalStateException("A split leads towards two different steps, not one step"
                     + " twice.");
         }
-        String firstBox = boxNameOf(firstId);
-        String secondBox = boxNameOf(secondId);
+        String firstBox = firstId;
+        String secondBox = secondId;
         requireFreeName(chart, firstBox, "box");
         requireFreeName(chart, secondBox, "box");
         List<S88ProcedureLink> wasLeadingTo = linksLeaving(chart, fromBarId);
@@ -568,14 +568,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * The box that works on a step of the recipe, named the way this module names one.
-     */
-    private static String boxNameOf(String elementId) {
-        return elementId == null || elementId.isBlank() ? elementId : "BOX_" + elementId;
-    }
-
-    /**
-     * A name of that shape that this chart is not already using.
+     * A name this chart is not already using.
      *
      * @param chart  the chart the name goes on
      * @param wanted the name to take if it is free
@@ -625,7 +618,7 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
-     * Puts the comparison a bar waits on, as the text a recipe carries.
+     * Puts the logic condition on a bar, as the text a recipe carries.
      *
      * @param recipe  recipe being edited, may be {@code null} when no change event is wanted
      * @param step    step whose chart is being drawn on, {@code null} for the chart of the recipe
@@ -871,14 +864,45 @@ public class EditProcedureLogicUseCase {
         if (box == null) {
             throw new IllegalArgumentException("This chart has no box called '" + boxId + "'.");
         }
-        if (!boxId.equals(newId)) {
-            requireFreeName(chart, newId, "box");
+        refuseRenamingAStartOrAnEnd(recipe, box);
+        if (boxId.equals(newId)) {
+            return;
+        }
+        requireFreeName(chart, newId, "box");
+        S88RecipeElement element = recipe != null
+                ? recipe.findElement(box.getRecipeElementId()).orElse(null)
+                : null;
+        if (element != null) {
+            RenameRecipeElementUseCase.execute(recipe, element, newId);
         }
         chart.removeStep(box);
         box.setId(newId);
         chart.addStep(box);
         renameLinkEnds(chart, boxId, newId);
         announce(recipe);
+    }
+
+    /**
+     * Refuses a name change whose step is the beginning or the end of a chart.
+     *
+     * <p>Every chart starts at the same element and stops at the same element, so those two names
+     * are what says which is which.
+     *
+     * @param recipe recipe the step belongs to, may be {@code null}
+     * @param box    box that was picked to be renamed
+     * @throws IllegalStateException when that box works on the beginning or the end of a chart
+     */
+    private static void refuseRenamingAStartOrAnEnd(S88Recipe recipe, S88ProcedureStep box) {
+        if (recipe == null) {
+            return;
+        }
+        S88RecipeElement element = recipe.findElement(box.getRecipeElementId()).orElse(null);
+        if (element != null && element.getKind() != null && element.getKind().isTerminal()) {
+            throw new IllegalStateException("Step '" + element.getId() + "' is the "
+                    + (element.getKind() == S88RecipeElementKind.BEGIN ? "beginning" : "end")
+                    + " of a chart, and it keeps the name it has, because every chart is read from"
+                    + " the same two names.");
+        }
     }
 
     /**

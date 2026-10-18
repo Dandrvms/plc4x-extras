@@ -175,7 +175,7 @@ final class RecipeChartToolbar {
         S88RecipeElement[] made = new S88RecipeElement[1];
         model().edit("Add " + label, () -> made[0] = what.apply(box));
         if (made[0] != null) {
-            scene.selectWhenDrawn("BOX_" + made[0].getId());
+            scene.selectWhenDrawn(made[0].getId());
         }
     }
 

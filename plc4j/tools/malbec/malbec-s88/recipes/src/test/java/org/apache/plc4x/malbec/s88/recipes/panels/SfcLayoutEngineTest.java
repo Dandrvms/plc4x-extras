@@ -138,7 +138,7 @@ class SfcLayoutEngineTest {
     }
 
     @Test
-    @Disabled("N14. El unico carril de los bucles pasa por encima de la barra de al lado: BUCLE, L8>BOX_PACK>T_MIX_AGAIN atraviesa T_PACK_DONE. Hace falta un carril por bucle. Se rehabilita en la fase D.1.")
+    @Disabled("N14. El unico carril de los bucles pasa por encima de la barra de al lado: BUCLE, L8>PACK>T_MIX_AGAIN atraviesa T_PACK_DONE. Hace falta un carril por bucle. Se rehabilita en la fase D.1.")
     void aLineDoesNotGoThroughAThingItIsNotJoinedTo() {
         for (S88MasterRecipe recipe : SfcFixtures.all()) {
             SfcLayoutEngine.Placement at = arrange(recipe);
@@ -177,9 +177,9 @@ class SfcLayoutEngineTest {
     void aStepWithOneThingBeforeItIsOnItsLine() {
         SfcLayoutEngine.Placement at = arrange(SfcFixtures.lineal());
 
-        int beginCentre = centreX(at, "BOX_BEGIN");
-        int heatCentre = centreX(at, "BOX_HEAT");
-        int mixCentre = centreX(at, "BOX_MIX");
+        int beginCentre = centreX(at, "BEGIN");
+        int heatCentre = centreX(at, "HEAT");
+        int mixCentre = centreX(at, "MIX");
 
         assertEquals(beginCentre, heatCentre,
                 "a step that only one thing leads to sits on that thing's line, so the edge between"
@@ -197,9 +197,9 @@ class SfcLayoutEngineTest {
     void aBranchIsCentredOnWhereItLeft() {
         SfcLayoutEngine.Placement at = arrange(SfcFixtures.parallelDivergence());
 
-        int splitCentre = centreX(at, "BOX_CHARGE");
-        int heatCentre = centreX(at, "BOX_HEAT");
-        int coolCentre = centreX(at, "BOX_COOL");
+        int splitCentre = centreX(at, "CHARGE");
+        int heatCentre = centreX(at, "HEAT");
+        int coolCentre = centreX(at, "COOL");
 
         assertEquals(splitCentre, (heatCentre + coolCentre) / 2,
                 "two steps leaving one bar sit either side of that bar's line, so the chart reads as"
@@ -223,8 +223,8 @@ class SfcLayoutEngineTest {
         SfcLayoutEngine.Placement at = arrange(SfcFixtures.parallelDivergence());
 
         Rectangle bar = at.syncBars().values().iterator().next().where();
-        Rectangle heat = at.steps().get("BOX_HEAT");
-        Rectangle cool = at.steps().get("BOX_COOL");
+        Rectangle heat = at.steps().get("HEAT");
+        Rectangle cool = at.steps().get("COOL");
 
         assertTrue(bar.x <= Math.min(heat.x + heat.width / 2, cool.x + cool.width / 2),
                 "the bar starts before the leftmost branch, or the edge has nothing to join at");
@@ -314,11 +314,11 @@ class SfcLayoutEngineTest {
 
         Rectangle bar = at.bars().get("T_HEAT");
         SfcLayoutEngine.Link arriving = at.links().stream()
-                .filter(link -> link.id().endsWith(">BOX_BEGIN>T_HEAT"))
+                .filter(link -> link.id().endsWith(">BEGIN>T_HEAT"))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the link into the bar is not there"));
         SfcLayoutEngine.Link leaving = at.links().stream()
-                .filter(link -> link.id().endsWith(">T_HEAT>BOX_HEAT"))
+                .filter(link -> link.id().endsWith(">T_HEAT>HEAT"))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the link out of the bar is not there"));
 
@@ -342,7 +342,7 @@ class SfcLayoutEngineTest {
         SfcLayoutEngine.Placement at = arrange(recipe);
 
         Rectangle bar = at.bars().get("T_HEAT_READY");
-        Rectangle child = at.steps().get("BOX_HEAT");
+        Rectangle child = at.steps().get("HEAT");
 
         assertEquals(bar.x + SfcMetrics.TRANSITION_WIDTH / 2, barCentreOfBarOnly(bar),
                 "the bar itself is where the line runs");
@@ -364,8 +364,8 @@ class SfcLayoutEngineTest {
 
         Rectangle left = at.bars().get("T_HEAT_READY");
         Rectangle right = at.bars().get("T_COOL_READY");
-        Rectangle leftBranch = at.steps().get("BOX_HEAT");
-        Rectangle rightBranch = at.steps().get("BOX_COOL");
+        Rectangle leftBranch = at.steps().get("HEAT");
+        Rectangle rightBranch = at.steps().get("COOL");
 
         assertEquals(leftBranch.x + leftBranch.width / 2, left.x + SfcMetrics.TRANSITION_WIDTH / 2,
                 "the left bar is over the left branch, and neither text moved it");
@@ -433,8 +433,8 @@ class SfcLayoutEngineTest {
         S88ProcedureLogic chart = recipe.getProcedureLogic();
         chart.addLink(new org.apache.plc4x.malbec.s88.api.S88ProcedureLink("L_BAD"));
         var bad = chart.findLink("L_BAD").orElseThrow();
-        bad.addFrom(org.apache.plc4x.malbec.s88.api.S88IdRef.step("BOX_HEAT"));
-        bad.addTo(org.apache.plc4x.malbec.s88.api.S88IdRef.step("BOX_MIX"));
+        bad.addFrom(org.apache.plc4x.malbec.s88.api.S88IdRef.step("HEAT"));
+        bad.addTo(org.apache.plc4x.malbec.s88.api.S88IdRef.step("MIX"));
 
         SfcLayoutEngine.Placement at = arrange(recipe);
 

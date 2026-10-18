@@ -132,25 +132,23 @@ class RecipeEditingTest {
         RenameRecipeElementUseCase.execute(recipe, heat, "HEAT_2");
 
         assertEquals("HEAT_2", heat.getId());
-        assertEquals("HEAT_2", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow()
+        assertEquals("HEAT_2", chartOfPaso(recipe).findStep("HEAT_2").orElseThrow()
                 .getRecipeElementId(), "the box on the chart now works on the step's new name");
     }
 
     @Test
-    void renamingAStepLeavesTheNamesOfTheBoxesAndTheLinesAlone() {
+    void renamingAStepTakesTheBoxesAndTheLinesWithIt() {
         S88Recipe recipe = completeChart();
         var line = chartOfPaso(recipe).findLink("L1").orElseThrow();
-        String fromBefore = line.getFrom().get(0).getValue();
-        String toBefore = line.getTo().get(0).getValue();
 
         RenameRecipeElementUseCase.execute(recipe, recipe.findElement("HEAT").orElseThrow(), "HEAT_2");
 
-        assertEquals("BOX_HEAT", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow().getId(),
-                "a box is the chart's own naming and not the step's, so a step that changes what it"
-                        + " is called leaves the box that works on it as it was");
-        assertEquals(fromBefore, line.getFrom().get(0).getValue(),
-                "and a line names the box it runs between, not the step that box works on");
-        assertEquals(toBefore, line.getTo().get(0).getValue());
+        assertEquals("HEAT_2", chartOfPaso(recipe).findStep("HEAT_2").orElseThrow().getId(),
+                "a box is named after the step it works on, so renaming the step renames its box");
+        assertEquals("HEAT_2", line.getFrom().get(0).getValue(),
+                "and a line names the box it runs between, so it follows the box");
+        assertEquals("T_TEMP_OK", line.getTo().get(0).getValue(),
+                "while the bar the line reaches is the chart's own naming and stays put");
     }
 
     @Test
@@ -163,7 +161,7 @@ class RecipeEditingTest {
                 "a name the recipe already has is refused by the name check, before anything moves");
 
         assertEquals("HEAT", recipe.findElement("HEAT").orElseThrow().getId());
-        assertEquals("HEAT", Levels.chartOf(recipe, "PROC").findStep("BOX_HEAT").orElseThrow()
+        assertEquals("HEAT", Levels.chartOf(recipe, "PROC").findStep("HEAT").orElseThrow()
                 .getRecipeElementId(),
                 "with the chart still pointing at the name it had, rather than half renamed and"
                         + " left to be found broken");
@@ -177,7 +175,7 @@ class RecipeEditingTest {
         RenameRecipeElementUseCase.execute(recipe, heat, "HEAT");
 
         assertEquals("HEAT", heat.getId());
-        assertEquals("HEAT", chartOfPaso(recipe).findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
+        assertEquals("HEAT", chartOfPaso(recipe).findStep("HEAT").orElseThrow().getRecipeElementId(),
                 "the one name the recipe already has is the name it is being called, so asking for"
                         + " it again is not a clash with itself");
     }
@@ -214,12 +212,12 @@ class RecipeEditingTest {
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> DeleteRecipeElementUseCase.execute(recipe, heat));
-        assertTrue(refused.getMessage().contains("BOX_HEAT"),
+        assertTrue(refused.getMessage().contains("HEAT"),
                 "the refusal names the box holding it, so the reader knows which one to take off"
                         + " rather than being told the step is used");
 
         EditProcedureLogicUseCase.removeLink(recipe, recipe.findElement("PROC").orElseThrow(), "L1");
-        EditProcedureLogicUseCase.removeStep(recipe, recipe.findElement("PROC").orElseThrow(), "BOX_HEAT");
+        EditProcedureLogicUseCase.removeStep(recipe, recipe.findElement("PROC").orElseThrow(), "HEAT");
         DeleteRecipeElementUseCase.execute(recipe, heat);
         assertTrue(recipe.findElement("HEAT").isEmpty());
     }
@@ -295,17 +293,17 @@ class RecipeEditingTest {
         recipe.addRecipeElement(new S88RecipeElement("END", S88RecipeElementKind.END));
 
         S88ProcedureLogic chart = new S88ProcedureLogic();
-        chart.addStep(new S88ProcedureStep("BOX_HEAT", "HEAT"));
-        chart.addStep(new S88ProcedureStep("BOX_END", "END"));
+        chart.addStep(new S88ProcedureStep("HEAT", "HEAT"));
+        chart.addStep(new S88ProcedureStep("END", "END"));
         chart.addTransition(new S88ProcedureTransition("T1", null));
-        link(chart, "BOX_HEAT", "T1");
-        link(chart, "T1", "BOX_END");
+        link(chart, "HEAT", "T1");
+        link(chart, "T1", "END");
         procedure.setProcedureLogic(chart);
 
         assertEquals(2, chart.getSteps().size());
         assertEquals(2, chart.getLinks().size());
         assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart));
-        assertEquals("HEAT", chart.findStep("BOX_HEAT").orElseThrow().getRecipeElementId(),
+        assertEquals("HEAT", chart.findStep("HEAT").orElseThrow().getRecipeElementId(),
                 "and the chart says which step each box works on, by the name the plant gave it");
         assertTrue(EditProcedureLogicUseCase.hasChart(procedure));
         assertFalse(EditProcedureLogicUseCase.hasChart(Levels.owner(recipe, "END")));
@@ -329,7 +327,7 @@ class RecipeEditingTest {
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
         assertThrows(IllegalArgumentException.class, () -> EditProcedureLogicUseCase.addLink(
-                recipe, proc, "LBAD", List.of("BOX_HEAT"), List.of("NO_SUCH_BOX"), null));
+                recipe, proc, "LBAD", List.of("HEAT"), List.of("NO_SUCH_BOX"), null));
     }
 
     @Test
@@ -339,7 +337,7 @@ class RecipeEditingTest {
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.addLink(recipe, proc, "LSTRAIGHT",
-                        List.of("BOX_HEAT"), List.of("BOX_END"), null));
+                        List.of("HEAT"), List.of("END"), null));
         assertTrue(refused.getMessage().contains("bar"),
                 "a line straight from one box to the next is a chart that never says what lets the"
                         + " flow go on, so the refusal says where the bar goes instead");
@@ -361,8 +359,8 @@ class RecipeEditingTest {
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
         assertThrows(IllegalArgumentException.class, () -> EditProcedureLogicUseCase.addLink(
-                recipe, proc, "LMIXED", List.of("BOX_HEAT", "T_TEMP_OK"),
-                List.of("BOX_END"), null),
+                recipe, proc, "LMIXED", List.of("HEAT", "T_TEMP_OK"),
+                List.of("END"), null),
                 "a line that left one box and one bar would be two lines sharing a name, and would"
                         + " draw as two lines the reader has to tell apart");
     }
@@ -371,9 +369,9 @@ class RecipeEditingTest {
     void aLineMayNameSomethingOutsideTheChart() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
-        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_ELSEWHERE", "HEAT");
+        EditProcedureLogicUseCase.addStep(recipe, proc, "ELSEWHERE", "HEAT");
 
-        EditProcedureLogicUseCase.addLink(recipe, proc, "LEXT", List.of("!BOX_OUTSIDE"),
+        EditProcedureLogicUseCase.addLink(recipe, proc, "LEXT", List.of("!OUTSIDE"),
                 List.of("T_TEMP_OK"), null);
 
         var external = chartOfPaso(recipe).findLink("LEXT").orElseThrow().getFrom().get(0);
@@ -388,21 +386,21 @@ class RecipeEditingTest {
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
         assertThrows(IllegalStateException.class,
-                () -> EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_HEAT"));
-        assertTrue(chartOfPaso(recipe).findStep("BOX_HEAT").isPresent());
+                () -> EditProcedureLogicUseCase.removeStep(recipe, proc, "HEAT"));
+        assertTrue(chartOfPaso(recipe).findStep("HEAT").isPresent());
     }
 
     @Test
     void aSplitIsDrawnByGivingALineMoreThanOneEnd() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
-        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_MIX", "HEAT");
+        EditProcedureLogicUseCase.addStep(recipe, proc, "MIX", "HEAT");
         EditProcedureLogicUseCase.addTransition(recipe, proc, "T_SPLIT");
 
-        EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT", List.of("BOX_HEAT"),
+        EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT", List.of("HEAT"),
                 List.of("T_SPLIT"), null);
         EditProcedureLogicUseCase.addLink(recipe, proc, "LSPLIT2", List.of("T_SPLIT"),
-                List.of("BOX_MIX", "BOX_END"), S88LinkType.PARALLEL_DIVERGENT);
+                List.of("MIX", "END"), S88LinkType.PARALLEL_DIVERGENT);
 
         var split = chartOfPaso(recipe).findLink("LSPLIT2").orElseThrow();
         assertEquals(2, split.getTo().size());
@@ -489,12 +487,12 @@ class RecipeEditingTest {
 
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Reports/STATE", "RUNNING",
                 DataType.ENUMERATION, null);
-        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_MIX", "HEAT");
-        EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_MIX");
+        EditProcedureLogicUseCase.addStep(recipe, proc, "MIX", "HEAT");
+        EditProcedureLogicUseCase.removeStep(recipe, proc, "MIX");
         EditProcedureLogicUseCase.removeLink(recipe, proc, "L1");
         EditProcedureLogicUseCase.removeLink(recipe, proc, "L2");
-        EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_HEAT");
-        EditProcedureLogicUseCase.removeStep(recipe, proc, "BOX_END");
+        EditProcedureLogicUseCase.removeStep(recipe, proc, "HEAT");
+        EditProcedureLogicUseCase.removeStep(recipe, proc, "END");
         DeleteRecipeElementUseCase.execute(recipe, heat);
 
         assertTrue(seen.stream().anyMatch(e -> e.type() == S88RecipeChangeEvent.Type.UPDATED));
@@ -569,7 +567,7 @@ class RecipeEditingTest {
         S88Recipe copy = RecipeDeepCopy.copyRecipe(completeChart());
 
         assertEquals("HEAT", copy.findElement("HEAT").orElseThrow().getId());
-        assertEquals("HEAT", copy.findElement("PROC").orElseThrow().getProcedureLogic().findStep("BOX_HEAT").orElseThrow()
+        assertEquals("HEAT", copy.findElement("PROC").orElseThrow().getProcedureLogic().findStep("HEAT").orElseThrow()
                 .getRecipeElementId());
     }
 
@@ -655,15 +653,15 @@ class RecipeEditingTest {
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Reports/STATE", "IDLE",
                 DataType.ENUMERATION, null);
 
-        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_HEAT", "HEAT");
-        EditProcedureLogicUseCase.addStep(recipe, proc, "BOX_END", "END");
+        EditProcedureLogicUseCase.addStep(recipe, proc, "HEAT", "HEAT");
+        EditProcedureLogicUseCase.addStep(recipe, proc, "END", "END");
         EditProcedureLogicUseCase.addTransition(recipe, proc, "T_TEMP_OK",
                 S88ConditionExpression.of(
                         S88VariableAddress.parse("Reports/STATE"), S88ConditionOperator.EQUALS, "COMPLETE"));
-        EditProcedureLogicUseCase.addLink(recipe, proc, "L1", List.of("BOX_HEAT"),
+        EditProcedureLogicUseCase.addLink(recipe, proc, "L1", List.of("HEAT"),
                 List.of("T_TEMP_OK"), null);
         EditProcedureLogicUseCase.addLink(recipe, proc, "L2", List.of("T_TEMP_OK"),
-                List.of("BOX_END"), null);
+                List.of("END"), null);
         return recipe;
     }
 }

@@ -114,7 +114,7 @@ class RecipeCloseTest {
     private static void addAChangeTo(RecipeEditorViewStub view) {
         view.model.edit("Add step QUENCH",
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        view.model.getRecipe(), null, "BOX_BEGIN", "QUENCH", "BOX_QUENCH",
+                        view.model.getRecipe(), null, "BEGIN", "QUENCH", "QUENCH",
                         "T_QUENCH", "QUENCH_CLASS"));
     }
 

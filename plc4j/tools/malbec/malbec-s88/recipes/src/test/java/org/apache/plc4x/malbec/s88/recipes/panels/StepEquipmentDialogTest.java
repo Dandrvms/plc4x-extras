@@ -140,7 +140,7 @@ class StepEquipmentDialogTest {
         S88MasterRecipe recipe = org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase
                 .execute("REC", S88RecipeKind.CLASS);
         S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_" + empty.getId(),
+        BindRecipeStepUseCase.bindToClass(recipe, null, empty.getId(),
                 "CALENTAMIENTO", plant);
         return recipe;
     }
@@ -152,7 +152,7 @@ class StepEquipmentDialogTest {
             S88MasterRecipe recipe = org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase
                     .execute("REC", S88RecipeKind.INSTANCE);
             S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-            BindRecipeStepUseCase.bindToEquipment(recipe, null, "BOX_" + empty.getId(),
+            BindRecipeStepUseCase.bindToEquipment(recipe, null, empty.getId(),
                     "CALENTAMIENTO_TANQUE_1", plant);
             RecipeEditorModel model = modelOf(recipe, plant);
 

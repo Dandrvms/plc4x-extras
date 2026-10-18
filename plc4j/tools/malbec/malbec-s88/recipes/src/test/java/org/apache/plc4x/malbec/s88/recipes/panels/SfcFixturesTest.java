@@ -150,11 +150,11 @@ class SfcFixturesTest {
     /** A fixture that is broken on purpose, to prove the check above can fail. */
     @Test
     void aStepNothingReachesIsReported() {        S88MasterRecipe recipe = SfcFixtures.lineal();
-        EditProcedureLogicUseCase.addStep(recipe, null, "BOX_ORPHAN", "MIX");
+        EditProcedureLogicUseCase.addStep(recipe, null, "ORPHAN", "MIX");
 
         RecipeConformance report = RecipeConformance.of(recipe);
 
-        assertTrue(report.excess().stream().anyMatch(complaint -> complaint.contains("BOX_ORPHAN")),
+        assertTrue(report.excess().stream().anyMatch(complaint -> complaint.contains("ORPHAN")),
                 "a box nothing reaches is a step the process would never perform, and it says so: "
                         + report.excess());
     }

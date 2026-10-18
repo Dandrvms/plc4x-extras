@@ -103,17 +103,17 @@ class SfcLayoutDeterminismTest {
     @Test
     void addingASecondBranchKeepsTheBranchesThatWereThereInTheSameOrder() {
         S88MasterRecipe recipe = SfcFixtures.parallelDivergence();
-        Rectangle heatBefore = arrange(recipe).steps().get("BOX_HEAT");
-        Rectangle coolBefore = arrange(recipe).steps().get("BOX_COOL");
+        Rectangle heatBefore = arrange(recipe).steps().get("HEAT");
+        Rectangle coolBefore = arrange(recipe).steps().get("COOL");
         assertEquals(true, heatBefore.x < coolBefore.x,
                 "and one branch starts out to the left of the other");
 
-        EditProcedureLogicUseCase.selectiveFork(recipe, null, "BOX_PACK", "T_PACK_WHEN_COLD",
+        EditProcedureLogicUseCase.selectiveFork(recipe, null, "PACK", "T_PACK_WHEN_COLD",
                 "T_PACK_OTHERWISE");
 
         SfcLayoutEngine.Placement at = arrange(recipe);
-        Rectangle heatAfter = at.steps().get("BOX_HEAT");
-        Rectangle coolAfter = at.steps().get("BOX_COOL");
+        Rectangle heatAfter = at.steps().get("HEAT");
+        Rectangle coolAfter = at.steps().get("COOL");
         assertEquals(true, heatAfter.x < coolAfter.x,
                 "and a new branch does not swap the two around, because an author who put one on the"
                         + " left finds it still on the left after adding another beside it");
@@ -127,8 +127,8 @@ class SfcLayoutDeterminismTest {
         S88MasterRecipe recipe = SfcFixtures.nestedParallelInsideSelective();
         SfcLayoutEngine.Placement at = arrange(recipe);
 
-        Rectangle left = at.steps().get("BOX_ADD");
-        Rectangle right = at.steps().get("BOX_SPRAY");
+        Rectangle left = at.steps().get("ADD");
+        Rectangle right = at.steps().get("SPRAY");
 
         assertEquals(true, left.x + left.width <= right.x || right.x + right.width <= left.x,
                 "and one branch is entirely to one side of the other, because two boxes drawn on"
@@ -139,11 +139,11 @@ class SfcLayoutDeterminismTest {
     void aLongNameInOneBranchDoesNotPushTheOtherBranchOutOfTheChart() {
         S88MasterRecipe recipe = SfcFixtures.parallelDivergence();
         String longName = "CALENTAMIENTO_DE_TANQUE_CIENTO_GRADOS";
-        EditProcedureLogicUseCase.renameStep(recipe, null, "BOX_HEAT", longName);
+        EditProcedureLogicUseCase.renameStep(recipe, null, "HEAT", longName);
         SfcLayoutEngine.Placement at = arrange(recipe);
 
         Rectangle heat = at.steps().get(longName);
-        Rectangle cool = at.steps().get("BOX_COOL");
+        Rectangle cool = at.steps().get("COOL");
         assertEquals(true, at.total().contains(heat), "and the long one is still inside the chart");
         assertEquals(true, at.total().contains(cool),
                 "and the other branch is not pushed out of it by the long name");

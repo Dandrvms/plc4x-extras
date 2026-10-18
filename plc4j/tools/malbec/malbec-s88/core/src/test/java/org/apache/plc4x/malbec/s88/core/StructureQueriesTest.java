@@ -157,8 +157,8 @@ class StructureQueriesTest {
                 .orElseThrow();
         logic.removeLink(join);
         S88ProcedureLink straight = new S88ProcedureLink("L_STRAIGHT");
-        straight.addFrom(S88IdRef.step("BOX_HEAT"));
-        straight.addTo(S88IdRef.step("BOX_COOL"));
+        straight.addFrom(S88IdRef.step("HEAT"));
+        straight.addTo(S88IdRef.step("COOL"));
         logic.addLink(straight);
         return logic;
     }
@@ -168,11 +168,11 @@ class StructureQueriesTest {
     void aChartWithNoBlocksSaysEveryWordAboutItIsEmpty() {
         S88ProcedureLogic logic = linear();
 
-        assertNull(StructureQueries.blockOf(logic, "BOX_HEAT"), "and no box is on a block");
+        assertNull(StructureQueries.blockOf(logic, "HEAT"), "and no box is on a block");
         assertNull(StructureQueries.blockOf(logic, "T_HEAT"), "and no bar is on a block");
-        assertFalse(StructureQueries.isInsideParallel(logic, "BOX_HEAT"), "and nothing runs in step");
-        assertFalse(StructureQueries.isInsideSelective(logic, "BOX_HEAT"), "and nothing goes one way");
-        assertTrue(StructureQueries.enclosingBlocks(logic, "BOX_HEAT").isEmpty(),
+        assertFalse(StructureQueries.isInsideParallel(logic, "HEAT"), "and nothing runs in step");
+        assertFalse(StructureQueries.isInsideSelective(logic, "HEAT"), "and nothing goes one way");
+        assertTrue(StructureQueries.enclosingBlocks(logic, "HEAT").isEmpty(),
                 "and there is no block around it to be inside of");
     }
 
@@ -186,18 +186,18 @@ class StructureQueriesTest {
     void aBoxOnAParallelBlockIsInsideItFromBothEnds() {
         S88ProcedureLogic logic = parallel();
 
-        assertTrue(StructureQueries.isInsideParallel(logic, "BOX_HEAT"),
+        assertTrue(StructureQueries.isInsideParallel(logic, "HEAT"),
                 "and the box the split reaches is inside it");
-        assertTrue(StructureQueries.isInsideParallel(logic, "BOX_COOL"),
+        assertTrue(StructureQueries.isInsideParallel(logic, "COOL"),
                 "and so is the other one, from the same split");
         assertTrue(StructureQueries.isInsideParallel(logic, "T_SPLIT"),
                 "and the bar the flow splits at is inside it");
         assertFalse(StructureQueries.isInsideParallel(logic, "T_MERGE"),
                 "and the bar the flow is held in step at is the end of the block, not inside it");
-        assertFalse(StructureQueries.isInsideParallel(logic, "BOX_PACK"),
+        assertFalse(StructureQueries.isInsideParallel(logic, "PACK"),
                 "and after the block is joined, the flow is on no block again");
         assertEquals(S88LinkType.PARALLEL_DIVERGENT,
-                StructureQueries.blockOf(logic, "BOX_HEAT"),
+                StructureQueries.blockOf(logic, "HEAT"),
                 "and the kind it says is the parallel one");
     }
 
@@ -206,13 +206,13 @@ class StructureQueriesTest {
     void aBoxOnASelectiveBlockIsInsideItAndNotTheParallelOne() {
         S88ProcedureLogic logic = selective();
 
-        assertTrue(StructureQueries.isInsideSelective(logic, "BOX_HEAT"),
+        assertTrue(StructureQueries.isInsideSelective(logic, "HEAT"),
                 "and the box the split reaches is inside it");
-        assertTrue(StructureQueries.isInsideSelective(logic, "BOX_COLD"),
+        assertTrue(StructureQueries.isInsideSelective(logic, "COLD"),
                 "and so is the other one, from the same split");
-        assertFalse(StructureQueries.isInsideSelective(logic, "BOX_PACK"),
+        assertFalse(StructureQueries.isInsideSelective(logic, "PACK"),
                 "and after the block is joined, the flow is on no block again");
-        assertFalse(StructureQueries.isInsideParallel(logic, "BOX_HEAT"),
+        assertFalse(StructureQueries.isInsideParallel(logic, "HEAT"),
                 "and it does not run in step, because only one side is taken");
     }
 
@@ -226,7 +226,7 @@ class StructureQueriesTest {
     void aBoxInsideABlockInsideABlockIsHeldByBoth() {
         S88ProcedureLogic logic = parallelInsideSelective();
 
-        List<S88LinkType> held = StructureQueries.enclosingBlocks(logic, "BOX_ADD");
+        List<S88LinkType> held = StructureQueries.enclosingBlocks(logic, "ADD");
 
         assertTrue(held.contains(S88LinkType.PARALLEL_DIVERGENT),
                 "and the box the inner split reaches is inside the parallel one");
@@ -236,7 +236,7 @@ class StructureQueriesTest {
                 "and the outermost one is the selective, which is the one that was opened first");
         assertEquals(2, held.size(),
                 "and there is one block for each of the two it is inside");
-        assertTrue(StructureQueries.isInsideParallel(logic, "BOX_ADD"),
+        assertTrue(StructureQueries.isInsideParallel(logic, "ADD"),
                 "and on the inner block, so what is added inside it runs in step");
     }
 
@@ -271,14 +271,14 @@ class StructureQueriesTest {
         }
 
         void box(String elementId) {
-            if (logic.findStep("BOX_" + elementId).isPresent()) {
+            if (logic.findStep(elementId).isPresent()) {
                 return;
             }
             if (recipe.findElement(elementId).isEmpty()) {
                 CreateRecipeElementUseCase.execute(recipe, ownerOf(), elementId,
                         S88RecipeElementKind.OPERATION);
             }
-            logic.addStep(new S88ProcedureStep("BOX_" + elementId, elementId));
+            logic.addStep(new S88ProcedureStep(elementId, elementId));
         }
 
         void bar(String barId) {
@@ -288,7 +288,7 @@ class StructureQueriesTest {
         void fromBoxToBar(String elementId, String barId) {
             box(elementId);
             S88ProcedureLink link = new S88ProcedureLink(nextId());
-            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            link.addFrom(S88IdRef.step(elementId));
             link.addTo(S88IdRef.transition(barId));
             logic.addLink(link);
         }
@@ -297,13 +297,13 @@ class StructureQueriesTest {
             box(elementId);
             S88ProcedureLink link = new S88ProcedureLink(nextId());
             link.addFrom(S88IdRef.transition(barId));
-            link.addTo(S88IdRef.step("BOX_" + elementId));
+            link.addTo(S88IdRef.step(elementId));
             logic.addLink(link);
         }
 
         void split(String elementId, S88LinkType kind, String... barIds) {
             S88ProcedureLink link = new S88ProcedureLink(nextId());
-            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            link.addFrom(S88IdRef.step(elementId));
             for (String barId : barIds) {
                 link.addTo(S88IdRef.transition(barId));
             }
@@ -318,7 +318,7 @@ class StructureQueriesTest {
             S88ProcedureLink link = new S88ProcedureLink(nextId());
             link.addFrom(S88IdRef.transition(barId));
             for (String elementId : elementIds) {
-                link.addTo(S88IdRef.step("BOX_" + elementId));
+                link.addTo(S88IdRef.step(elementId));
             }
             link.setLinkType(kind);
             logic.addLink(link);
@@ -327,7 +327,7 @@ class StructureQueriesTest {
         void join(String barId, S88LinkType kind, String... elementIds) {
             S88ProcedureLink link = new S88ProcedureLink(nextId());
             for (String elementId : elementIds) {
-                link.addFrom(S88IdRef.step("BOX_" + elementId));
+                link.addFrom(S88IdRef.step(elementId));
             }
             link.addTo(S88IdRef.transition(barId));
             link.setLinkType(kind);

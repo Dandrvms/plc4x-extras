@@ -42,45 +42,45 @@ class ChartDeletionUseCaseTest {
     private static S88MasterRecipe runOfTwoSteps() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
         return recipe;
     }
 
     private static S88MasterRecipe runOfThreeSteps() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_1");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
         return recipe;
     }
 
     /** A parallel branch whose second branch has a step of its own behind the forked one. */
     private static S88MasterRecipe parallelWithASecondStepInOneBranch() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
         return recipe;
     }
 
     /** A parallel branch whose second branch is long enough to have a step in the middle of it. */
     private static S88MasterRecipe parallelWithAThirdStepInOneBranch() {
         S88MasterRecipe recipe = parallelWithASecondStepInOneBranch();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_3");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_3");
         return recipe;
     }
 
     /** An alternative branch whose new branch has a second step of its own behind the first. */
     private static S88MasterRecipe alternativeWithASecondStepInItsBranch() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
         return recipe;
     }
 
     /** An alternative branch whose new branch is long enough to have a step in the middle of it. */
     private static S88MasterRecipe alternativeWithAThirdStepInItsBranch() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_3");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_3");
         return recipe;
     }
 
@@ -88,9 +88,9 @@ class ChartDeletionUseCaseTest {
     void takingAStepOffAStraightRunJoinsWhatItJoined() {
         S88MasterRecipe recipe = runOfTwoSteps();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_1");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_1");
 
-        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T1", "END"), flowOf(recipe),
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T1", "END"), flowOf(recipe),
                 "and the step and the bar that was only waiting on it are gone, with the flow"
                         + " carrying on as it was before the step was put in");
         assertHoldsTogether(recipe);
@@ -100,7 +100,7 @@ class ChartDeletionUseCaseTest {
     void theStepOfTheRecipeGoesWithItsBox() {
         S88MasterRecipe recipe = runOfTwoSteps();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_1");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_1");
 
         assertTrue(recipe.findElement("STEP_1").isEmpty(),
                 "and the step itself is gone from the recipe, not only its box, because a step the"
@@ -111,12 +111,12 @@ class ChartDeletionUseCaseTest {
     void takingTheLastStepOfAParallelBranchReconnectsItToWhereItConverged() {
         S88MasterRecipe recipe = parallelWithASecondStepInOneBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_2"), arrivalsOf(recipe, "T_STEP_1"),
+        assertEquals(List.of("STEP", "STEP_2"), arrivalsOf(recipe, "T_STEP_1"),
                 "and the branch comes back to the bar the whole branch comes back to, rather than"
                         + " hanging under a bar nothing follows");
-        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "BOX_STEP_2"),
+        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "STEP_2"),
                 "and the step before it carries on to it");
         assertHoldsTogether(recipe);
     }
@@ -125,12 +125,12 @@ class ChartDeletionUseCaseTest {
     void takingTheFirstStepOfAParallelBranchLeavesTheRestOfItHangingOffTheFork() {
         S88MasterRecipe recipe = parallelWithASecondStepInOneBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_3"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP", "STEP_3"), departuresOf(recipe, "T_STEP"),
                 "and the rest of that branch is now hanging off the fork that opened it, rather"
                         + " than off nothing");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_3"), arrivalsOf(recipe, "T_STEP_1"),
+        assertEquals(List.of("STEP", "STEP_3"), arrivalsOf(recipe, "T_STEP_1"),
                 "and it comes back with the other branch, as it did before");
         assertHoldsTogether(recipe);
     }
@@ -138,16 +138,16 @@ class ChartDeletionUseCaseTest {
     @Test
     void takingTheOnlyStepOfABranchTakesThatBranchWithIt() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
-        assertEquals(List.of("BOX_STEP"), departuresOf(recipe, "T_STEP"),
+        assertEquals(List.of("STEP"), departuresOf(recipe, "T_STEP"),
                 "and the fork is left with the one branch that is still there");
-        assertEquals(List.of("BOX_STEP"), arrivalsOf(recipe, "T_STEP_1"),
+        assertEquals(List.of("STEP"), arrivalsOf(recipe, "T_STEP_1"),
                 "and so is the convergence, so the chart is a straight run again rather than a"
                         + " fork with nothing on one side");
-        assertFalse(chartOf(recipe).findStep("BOX_STEP_2").isPresent(),
+        assertFalse(chartOf(recipe).findStep("STEP_2").isPresent(),
                 "and the step of that branch is gone from the recipe too");
         assertHoldsTogether(recipe);
     }
@@ -155,11 +155,11 @@ class ChartDeletionUseCaseTest {
     @Test
     void takingTheOnlyStepOfAnAlternativeBranchTakesItsTwoBarsWithIt() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
-        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "BOX_STEP"),
+        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "STEP"),
                 "and the branch is gone from the split, because there is nothing left of it");
         assertFalse(chartOf(recipe).findTransition("T_BRANCH").isPresent(),
                 "and the bar that waited on that branch is gone with it");
@@ -167,7 +167,7 @@ class ChartDeletionUseCaseTest {
                 "and so is the bar behind it, because a bar nothing arrives at waits on nothing");
         assertEquals(List.of("T_STEP"), departuresOf(recipe, "BEGIN"),
                 "and the split is left with the one bar that is still there");
-        assertEquals(List.of("BOX_STEP_1"), departuresOf(recipe, "T_STEP_1"),
+        assertEquals(List.of("STEP_1"), departuresOf(recipe, "T_STEP_1"),
                 "and the other branch still leads to its own step");
         assertHoldsTogether(recipe);
     }
@@ -175,12 +175,12 @@ class ChartDeletionUseCaseTest {
     @Test
     void aForkTakenApartBranchByBranchEndsUpAsTheRunItWas() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP");
 
-        assertEquals(List.of("BEGIN", "T_STEP_1", "BOX_STEP_1", "T1", "END"), flowOf(recipe),
+        assertEquals(List.of("BEGIN", "T_STEP_1", "STEP_1", "T1", "END"), flowOf(recipe),
                 "and nothing is left of either branch");
         assertHoldsTogether(recipe);
     }
@@ -189,7 +189,7 @@ class ChartDeletionUseCaseTest {
     void takingTheFirstStepOfAParallelBranchLeavesTheForkCallingItABranch() {
         S88MasterRecipe recipe = parallelWithASecondStepInOneBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
         assertEquals(S88LinkType.PARALLEL_DIVERGENT, typeOfLineLeaving(recipe, "T_STEP"),
                 "and the line still says it splits, because there is still a branch to split into"
@@ -205,14 +205,14 @@ class ChartDeletionUseCaseTest {
     void takingTheLastStepOfAParallelBranchLeavesTheConvergenceCallingItAJoin() {
         S88MasterRecipe recipe = parallelWithASecondStepInOneBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
 
         assertEquals(S88LinkType.PARALLEL_CONVERGENT, typeOfLineArrivingAt(recipe, "T_STEP_1"),
                 "and the line still says it joins, because two branches are still coming back to"
                         + " that bar");
         assertEquals(S88LinkType.PARALLEL_DIVERGENT, typeOfLineLeaving(recipe, "T_STEP"),
                 "and the line that splits is untouched, because both branches are still there");
-        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "BOX_STEP_2"),
+        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "STEP_2"),
                 "and the step before the one that is gone leads straight to the bar the whole branch"
                         + " comes back to");
         assertFalse(chartOf(recipe).findTransition("T_STEP_3").isPresent(),
@@ -223,9 +223,9 @@ class ChartDeletionUseCaseTest {
     @Test
     void takingTheOnlyStepOfAParallelBranchLeavesALineThatNoLongerSplits() {
         S88MasterRecipe recipe = runOfTwoSteps();
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
         assertEquals(S88LinkType.CONTROL_LINK, typeOfLineLeaving(recipe, "T_STEP"),
                 "and the line goes back to being an ordinary line, because there is only one way"
@@ -238,9 +238,9 @@ class ChartDeletionUseCaseTest {
     void takingTheFirstStepOfAnAlternativeBranchHandsTheBarToTheNextOne() {
         S88MasterRecipe recipe = alternativeWithASecondStepInItsBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
 
-        assertEquals(List.of("BOX_STEP_3"), departuresOf(recipe, "T_BRANCH"),
+        assertEquals(List.of("STEP_3"), departuresOf(recipe, "T_BRANCH"),
                 "and the bar that waited on that branch now waits on the step behind the one that"
                         + " is gone");
         assertEquals(List.of("T_STEP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
@@ -255,13 +255,13 @@ class ChartDeletionUseCaseTest {
     void takingTheLastStepOfAnAlternativeBranchHandsTheBarBehindToTheOneBefore() {
         S88MasterRecipe recipe = alternativeWithASecondStepInItsBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
 
-        assertEquals(List.of("T_BRANCH_1"), departuresOf(recipe, "BOX_STEP_2"),
+        assertEquals(List.of("T_BRANCH_1"), departuresOf(recipe, "STEP_2"),
                 "and the step that is left in that branch carries on to the bar that ends it");
-        assertEquals(List.of("BOX_STEP_2"), arrivalsOf(recipe, "T_BRANCH_1"),
+        assertEquals(List.of("STEP_2"), arrivalsOf(recipe, "T_BRANCH_1"),
                 "and that bar still waits on the branch and nothing else");
-        assertEquals(List.of("T_STEP_1", "T_BRANCH_1"), arrivalsOf(recipe, "BOX_STEP_1"),
+        assertEquals(List.of("T_STEP_1", "T_BRANCH_1"), arrivalsOf(recipe, "STEP_1"),
                 "and the branch still ends where it ended, joining the other one");
         assertFalse(chartOf(recipe).findTransition("T_STEP_3").isPresent(),
                 "and the bar that was only waiting on the step that is gone goes with it");
@@ -272,14 +272,14 @@ class ChartDeletionUseCaseTest {
     void takingAStepFromTheMiddleOfAnAlternativeBranchJoinsTheStepsAroundIt() {
         S88MasterRecipe recipe = alternativeWithAThirdStepInItsBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
 
-        assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "BOX_STEP_2"),
+        assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "STEP_2"),
                 "and the step before the one that is gone carries on to the bar the one behind it"
                         + " waited at, because a step is always reached through a bar");
-        assertEquals(List.of("BOX_STEP_2"), arrivalsOf(recipe, "T_STEP_4"),
+        assertEquals(List.of("STEP_2"), arrivalsOf(recipe, "T_STEP_4"),
                 "and that bar waits on the step that is left and nothing else");
-        assertEquals(List.of("T_STEP_4"), arrivalsOf(recipe, "BOX_STEP_4"),
+        assertEquals(List.of("T_STEP_4"), arrivalsOf(recipe, "STEP_4"),
                 "and that step is still reached through a bar, as every step is");
         assertEquals(List.of("T_STEP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
                 "and the branch is still a branch, because two of its three steps are still there");
@@ -292,12 +292,12 @@ class ChartDeletionUseCaseTest {
     void takingAMiddleStepOffAStraightRunJoinsTheStepsAroundIt() {
         S88MasterRecipe recipe = runOfThreeSteps();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_1");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_1");
 
-        assertEquals(List.of("T_STEP_2"), departuresOf(recipe, "BOX_STEP"),
+        assertEquals(List.of("T_STEP_2"), departuresOf(recipe, "STEP"),
                 "and the step before it carries on to the bar the one behind it waited at, because"
                         + " a step is always reached through a bar");
-        assertEquals(List.of("T_STEP_2"), arrivalsOf(recipe, "BOX_STEP_2"),
+        assertEquals(List.of("T_STEP_2"), arrivalsOf(recipe, "STEP_2"),
                 "and that step is still reached through a bar, as every step is");
         assertFalse(chartOf(recipe).findTransition("T_STEP_1").isPresent(),
                 "and the bar that was only waiting on the step that is gone goes with it");
@@ -308,14 +308,14 @@ class ChartDeletionUseCaseTest {
     void takingAStepFromTheMiddleOfAParallelBranchJoinsTheStepsAroundIt() {
         S88MasterRecipe recipe = parallelWithAThirdStepInOneBranch();
 
-        ChartDeletionUseCase.deleteBox(recipe, null, "BOX_STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
 
-assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "BOX_STEP_2"),
+assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "STEP_2"),
                 "and the step before the one that is gone carries on to the bar the one behind it"
                         + " waited at, because a step is always reached through a bar");
-        assertEquals(List.of("BOX_STEP_2"), arrivalsOf(recipe, "T_STEP_4"),
+        assertEquals(List.of("STEP_2"), arrivalsOf(recipe, "T_STEP_4"),
                 "and that bar waits on the step that is left and nothing else");
-        assertEquals(List.of("BOX_STEP", "BOX_STEP_4"), arrivalsOf(recipe, "T_STEP_1"),
+        assertEquals(List.of("STEP", "STEP_4"), arrivalsOf(recipe, "T_STEP_1"),
                 "and the branch still comes back with the other one, which it did before");
         assertEquals(S88LinkType.PARALLEL_CONVERGENT, typeOfLineArrivingAt(recipe, "T_STEP_1"),
                 "and the line it comes back on still says it joins, because two branches are still"
@@ -335,7 +335,7 @@ assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "BOX_STEP_2"),
         assertThrows(IllegalStateException.class,
                 () -> ChartDeletionUseCase.deleteBox(recipe, null, "END"),
                 "and the stop is kept for the same reason");
-        assertEquals(List.of("BEGIN", "T_STEP", "BOX_STEP", "T_STEP_1", "BOX_STEP_1", "T1", "END"),
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T1", "END"),
                 flowOf(recipe),
                 "and the chart is exactly as it was, because both refusals happened before anything"
                         + " was touched");

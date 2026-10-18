@@ -147,7 +147,7 @@ class SfcStructureTest {
         S88ProcedureLogic chart = recipe.getProcedureLogic();
         boolean back = chart.getLinks().stream()
                 .anyMatch(link -> link.getTo().stream()
-                        .anyMatch(to -> "BOX_MIX".equals(to.getValue())));
+                        .anyMatch(to -> "MIX".equals(to.getValue())));
         assertTrue(back, "the flow really does go back round the mixer");
     }
 

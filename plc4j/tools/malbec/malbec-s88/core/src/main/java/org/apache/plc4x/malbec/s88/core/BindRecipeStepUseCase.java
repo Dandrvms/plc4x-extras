@@ -234,7 +234,7 @@ public final class BindRecipeStepUseCase {
         }
         String elementId = reserveNames(recipe, chart, "STEP");
         return EditProcedureLogicUseCase.insertStepAfter(recipe, step, afterBoxId, elementId,
-                "BOX_" + elementId, "T_" + elementId, null);
+                elementId, "T_" + elementId, null);
     }
 
     private static String reserveNames(S88Recipe recipe, S88ProcedureLogic chart, String stem) {
@@ -248,7 +248,6 @@ public final class BindRecipeStepUseCase {
 
     private static boolean isFree(S88Recipe recipe, S88ProcedureLogic chart, String stem) {
         return !isTaken(recipe, chart, stem)
-                && !isTaken(recipe, chart, "BOX_" + stem)
                 && !isTaken(recipe, chart, "T_" + stem);
     }
 

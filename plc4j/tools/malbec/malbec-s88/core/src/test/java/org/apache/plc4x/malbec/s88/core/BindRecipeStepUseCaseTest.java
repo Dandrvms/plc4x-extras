@@ -107,7 +107,7 @@ class BindRecipeStepUseCaseTest {
         Levels.unitProcedure(recipe, "TRAMO", null);
         Levels.operation(recipe, "TRAMO", "PASO");
         EditProcedureLogicUseCase.insertStepAfter(recipe, Levels.owner(recipe, "PASO"),
-                "BEGIN", "EMPTY", "BOX_EMPTY", "T_EMPTY", null);
+                "BEGIN", "EMPTY", "EMPTY", "T_EMPTY", null);
         return recipe;
     }
 
@@ -125,7 +125,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToClass(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plantWithAnOrder());
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plantWithAnOrder());
         S88ParameterValue command =
                 element.findParameter("COMMAND").orElseThrow().getFirstValue();
 
@@ -143,7 +143,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToClass(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
         S88ParameterValue temperature =
                 element.findParameter("TEMPERATURA_SP").orElseThrow().getFirstValue();
 
@@ -157,7 +157,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToClass(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
 
         assertEquals("CALENTAMIENTO", element.getEquipmentClassId(),
                 "and the class is what the step names");
@@ -171,7 +171,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToClass(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
 
         assertEquals("80", element.findParameter("TEMPERATURA_SP").orElseThrow()
                 .getFirstValue().getFirstValueString(),
@@ -186,7 +186,7 @@ class BindRecipeStepUseCaseTest {
     void aStepBoundToAClassIsNamedAfterTheClass() {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
-        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
 
         assertEquals("CALENTAMIENTO", recipe.findElement("CALENTAMIENTO").orElseThrow().getId(),
                 "and the step takes the name of the equipment it stands for");
@@ -198,11 +198,11 @@ class BindRecipeStepUseCaseTest {
     @Test
     void twoStepsOnTheSameClassAreNumberedRatherThanSharingAName() {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
-        EditProcedureLogicUseCase.insertStepAfter(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "SECOND", "BOX_SECOND",
+        EditProcedureLogicUseCase.insertStepAfter(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "SECOND", "SECOND",
                 "T_SECOND", null);
 
-        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
-        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "BOX_SECOND", "CALENTAMIENTO", plant());
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "SECOND", "CALENTAMIENTO", plant());
 
         assertTrue(recipe.findElement("CALENTAMIENTO").isPresent(), "the first keeps the plain name");
         assertEquals("CALENTAMIENTO_1",
@@ -210,7 +210,7 @@ class BindRecipeStepUseCaseTest {
                         .getRecipeElementId(),
                 "and the second carries a number, because two steps of one class in one recipe"
                         + " cannot both be called the same thing");
-        assertTrue(Levels.chartOf(recipe, "PASO").findStep("BOX_SECOND").isEmpty(),
+        assertTrue(Levels.chartOf(recipe, "PASO").findStep("SECOND").isEmpty(),
                 "and its box is renamed with it, because the box is the step on the chart and a box"
                         + " left under the old name works on a step that is not there");
     }
@@ -223,7 +223,7 @@ class BindRecipeStepUseCaseTest {
         String uid = plant.findById("CALENTAMIENTO_TANQUE_1").orElseThrow().getUid();
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToEquipment(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO_TANQUE_1", plant);
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO_TANQUE_1", plant);
 
         assertEquals(List.of("CALENTAMIENTO_TANQUE_1"), element.getActualEquipmentIds(),
                 "and the equipment is what the step names");
@@ -240,7 +240,7 @@ class BindRecipeStepUseCaseTest {
         recipe.setKind(S88RecipeKind.INSTANCE);
 
         S88RecipeElement element = BindRecipeStepUseCase.bindToEquipment(
-                recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO_TANQUE_1", plant());
+                recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO_TANQUE_1", plant());
 
         assertEquals("100", element.findParameter("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1")
                         .orElseThrow().getFirstValue().getFirstValueString(),
@@ -271,7 +271,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         assertThrows(IllegalStateException.class, () -> BindRecipeStepUseCase.bindToClass(
-                        recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "TANQUE", plant()),
+                        recipe, Levels.owner(recipe, "PASO"), "EMPTY", "TANQUE", plant()),
                 "and it says why, because a phase works on a module of equipment and a unit is a"
                         + " level away");
     }
@@ -281,10 +281,10 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         assertThrows(IllegalArgumentException.class, () -> BindRecipeStepUseCase.bindToClass(
-                        recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "NOT_A_CLASS", plant()),
+                        recipe, Levels.owner(recipe, "PASO"), "EMPTY", "NOT_A_CLASS", plant()),
                 "because a recipe naming equipment that is not there is a recipe nobody can run");
         assertThrows(IllegalArgumentException.class, () -> BindRecipeStepUseCase.bindToEquipment(
-                        recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "NOT_A_MACHINE", plant()),
+                        recipe, Levels.owner(recipe, "PASO"), "EMPTY", "NOT_A_MACHINE", plant()),
                 "for either kind of recipe");
     }
 
@@ -293,7 +293,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", null));
+                () -> BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", null));
 
         assertTrue(failure.getMessage().contains("plant"),
                 "and it says why, because a step is a piece of equipment and there is none to name");
@@ -319,7 +319,7 @@ class BindRecipeStepUseCaseTest {
     @Test
     void aStepNamingAClassThePlantDoesNotHaveIsReported() {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
-        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO", plant());
+        BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", plant());
         S88PlantSnapshot aNarrowerPlant = plantWithout("CALENTAMIENTO");
 
         assertFalse(RecipeConformance.of(recipe, aNarrowerPlant).excess().isEmpty(),
@@ -333,7 +333,7 @@ class BindRecipeStepUseCaseTest {
     void aStepNamingAEquipmentThatIsNotThereIsReported() {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
         recipe.setKind(S88RecipeKind.INSTANCE);
-        BindRecipeStepUseCase.bindToEquipment(recipe, Levels.owner(recipe, "PASO"), "BOX_EMPTY", "CALENTAMIENTO_TANQUE_1",
+        BindRecipeStepUseCase.bindToEquipment(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO_TANQUE_1",
                 plant());
 
         assertFalse(RecipeConformance.of(recipe, plantWithout("CALENTAMIENTO_TANQUE_1"))

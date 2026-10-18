@@ -92,7 +92,7 @@ class StepBoxOnTheChartTest {
     void aStepWithNoEquipmentSaysNothingAndIsAsBigAsAnyOther() {
         S88MasterRecipe recipe = withAnEmptyStep();
         S88RecipeElement empty = recipe.findElement("STEP").orElseThrow();
-        String box = recipe.getProcedureLogic().findStep("BOX_STEP").orElseThrow().getId();
+        String box = recipe.getProcedureLogic().findStep("STEP").orElseThrow().getId();
 
         RecipeChartScene.NodeSpec spec = RecipeChartScene.nodesOf(recipe, null).get(box);
 
@@ -108,7 +108,7 @@ class StepBoxOnTheChartTest {
     void aStepWithALongNameGrowsToHoldIt() {
         S88PlantSnapshot plant = plant();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO_DE_TANQUE", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO_DE_TANQUE", plant);
         String bound = "CALENTAMIENTO_DE_TANQUE";
 
         int grown = widthOf(bound, recipe);
@@ -157,7 +157,7 @@ class StepBoxOnTheChartTest {
     void aStepBoundToAClassIsNotWrittenTwice() {
         S88PlantSnapshot plant = plant();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO_DE_TANQUE", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO_DE_TANQUE", plant);
 
         String label = RecipeChartScene.nodesOf(recipe, null).get("CALENTAMIENTO_DE_TANQUE").label();
 
@@ -170,7 +170,7 @@ class StepBoxOnTheChartTest {
     void aStepSaysTheValuesItIsWorkedByUnderItsName() {
         S88PlantSnapshot plant = plantWithParameters();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO", plant);
 
         List<String> lines =
                 List.of(RecipeChartScene.nodesOf(recipe, null).get("CALENTAMIENTO").label().split("\\R"));
@@ -185,7 +185,7 @@ class StepBoxOnTheChartTest {
     void whatTheBoxIsAllowedToWriteIsWhatItsFixedHeightHolds() {
         S88PlantSnapshot plant = plantWithParameters();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO", plant);
         String label = RecipeChartScene.nodesOf(recipe, null).get("CALENTAMIENTO").label();
         int lines = label.split("\\R").length;
 
@@ -203,7 +203,7 @@ class StepBoxOnTheChartTest {
     void aStepWithMoreValuesThanFitLeavesTheRestToThePointer() {
         S88PlantSnapshot plant = plantWithParameters();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO", plant);
         for (int n = 1; n <= 6; n++) {
             UpdateRecipeParameterUseCase.execute(recipe, recipe.findElement("CALENTAMIENTO")
                     .orElseThrow(), "PARAMETRO_" + n, String.valueOf(n), DataType.REAL, "C");
@@ -221,7 +221,7 @@ class StepBoxOnTheChartTest {
     void whatTheBatchWritesWhileTheRecipeRunsIsNotWrittenOnTheBox() {
         S88PlantSnapshot plant = plantWithParameters();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO", plant);
 
         String label = RecipeChartScene.nodesOf(recipe, null).get("CALENTAMIENTO").label();
 
@@ -234,7 +234,7 @@ class StepBoxOnTheChartTest {
     void theOrderIsStillCarriedOnTheStepSoTheBatchCanUseIt() {
         S88PlantSnapshot plant = plantWithParameters();
         S88MasterRecipe recipe = withAnEmptyStep();
-        BindRecipeStepUseCase.bindToClass(recipe, null, "BOX_STEP", "CALENTAMIENTO", plant);
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO", plant);
 
         assertTrue(recipe.findElement("CALENTAMIENTO").orElseThrow()
                         .findParameter("COMMAND").isPresent(),

@@ -177,7 +177,7 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
             Map<String, java.awt.Point> where = scene.positions();
 
-            assertEquals("BOX_HEAT", scene.nodeAt(where.get("BOX_HEAT")),
+            assertEquals("HEAT", scene.nodeAt(where.get("HEAT")),
                     "the top left corner of a box is on the box");
             assertEquals("T_HEAT", scene.nodeAt(where.get("T_HEAT")),
                     "and a bar is picked as well as a box, because the toolbar acts on both");
@@ -192,8 +192,8 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
 
             assertFalse(scene.isBox("T_HEAT"), "a bar holds the flow while it waits");
-            assertTrue(scene.isBox("BOX_BEGIN"), "the start can take a step after it");
-            assertTrue(scene.isBox("BOX_PACK"), "and so can any other step");
+            assertTrue(scene.isBox("BEGIN"), "the start can take a step after it");
+            assertTrue(scene.isBox("PACK"), "and so can any other step");
         });
     }
 
@@ -218,8 +218,8 @@ class RecipeChartSceneTest {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
             Map<String, java.awt.Point> where = scene.positions();
 
-            List<String> chain = List.of("BOX_BEGIN", "T_HEAT", "BOX_HEAT", "T_MIX",
-                    "BOX_MIX", "T_PACK", "BOX_PACK", "T_END", "END");
+            List<String> chain = List.of("BEGIN", "T_HEAT", "HEAT", "T_MIX",
+                    "MIX", "T_PACK", "PACK", "T_END", "END");
             int previousTop = Integer.MIN_VALUE;
             int centre = centreX(scene, chain.get(0));
             for (int row = 0; row < chain.size(); row++) {
@@ -252,8 +252,8 @@ class RecipeChartSceneTest {
     void aNodeThatLeavesTheChartIsNoLongerPicked() {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
-            scene.select("BOX_MIX");
-            assertEquals("BOX_MIX", scene.selected());
+            scene.select("MIX");
+            assertEquals("MIX", scene.selected());
 
             scene.draw(SfcFixtures.parallelDivergence(), null);
 
@@ -267,7 +267,7 @@ class RecipeChartSceneTest {
     void pickingSomethingThatIsNotTherePicksNothing() {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
-            scene.select("BOX_PACK");
+            scene.select("PACK");
 
             scene.select("NOT_ON_THIS_CHART");
 
@@ -361,9 +361,9 @@ class RecipeChartSceneTest {
     void aClickOnABoxPicksIt() {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
-            scene.pickAt(centreOf(scene, "BOX_HEAT"));
+            scene.pickAt(centreOf(scene, "HEAT"));
 
-            assertEquals("BOX_HEAT", scene.selected(),
+            assertEquals("HEAT", scene.selected(),
                     "and the name the buttons are given is the box that was pointed at");
         });
     }
@@ -388,9 +388,9 @@ class RecipeChartSceneTest {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
 
-            scene.pickAt(centreOf(scene, "BOX_HEAT"));
+            scene.pickAt(centreOf(scene, "HEAT"));
 
-            assertEquals("BOX_HEAT", scene.selected(),
+            assertEquals("HEAT", scene.selected(),
                     "a line stops at the box, so pointing there is pointing at the step");
         });
     }
@@ -399,7 +399,7 @@ class RecipeChartSceneTest {
     void aClickOnEmptyChartPicksNothing() {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
-            scene.select("BOX_MIX");
+            scene.select("MIX");
 
             scene.pickAt(new Point(-50, -50));
 
@@ -436,14 +436,14 @@ class RecipeChartSceneTest {
             S88MasterRecipe recipe = SfcFixtures.lineal();
             RecipeChartScene scene = sceneOf(recipe);
 
-            EditProcedureLogicUseCase.insertStepAfter(recipe, null, "BOX_BEGIN", "QUENCH",
-                    "BOX_QUENCH", "T_QUENCH", "QUENCH_CLASS");
-            scene.selectWhenDrawn("BOX_QUENCH");
+            EditProcedureLogicUseCase.insertStepAfter(recipe, null, "BEGIN", "QUENCH",
+                    "QUENCH", "T_QUENCH", "QUENCH_CLASS");
+            scene.selectWhenDrawn("QUENCH");
             assertNull(scene.selected(), "and before the drawing there is nothing to pick");
 
             scene.draw(recipe, null);
 
-            assertEquals("BOX_QUENCH", scene.selected(),
+            assertEquals("QUENCH", scene.selected(),
                     "and after it there is, or every button that adds something would leave the"
                             + " operator with nothing picked");
         });
@@ -454,7 +454,7 @@ class RecipeChartSceneTest {
         onSwingThread(() -> {
             RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
 
-            scene.selectWhenDrawn("BOX_NOT_HERE");
+            scene.selectWhenDrawn("NOT_HERE");
             scene.draw(SfcFixtures.lineal(), null);
 
             assertNull(scene.selected(),

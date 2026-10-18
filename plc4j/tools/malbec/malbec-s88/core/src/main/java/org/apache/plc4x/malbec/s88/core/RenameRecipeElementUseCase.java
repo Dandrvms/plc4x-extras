@@ -21,6 +21,7 @@ package org.apache.plc4x.malbec.s88.core;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
@@ -86,10 +87,11 @@ public class RenameRecipeElementUseCase {
         List<StepRename> renames = new ArrayList<>();
         for (S88RecipeElement element : recipe.getAllElements()) {
             if (element == step) {
-                renames.add(() -> element.setId(newId));
+                renames.add(() -> recipe.renameRecipeElement(element, newId));
             }
             collectBoxes(renames, element.getProcedureLogic(), oldId, newId);
         }
+        collectBoxes(renames, recipe.getProcedureLogic(), oldId, newId);
         return renames;
     }
 
@@ -100,9 +102,39 @@ public class RenameRecipeElementUseCase {
         for (S88ProcedureStep box : chart.getSteps()) {
             if (oldId != null && oldId.equals(box.getRecipeElementId())) {
                 renames.add(() -> box.setRecipeElementId(newId));
+                if (oldId.equals(box.getId())) {
+                    renames.add(() -> {
+                        chart.removeStep(box);
+                        box.setId(newId);
+                        chart.addStep(box);
+                        renameLinkEnds(chart, oldId, newId);
+                    });
+                }
             }
         }
 
+    }
+
+    private static void renameLinkEnds(S88ProcedureLogic chart, String oldId, String newId) {
+        for (S88ProcedureLink link : new ArrayList<>(chart.getLinks())) {
+            boolean changed = renameEnd(link.getFrom(), oldId, newId)
+                    | renameEnd(link.getTo(), oldId, newId);
+            if (changed) {
+                chart.removeLink(link);
+                chart.addLink(link);
+            }
+        }
+    }
+
+    private static boolean renameEnd(List<S88IdRef> ends, String oldId, String newId) {
+        boolean changed = false;
+        for (S88IdRef end : ends) {
+            if (end != null && oldId.equals(end.getValue())) {
+                end.setValue(newId);
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private static List<S88IdRef> endsOf(S88ProcedureLogic chart) {

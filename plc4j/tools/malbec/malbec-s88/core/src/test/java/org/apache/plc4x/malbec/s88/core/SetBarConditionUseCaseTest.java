@@ -87,7 +87,7 @@ class SetBarConditionUseCaseTest {
         S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe,
                 Levels.owner(recipe, "PASO"), "BEGIN");
         BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"),
-                "BOX_" + empty.getId(), "CALENTAMIENTO", plant());
+                empty.getId(), "CALENTAMIENTO", plant());
         return recipe;
     }
 
@@ -208,7 +208,7 @@ class SetBarConditionUseCaseTest {
         S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe,
                 Levels.owner(recipe, "PASO"), "BEGIN");
         BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"),
-                "BOX_" + empty.getId(), "CALENTAMIENTO", plantWithAStateReport());
+                empty.getId(), "CALENTAMIENTO", plantWithAStateReport());
         return recipe;
     }
 

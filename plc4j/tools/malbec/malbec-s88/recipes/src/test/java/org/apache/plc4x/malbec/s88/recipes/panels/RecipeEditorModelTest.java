@@ -81,7 +81,7 @@ class RecipeEditorModelTest {
                 .orElse(name + "_CLASS");
         model.edit("Add step " + name,
                 () -> EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(),
-                        model.currentStep(), after, name, "BOX_" + name, "T_" + name, classId));
+                        model.currentStep(), after, name, name, "T_" + name, classId));
     }
 
     /** The name of the box the flow leaves in the chart the editor has open. */
@@ -105,7 +105,7 @@ class RecipeEditorModelTest {
     private static void addStepWithAClashingName(RecipeEditorModel model) {
         model.edit("Add step QUENCH",
                 () -> EditProcedureLogicUseCase.insertStepAfter(
-                        model.getRecipe(), null, "BOX_BEGIN", "QUENCH", "BOX_QUENCH", "T_QUENCH",
+                        model.getRecipe(), null, "BEGIN", "QUENCH", "QUENCH", "T_QUENCH",
                         "QUENCH_CLASS"));
     }
 
@@ -123,10 +123,10 @@ class RecipeEditorModelTest {
     private static S88MasterRecipe tree() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
-                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", null);
+                "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", null);
         CreateChartUseCase.forStep(recipe, tramo);
         S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
-                "BEGIN", "PASO", "BOX_PASO", "T_PASO", "PASO_CLASS");
+                "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
         CreateChartUseCase.forStep(recipe, paso);
         return recipe;
     }
@@ -146,7 +146,7 @@ class RecipeEditorModelTest {
     private static S88MasterRecipe treeWithAnUnbornChart() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
-                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", null);
+                "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", null);
         tramo.setProcedureLogic(null);
         return recipe;
     }
@@ -225,7 +225,7 @@ class RecipeEditorModelTest {
         RecipeEditorModel model = openOverATree();
         model.editChartOf(model.getRecipe().findElement("PASO").orElseThrow());
         EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(), model.currentStep(),
-                "BEGIN", "PULSO", "BOX_PULSO", "T_PULSO", "PULSO_CLASS");
+                "BEGIN", "PULSO", "PULSO", "T_PULSO", "PULSO_CLASS");
 
         model.editChartOf(model.getRecipe().findElement("PULSO").orElseThrow());
         model.createChartForCurrentStep();
@@ -282,7 +282,7 @@ class RecipeEditorModelTest {
         model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
 
         model.edit("Delete TRAMO", () -> ChartDeletionUseCase.deleteBox(
-                model.getRecipe(), null, "BOX_TRAMO"));
+                model.getRecipe(), null, "TRAMO"));
 
         assertNull(model.currentStep(), "and the step that held the chart has gone");
         assertEquals(model.getRecipe().getProcedureLogic(), model.chartBeingEdited(),
@@ -588,21 +588,21 @@ class RecipeEditorModelTest {
         RecipeEditorModel model = open();
         byte[] asOpened = RecipeBytes.of(model.getRecipe());
 
-        model.edit("Split BOX_BEGIN",
+        model.edit("Split BEGIN",
                 () -> EditProcedureLogicUseCase.selectiveFork(
-                        model.getRecipe(), null, "BOX_BEGIN", "T_ONE_OF", "T_OTHERWISE"));
+                        model.getRecipe(), null, "BEGIN", "T_ONE_OF", "T_OTHERWISE"));
         model.edit("Split T_OTHERWISE",
                 () -> EditProcedureLogicUseCase.parallelFork(
                         model.getRecipe(), null, "T_OTHERWISE", "QUENCH", "CHILL"));
-        model.edit("Join BOX_QUENCH and BOX_CHILL",
+        model.edit("Join QUENCH and CHILL",
                 () -> EditProcedureLogicUseCase.joinOnto(model.getRecipe(), null,
-                        "BOX_QUENCH", "BOX_CHILL", "T_BOTH", null));
+                        "QUENCH", "CHILL", "T_BOTH", null));
         model.edit("Condition of T_ONE_OF",
                 () -> EditProcedureLogicUseCase.setCondition(
                         model.getRecipe(), null, "T_ONE_OF", "Reports/STATE#=#COMPLETE"));
-        model.edit("Rename BOX_HEAT",
+        model.edit("Rename HEAT",
                 () -> EditProcedureLogicUseCase.renameStep(
-                        model.getRecipe(), null, "BOX_HEAT", "HEATING"));
+                        model.getRecipe(), null, "HEAT", "HEATING"));
         byte[] afterEdits = RecipeBytes.of(model.getRecipe());
 
         assertFalse(Arrays.equals(asOpened, afterEdits),
@@ -672,10 +672,10 @@ class RecipeEditorModelTest {
     @Test
     void manyEditsOnALargeRecipeStayInReasonableTime() throws IOException {
         RecipeEditorModel model = open();
-        String last = "BOX_BEGIN";
+        String last = "BEGIN";
         for (int n = 0; n < 60; n++) {
             String name = "PASO_" + n;
-            String box = "BOX_" + name;
+            String box = name;
             String after = last;
             model.edit("Add step " + name,
                     () -> EditProcedureLogicUseCase.insertStepAfter(model.getRecipe(), null, after,

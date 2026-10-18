@@ -128,18 +128,18 @@ InMemory storage = new InMemory();
         master.addRecipeElement(end);
 
         S88ProcedureLogic chart = new S88ProcedureLogic();
-        chart.addStep(new S88ProcedureStep("BOX_HEAT", "HEAT"));
-        chart.addStep(new S88ProcedureStep("BOX_END", "END"));
+        chart.addStep(new S88ProcedureStep("HEAT", "HEAT"));
+        chart.addStep(new S88ProcedureStep("END", "END"));
         chart.addTransition(new S88ProcedureTransition("T_TEMP_OK",
                 S88ConditionExpression.of(S88VariableAddress.parse("Reports/STATE"),
                         S88ConditionOperator.EQUALS, "COMPLETE").toText()));
         S88ProcedureLink first = new S88ProcedureLink("L1");
-        first.addFrom(S88IdRef.step("BOX_HEAT"));
+        first.addFrom(S88IdRef.step("HEAT"));
         first.addTo(S88IdRef.transition("T_TEMP_OK"));
         chart.addLink(first);
         S88ProcedureLink second = new S88ProcedureLink("L2");
         second.addFrom(S88IdRef.transition("T_TEMP_OK"));
-        second.addTo(S88IdRef.step("BOX_END"));
+        second.addTo(S88IdRef.step("END"));
         second.setLinkType(S88LinkType.CONTROL_LINK);
         second.setEvaluationOrder(2);
         chart.addLink(second);
@@ -154,7 +154,7 @@ InMemory storage = new InMemory();
         assertEquals(2, readChart.getSteps().size());
         assertEquals(2, readChart.getLinks().size());
         assertEquals(1, readChart.getTransitions().size());
-        assertEquals("HEAT", readChart.findStep("BOX_HEAT").orElseThrow().getRecipeElementId());
+        assertEquals("HEAT", readChart.findStep("HEAT").orElseThrow().getRecipeElementId());
 
         S88ProcedureTransition readBar = readChart.findTransition("T_TEMP_OK").orElseThrow();
         assertTrue(readBar.isGuarded());
@@ -482,14 +482,14 @@ assertEquals(BatchMLRecipeRepositoryImpl.ROOT, rootOf(storage),
     void theDrawingOfTheChartOfTheRecipeItselfSurvivesTheFile() {
         S88MasterRecipe master = new S88MasterRecipe("REC", S88RecipeKind.CLASS);
         S88ProcedureLogic chart = new S88ProcedureLogic();
-        chart.addStep(new S88ProcedureStep("BOX_A", "HEAT"));
-        chart.addStep(new S88ProcedureStep("BOX_B", "COOL"));
+        chart.addStep(new S88ProcedureStep("A", "HEAT"));
+        chart.addStep(new S88ProcedureStep("B", "COOL"));
         chart.addTransition(new S88ProcedureTransition("T1", null));
         master.setProcedureLogic(chart);
 
         S88ChartLayout layout = new S88ChartLayout();
-        layout.place("BOX_A", 120, 80);
-        layout.place("BOX_B", 360, 80);
+        layout.place("A", 120, 80);
+        layout.place("B", 360, 80);
         layout.place("T1", 240, 80);
         master.setLayout(layout);
 
@@ -634,12 +634,12 @@ assertEquals(BatchMLRecipeRepositoryImpl.ROOT, rootOf(storage),
         S88RecipeElement procedure = new S88RecipeElement("PROC", S88RecipeElementKind.PROCEDURE);
         master.addRecipeElement(procedure);
         S88ProcedureLogic chart = new S88ProcedureLogic();
-        chart.addStep(new S88ProcedureStep("BOX_HEAT", "HEAT"));
+        chart.addStep(new S88ProcedureStep("HEAT", "HEAT"));
         chart.addTransition(new S88ProcedureTransition("T_OK",
                 S88ConditionExpression.of(S88VariableAddress.parse("Reports/STATE"),
                         S88ConditionOperator.EQUALS, "COMPLETE").toText()));
         S88ProcedureLink link = new S88ProcedureLink("L1");
-        link.addFrom(S88IdRef.step("BOX_HEAT"));
+        link.addFrom(S88IdRef.step("HEAT"));
         link.addTo(S88IdRef.transition("T_OK"));
         link.setLinkType(S88LinkType.CONTROL_LINK);
         chart.addLink(link);

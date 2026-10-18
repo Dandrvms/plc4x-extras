@@ -219,7 +219,7 @@ static final class Buttons {
         String last = "BEGIN";
         for (int n = 0; n < 3; n++) {
             BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, last);
-            last = "BOX_STEP" + (n == 0 ? "" : "_" + n);
+            last = "STEP" + (n == 0 ? "" : "_" + n);
         }
         return recipe;
     }
@@ -227,29 +227,29 @@ static final class Buttons {
     /** Two steps, then a parallel branch on the second one. */
     static S88MasterRecipe parallel() {
         S88MasterRecipe recipe = lineal("BOTONES_PARALELA");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
         return recipe;
     }
 
     /** The same, pressing Add parallel branch once more. */
     static S88MasterRecipe parallelThreeBranches() {
         S88MasterRecipe recipe = lineal("BOTONES_PARALELA_TRES");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_1");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_2");
         return recipe;
     }
 
     /** Pick a step inside one branch and press Add step, which grows that branch. */
     static S88MasterRecipe parallelStepInsideABranch() {
         S88MasterRecipe recipe = parallel();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
         return recipe;
     }
 
     /** Two steps, then a branch on the second one. */
     static S88MasterRecipe bifurcation() {
         S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
         return recipe;
     }
 
@@ -263,15 +263,15 @@ static final class Buttons {
      */
     static S88MasterRecipe bifurcationThreeBranches() {
         S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION_TRES");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_1");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "BOX_STEP_2");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_2");
         return recipe;
     }
 
     /** Pick a step inside one branch and press Add step, which grows that branch. */
     static S88MasterRecipe bifurcationStepInsideABranch() {
         S88MasterRecipe recipe = bifurcation();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BOX_STEP_2");
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
         return recipe;
     }
 }
@@ -464,7 +464,7 @@ static final class Buttons {
 
         /** A box on the chart working on a step of the recipe of the same name. */
         Chart box(String elementId) {
-            if (chart.findStep("BOX_" + elementId).isPresent()) {
+            if (chart.findStep(elementId).isPresent()) {
                 return this;
             }
             if (recipe.findElement(elementId).isEmpty()) {
@@ -474,7 +474,7 @@ static final class Buttons {
                 }
                 recipe.addRecipeElement(element);
             }
-            chart.addStep(new S88ProcedureStep("BOX_" + elementId, elementId));
+            chart.addStep(new S88ProcedureStep(elementId, elementId));
             return this;
         }
 
@@ -482,7 +482,7 @@ static final class Buttons {
         Chart down(String elementId, String barId) {
             box(elementId);
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
-            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            link.addFrom(S88IdRef.step(elementId));
             link.addTo(S88IdRef.transition(barId));
             chart.addLink(link);
             return this;
@@ -493,7 +493,7 @@ static final class Buttons {
             box(elementId);
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
             link.addFrom(S88IdRef.transition(barId));
-            link.addTo(S88IdRef.step("BOX_" + elementId));
+            link.addTo(S88IdRef.step(elementId));
             chart.addLink(link);
             return this;
         }
@@ -501,7 +501,7 @@ static final class Buttons {
         /** One line leaving a box towards two bars, which is the selective split. */
         Chart split(String elementId, String firstBar, String secondBar, S88LinkType type) {
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
-            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            link.addFrom(S88IdRef.step(elementId));
             link.addTo(S88IdRef.transition(firstBar));
             link.addTo(S88IdRef.transition(secondBar));
             link.setLinkType(type);
@@ -517,7 +517,7 @@ static final class Buttons {
          */
         Chart split(String elementId, S88LinkType type, String... bars) {
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
-            link.addFrom(S88IdRef.step("BOX_" + elementId));
+            link.addFrom(S88IdRef.step(elementId));
             for (String bar : bars) {
                 link.addTo(S88IdRef.transition(bar));
             }
@@ -532,8 +532,8 @@ static final class Buttons {
             box(second);
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
             link.addFrom(S88IdRef.transition(barId));
-            link.addTo(S88IdRef.step("BOX_" + first));
-            link.addTo(S88IdRef.step("BOX_" + second));
+            link.addTo(S88IdRef.step(first));
+            link.addTo(S88IdRef.step(second));
             link.setLinkType(type);
             chart.addLink(link);
             return this;
@@ -550,7 +550,7 @@ static final class Buttons {
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
             link.addFrom(S88IdRef.transition(barId));
             for (String box : boxes) {
-                link.addTo(S88IdRef.step("BOX_" + box));
+                link.addTo(S88IdRef.step(box));
             }
             link.setLinkType(type);
             chart.addLink(link);
@@ -560,8 +560,8 @@ static final class Buttons {
         /** One line bringing two boxes together onto a bar, which is the parallel convergence. */
         Chart join(String first, String second, String barId, S88LinkType type) {
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
-            link.addFrom(S88IdRef.step("BOX_" + first));
-            link.addFrom(S88IdRef.step("BOX_" + second));
+            link.addFrom(S88IdRef.step(first));
+            link.addFrom(S88IdRef.step(second));
             link.addTo(S88IdRef.transition(barId));
             link.setLinkType(type);
             chart.addLink(link);
@@ -575,7 +575,7 @@ static final class Buttons {
             }
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
             for (String box : boxes) {
-                link.addFrom(S88IdRef.step("BOX_" + box));
+                link.addFrom(S88IdRef.step(box));
             }
             link.addTo(S88IdRef.transition(barId));
             link.setLinkType(type);
@@ -611,7 +611,7 @@ static final class Buttons {
             box(toElementId);
             S88ProcedureLink link = new S88ProcedureLink(nextLinkId());
             link.addFrom(departure);
-            link.addTo(S88IdRef.step("BOX_" + toElementId));
+            link.addTo(S88IdRef.step(toElementId));
             chart.addLink(link);
             return this;
         }
@@ -828,13 +828,13 @@ static final class Buttons {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("SUB_GRAFICOS",
                 S88RecipeKind.CLASS);
         S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
-                "BEGIN", "TRAMO", "BOX_TRAMO", "T_TRAMO", "TRAMO_CLASS");
+                "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", "TRAMO_CLASS");
         CreateChartUseCase.forStep(recipe, tramo);
         S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
-                "BEGIN", "PASO", "BOX_PASO", "T_PASO", "PASO_CLASS");
+                "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
         CreateChartUseCase.forStep(recipe, paso);
         EditProcedureLogicUseCase.insertStepAfter(recipe, paso, "BEGIN", "PULSO",
-                "BOX_PULSO", "T_PULSO", "PULSO_CLASS");
+                "PULSO", "T_PULSO", "PULSO_CLASS");
         return recipe;
     }
 }

@@ -107,9 +107,9 @@ class S88ChartLayoutTest {
     @Test
     void everyThingThatWasPlacedComesBack() {
         S88ChartLayout layout = new S88ChartLayout();
-        layout.place("BOX_A", 10, 20);
+        layout.place("A", 10, 20);
         layout.place("T1", 100, 40);
-        layout.place("BOX_B", 200, 60);
+        layout.place("B", 200, 60);
 
         assertEquals(layout, S88ChartLayout.of(layout.toLines()),
                 "a layout that goes out and comes back is the layout that went out");
@@ -119,11 +119,11 @@ class S88ChartLayoutTest {
     @Test
     void twoLayoutsAreTheSameWhateverOrderTheyWereDrawnIn() {
         S88ChartLayout one = new S88ChartLayout();
-        one.place("BOX_A", 10, 20);
-        one.place("BOX_B", 30, 40);
+        one.place("A", 10, 20);
+        one.place("B", 30, 40);
         S88ChartLayout other = new S88ChartLayout();
-        other.place("BOX_B", 30, 40);
-        other.place("BOX_A", 10, 20);
+        other.place("B", 30, 40);
+        other.place("A", 10, 20);
 
         assertEquals(one, other,
                 "the order is how the chart was drawn and not what it says");
@@ -133,23 +133,23 @@ class S88ChartLayoutTest {
     void theOrderThingsWerePlacedInIsKept() {
         S88ChartLayout layout = new S88ChartLayout();
         layout.place("T1", 1, 1);
-        layout.place("BOX_A", 2, 2);
+        layout.place("A", 2, 2);
 
-        assertEquals(List.of("T1", "BOX_A"), S88ChartLayout.of(layout.toLines()).placedIds(),
+        assertEquals(List.of("T1", "A"), S88ChartLayout.of(layout.toLines()).placedIds(),
                 "so a chart that is drawn again reads the way it was drawn");
     }
 
     @Test
     void aLineThatIsNotAPositionIsLeftOut() {
         S88ChartLayout read = S88ChartLayout.of(List.of(
-                "BOX_A|10|20",
+                "A|10|20",
                 "this is not a position",
-                "BOX_B|30",
+                "B|30",
                 "|40|50",
                 ""));
 
         assertEquals(1, read.size());
-        assertEquals(new S88Position(10, 20), read.positionOf("BOX_A").orElseThrow(),
+        assertEquals(new S88Position(10, 20), read.positionOf("A").orElseThrow(),
                 "one line that does not parse loses where one box is drawn and nothing else");
     }
 
@@ -243,17 +243,17 @@ class S88ChartLayoutTest {
     void aLayoutReplacesTheOneItReplacesAndLeavesOneBehind() {
         S88MasterRecipe recipe = new S88MasterRecipe("REC", S88RecipeKind.CLASS);
         S88ChartLayout first = new S88ChartLayout();
-        first.place("BOX_A", 1, 1);
-        first.place("BOX_B", 2, 2);
+        first.place("A", 1, 1);
+        first.place("B", 2, 2);
         recipe.setLayout(first);
 
         S88ChartLayout second = new S88ChartLayout();
-        second.place("BOX_A", 9, 9);
+        second.place("A", 9, 9);
         recipe.setLayout(second);
 
         assertEquals(1, recipe.getLayout().size(),
                 "and the one that was there is gone rather than merged into the new one");
-        assertEquals(new S88Position(9, 9), recipe.getLayout().positionOf("BOX_A").orElseThrow());
+        assertEquals(new S88Position(9, 9), recipe.getLayout().positionOf("A").orElseThrow());
     }
 
     @Test

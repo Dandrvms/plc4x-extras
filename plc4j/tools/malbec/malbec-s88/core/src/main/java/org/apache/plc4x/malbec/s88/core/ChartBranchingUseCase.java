@@ -74,7 +74,7 @@ public final class ChartBranchingUseCase {
         put(chart, leaving, widenDeparture(leaving, S88IdRef.step(box), S88LinkType.PARALLEL_CONVERGENT));
 
         announce(recipe);
-        return recipe.findElement(elementOf(box)).orElseThrow();
+        return recipe.findElement(box).orElseThrow();
     }
 
     /**
@@ -117,7 +117,7 @@ public final class ChartBranchingUseCase {
         put(chart, carryingOn, widenDeparture(carryingOn, S88IdRef.transition(finishBar), S88LinkType.SERIAL_CONVERGENT));
 
         announce(recipe);
-        return recipe.findElement(elementOf(box)).orElseThrow();
+        return recipe.findElement(box).orElseThrow();
     }
 
     private static S88ProcedureLogic chartToBranch(S88Recipe recipe, S88RecipeElement step,
@@ -483,7 +483,7 @@ public final class ChartBranchingUseCase {
         put(chart, leaving, widenDeparture(leaving, S88IdRef.step(box),
                 S88LinkType.PARALLEL_CONVERGENT));
         announce(recipe);
-        return recipe.findElement(elementOf(box)).orElseThrow();
+        return recipe.findElement(box).orElseThrow();
     }
 
     /**
@@ -522,7 +522,7 @@ public final class ChartBranchingUseCase {
                 S88LinkType.SERIAL_CONVERGENT));
 
         announce(recipe);
-        return recipe.findElement(elementOf(box)).orElseThrow();
+        return recipe.findElement(box).orElseThrow();
     }
 
     /**
@@ -597,7 +597,7 @@ public final class ChartBranchingUseCase {
     private static String newStep(S88Recipe recipe, S88RecipeElement step,
                                   S88ProcedureLogic chart) {
         String elementId = freeName(recipe, chart, STEP_STEM);
-        String box = "BOX_" + elementId;
+        String box = elementId;
         CreateRecipeElementUseCase.forEquipmentClass(recipe, step, elementId,
                 RecipeLevels.levelOf(step), null);
         EditProcedureLogicUseCase.addStep(recipe, step, box, elementId);
@@ -611,10 +611,6 @@ public final class ChartBranchingUseCase {
         return barId;
     }
 
-    private static String elementOf(String boxId) {
-        return boxId.startsWith("BOX_") ? boxId.substring("BOX_".length()) : boxId;
-    }
-
     private static String freeName(S88Recipe recipe, S88ProcedureLogic chart, String stem) {
         String candidate = stem;
         int more = 1;
@@ -626,7 +622,6 @@ public final class ChartBranchingUseCase {
 
     private static boolean isFree(S88Recipe recipe, S88ProcedureLogic chart, String candidate) {
         return takesNoName(recipe, chart, candidate)
-            && takesNoName(recipe, chart, "BOX_" + candidate)
             && takesNoName(recipe, chart, "T_" + candidate);
     }
 
