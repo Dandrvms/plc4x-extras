@@ -25,6 +25,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
+import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.junit.jupiter.api.Test;
 
@@ -72,6 +75,21 @@ class RecipeChartSceneTest {
 
     private static RecipeChartScene sceneOf(S88MasterRecipe recipe) {
         return RecipeChartScene.forRecipe(recipe);
+    }
+
+    /** A step with no equipment behind it still writes its name, so the box is not a blank. */
+    @Test
+    void aStepWithNoEquipmentStillSaysItsName() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
+
+        RecipeChartScene.NodeSpec spec = RecipeChartScene.nodesOf(recipe, null).get("STEP");
+
+        assertNotNull(spec.label(),
+                "a box with no name reads as nothing being there rather than as a step waiting"
+                        + " for one");
+        assertTrue(spec.label().startsWith("STEP"),
+                "and the name it writes is the one the chart knows it by: " + spec.label());
     }
 
     @Test

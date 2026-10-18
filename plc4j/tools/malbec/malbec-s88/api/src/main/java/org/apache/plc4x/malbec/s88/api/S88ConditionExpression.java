@@ -184,6 +184,24 @@ public final class S88ConditionExpression {
     }
 
     /**
+     * The comparison the way a person reads it, for showing on the chart.
+     * <p>
+     * Written as a sentence rather than as the four parts a recipe stores: the equipment, when one
+     * is named, then the variable's own name and how it is compared. The container the address
+     * lives in is left out, because {@code Reports/STATE} reads as {@code STATE} to the person
+     * looking at the bar.
+     *
+     * @return the comparison as it is shown
+     */
+    public String toDisplay() {
+        if (operator == S88ConditionOperator.OTHER) {
+            return toText();
+        }
+        String read = equipment == null ? variable.getName() : equipment + "." + variable.getName();
+        return read + " " + operator.getSymbol() + " " + literal;
+    }
+
+    /**
      * Whether this comparison reads the same address the text names.
      *
      * @param address address to ask about, may be {@code null}

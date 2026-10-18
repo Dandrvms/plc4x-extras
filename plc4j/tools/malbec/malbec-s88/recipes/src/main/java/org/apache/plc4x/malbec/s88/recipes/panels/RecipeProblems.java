@@ -79,6 +79,24 @@ final class RecipeProblems extends JPanel {
     }
 
     /**
+     * Everything the panel has to say, in the order that helps most: what the recipe cannot run,
+     * what the chart cannot be arranged as, and then whatever the editor is warning about.
+     *
+     * @param report          what is wrong with the recipe
+     * @param chartComplaints what the layout could not arrange, empty when it arranged everything
+     * @param warning         what the editor has to say, or {@code null} for nothing
+     * @return one line per thing to say
+     */
+    static List<String> toShow(RecipeConformance report, List<String> chartComplaints, String warning) {
+        List<String> said = new java.util.ArrayList<>(saidBy(report));
+        said.addAll(chartComplaints);
+        if (warning != null) {
+            said.add(warning);
+        }
+        return said;
+    }
+
+    /**
      * What the report has to say, in the order that helps most.
      *
      * @param report what is wrong with the recipe

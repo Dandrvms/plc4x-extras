@@ -64,6 +64,8 @@ class SetBarConditionUseCaseTest {
         S88Element tank = new S88Element();
         tank.setId("TANQUE_1");
         tank.setLevel(S88Level.UNIT);
+        tank.setProperty("Reports", Map.of("NIVEL",
+                Map.of("Type", "REAL", "Eng_Units/Enum", "%")));
 
         S88PlantModel model = new S88PlantModel(root);
         model.addChild(root, cell);
@@ -136,11 +138,20 @@ class SetBarConditionUseCaseTest {
     }
 
     @Test
-    void aReportNoEquipmentInThePlantPublishesIsNotOffered() {
+    void theEquipmentOfferedIsOfTheLevelTheChartWorksOn() {
         S88PlantSnapshot plant = plant();
+        S88MasterRecipe recipe = recipeOf(S88RecipeKind.CLASS);
 
-        assertTrue(SetBarConditionUseCase.equipmentWithReports(plant).contains("CALENTAMIENTO_1"),
-                "and the list offered is the one that has something to read");
+        assertTrue(SetBarConditionUseCase.equipmentWithReports(plant, null).contains("TANQUE_1"),
+                "because the steps of the chart of the recipe are unit procedures, so a bar there"
+                        + " reads a unit");
+        assertTrue(SetBarConditionUseCase.equipmentWithReports(plant, Levels.owner(recipe, "PASO"))
+                        .contains("CALENTAMIENTO_1"),
+                "and the steps of the chart of an operation are phases, so a bar there reads a"
+                        + " module");
+        assertTrue(SetBarConditionUseCase.equipmentWithReports(plant, null)
+                        .stream().noneMatch("CALENTAMIENTO_1"::equals),
+                "and a module is not offered where the bar reads a unit");
     }
 
     @Test
@@ -246,7 +257,7 @@ class SetBarConditionUseCaseTest {
         S88MasterRecipe recipe = recipeWithAStateReport(S88RecipeKind.INSTANCE);
 
         List<String> offered = SetBarConditionUseCase.allowedValues(
-                recipe, plant, "CALENTAMIENTO_1", "ESTADO_1");
+                recipe, null, "T1", plant, "CALENTAMIENTO_1", "ESTADO_1");
 
         assertTrue(offered.contains("COMPLETE"), offered.toString());
         assertTrue(offered.contains("IDLE"), offered.toString());
@@ -258,7 +269,7 @@ class SetBarConditionUseCaseTest {
         S88MasterRecipe recipe = recipeOf(S88RecipeKind.INSTANCE);
 
         assertEquals(List.of(),
-                SetBarConditionUseCase.allowedValues(recipe, plant, "CALENTAMIENTO_1",
+                SetBarConditionUseCase.allowedValues(recipe, null, "T1", plant, "CALENTAMIENTO_1",
                         "TEMPERATURA_ACTUAL_1"),
                 "because a number is written rather than chosen, so there is no list to show");
     }
@@ -298,5 +309,77 @@ class SetBarConditionUseCaseTest {
         assertEquals(comparison.toText(), readBack.toText(),
                 "and the text survives being written and read again, which is what a recipe stored in"
                         + " a file needs");
+    }
+
+    @Test
+    void aConditionIsShownTheWayAPersonReadsIt() {
+        var byEquipment = org.apache.plc4x.malbec.s88.api.S88ConditionExpression.on("CALENTAMIENTO_1",
+                S88VariableAddress.parse("Reports/STATE"),
+                org.apache.plc4x.malbec.s88.api.S88ConditionOperator.EQUALS, "COMPLETE");
+        var byClass = org.apache.plc4x.malbec.s88.api.S88ConditionExpression.of(
+                S88VariableAddress.parse("Reports/TEMPERATURA_ACTUAL"),
+                org.apache.plc4x.malbec.s88.api.S88ConditionOperator.GREATER, "80");
+
+        assertEquals("CALENTAMIENTO_1.STATE = COMPLETE", byEquipment.toDisplay(),
+                "because the raw text names the container and uses the separators a recipe stores,"
+                        + " and neither is what the person at the chart reads");
+        assertEquals("TEMPERATURA_ACTUAL > 80", byClass.toDisplay(),
+                "and with no equipment named there is nothing to put in front of the report");
+    }
+
+    /** Two classes of unit, both publishing a report of the same name and of different types. */
+    private static S88PlantSnapshot plantWithTwoUnitClasses() {
+        S88ElementClass tanksA = new S88ElementClass();
+        tanksA.setName("TANQUE_A");
+        tanksA.setTargetLevel(S88Level.UNIT);
+        tanksA.setProperty("Reports", Map.of("ESTADO", Map.of(
+                "Type", "ENUMERATION", "Eng_Units/Enum", "STATE", "Default", "IDLE")));
+
+        S88ElementClass tanksB = new S88ElementClass();
+        tanksB.setName("TANQUE_B");
+        tanksB.setTargetLevel(S88Level.UNIT);
+        tanksB.setProperty("Reports", Map.of("ESTADO", Map.of(
+                "Type", "INTEGER", "Eng_Units/Enum", "1")));
+
+        S88Element root = new S88Element();
+        root.setId("PLANT");
+        root.setLevel(S88Level.AREA);
+
+        S88PlantModel model = new S88PlantModel(root);
+        model.registerClass(tanksA);
+        model.registerClass(tanksB);
+        model.registerEnumeration(PlatformEnumerations.stateValue());
+        return PlantSnapshotUseCase.of(model);
+    }
+
+    @Test
+    void aReportOfTwoOfTheRecipeClassesIsReadOffTheOneBeforeTheBar() {
+        S88PlantSnapshot plant = plantWithTwoUnitClasses();
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        Levels.unitProcedure(recipe, "OTRO", "TANQUE_B");
+        S88RecipeElement step = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
+        BindRecipeStepUseCase.bindToClass(recipe, null, step.getId(), "TANQUE_A", plant);
+
+        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null, "ESTADO", "=", "COMPLETE");
+
+        assertEquals("Reports/ESTADO#=#COMPLETE",
+                recipe.getProcedureLogic().findTransition("T1").orElseThrow().getCondition(),
+                "because the class of the step before the bar decides which of two reports of the"
+                        + " same name is meant, and only that one lets the value be a member of its"
+                        + " enumeration rather than a number");
+    }
+
+    @Test
+    void aReportOnlySomeOtherClassOfTheRecipePublishesIsStillReadable() {
+        S88PlantSnapshot plant = plantWithTwoUnitClasses();
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        Levels.unitProcedure(recipe, "OTRO", "TANQUE_B");
+
+        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null, "ESTADO", "=", "7");
+
+        assertEquals("Reports/ESTADO#=#7",
+                recipe.getProcedureLogic().findTransition("T1").orElseThrow().getCondition(),
+                "because a bar can be pointed at a piece of equipment elsewhere in the recipe on"
+                        + " purpose, and there the integer report is the one that is meant");
     }
 }

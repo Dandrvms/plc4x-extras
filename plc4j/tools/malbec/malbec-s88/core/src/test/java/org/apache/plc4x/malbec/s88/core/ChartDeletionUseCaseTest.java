@@ -84,6 +84,22 @@ class ChartDeletionUseCaseTest {
         return recipe;
     }
 
+    /** A parallel block of three branches, each of one step. */
+    private static S88MasterRecipe parallelWithThreeBranches() {
+        S88MasterRecipe recipe = runOfTwoSteps();
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_2");
+        return recipe;
+    }
+
+    /** A selective block of three branches, each of one step with its own bars. */
+    private static S88MasterRecipe alternativeWithThreeBranches() {
+        S88MasterRecipe recipe = runOfTwoSteps();
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_2");
+        return recipe;
+    }
+
     @Test
     void takingAStepOffAStraightRunJoinsWhatItJoined() {
         S88MasterRecipe recipe = runOfTwoSteps();
@@ -169,6 +185,89 @@ class ChartDeletionUseCaseTest {
                 "and the split is left with the one bar that is still there");
         assertEquals(List.of("STEP_1"), departuresOf(recipe, "T_STEP_1"),
                 "and the other branch still leads to its own step");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingOneOfThreeParallelBranchesLeavesTheTwoThatAreThere() {
+        S88MasterRecipe recipe = parallelWithThreeBranches();
+
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
+
+        assertEquals(List.of("STEP", "STEP_3"), departuresOf(recipe, "T_STEP"),
+                "and the fork is left with the two branches that are still there");
+        assertEquals(List.of("STEP", "STEP_3"), arrivalsOf(recipe, "T_STEP_1"),
+                "and both of them come back to the bar that closes the block");
+        assertEquals(S88LinkType.PARALLEL_DIVERGENT, typeOfLineLeaving(recipe, "T_STEP"),
+                "and the line still says it splits, because a block of two is still a block");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingTwoOfThreeParallelBranchesTakesTheBlockWithThem() {
+        S88MasterRecipe recipe = parallelWithThreeBranches();
+
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
+
+        assertEquals(List.of("STEP"), departuresOf(recipe, "T_STEP"),
+                "and the fork is left with the one branch that is still there");
+        assertEquals(S88LinkType.CONTROL_LINK, typeOfLineLeaving(recipe, "T_STEP"),
+                "and the line goes back to being an ordinary line, because one branch is no"
+                        + " longer a block");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T1", "END"),
+                flowOf(recipe),
+                "and the chart is the straight run it was before the fork was put in");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingOneOfThreeAlternativeBranchesLeavesTheTwoThatAreThere() {
+        S88MasterRecipe recipe = alternativeWithThreeBranches();
+
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
+
+        assertEquals(List.of("T_STEP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
+                "and the split is left with the two branches that are still there");
+        assertEquals(List.of("T_STEP_1", "T_BRANCH_1"), arrivalsOf(recipe, "STEP_1"),
+                "and both of them come back to the bar that closes the block");
+        assertEquals(S88LinkType.SERIAL_DIVERGENT, typeOfLineLeaving(recipe, "BEGIN"),
+                "and the line still says the flow goes one way or the other");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingTwoOfThreeAlternativeBranchesTakesTheBlockWithThem() {
+        S88MasterRecipe recipe = alternativeWithThreeBranches();
+
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_2");
+
+        assertEquals(List.of("T_STEP"), departuresOf(recipe, "BEGIN"),
+                "and the split is left with the one branch that is still there");
+        assertEquals(S88LinkType.CONTROL_LINK, typeOfLineLeaving(recipe, "BEGIN"),
+                "and the line goes back to being an ordinary line, because one branch is no"
+                        + " longer a block");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T1", "END"),
+                flowOf(recipe),
+                "and the chart is the straight run it was before the block was put in");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingTheOnlyStepOfANestedBranchCollapsesOnlyThatBlock() {
+        S88MasterRecipe recipe = runOfThreeSteps();
+        ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP_1");
+
+        ChartDeletionUseCase.deleteBox(recipe, null, "STEP_3");
+
+        assertEquals(List.of("STEP_1"), departuresOf(recipe, "T_STEP_1"),
+                "and the inner fork is left with the one branch that is still there");
+        assertEquals(S88LinkType.CONTROL_LINK, typeOfLineLeaving(recipe, "T_STEP_1"),
+                "and the line goes back to being an ordinary line, because the inner block is gone");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T_STEP_2", "STEP_2",
+                        "T1", "END"), flowOf(recipe),
+                "and the run the block was put into is exactly as it was");
         assertHoldsTogether(recipe);
     }
 

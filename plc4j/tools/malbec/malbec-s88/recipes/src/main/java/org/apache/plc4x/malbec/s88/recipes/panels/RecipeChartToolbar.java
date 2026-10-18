@@ -374,7 +374,7 @@ final class RecipeChartToolbar {
         boolean byClass = recipe.addressesByClass();
         String equipment = null;
         if (!byClass) {
-            List<String> withReports = SetBarConditionUseCase.equipmentWithReports(plant);
+            List<String> withReports = SetBarConditionUseCase.equipmentWithReports(plant, owner);
             if (withReports.isEmpty()) {
                 JOptionPane.showMessageDialog(bar(), "No equipment in this plant publishes a report, so there is nothing a bar" + " can wait on.", "No reports", JOptionPane.INFORMATION_MESSAGE);
                 return;
@@ -384,7 +384,7 @@ final class RecipeChartToolbar {
                 return;
             }
         }
-        List<String> reports = byClass ? SetBarConditionUseCase.reportsToWaitOn(recipe, plant) : SetBarConditionUseCase.reportsOf(plant, equipment);
+        List<String> reports = byClass ? SetBarConditionUseCase.reportsToWaitOn(recipe, owner, bar, plant) : SetBarConditionUseCase.reportsOf(plant, equipment);
         if (reports.isEmpty()) {
             JOptionPane.showMessageDialog(bar(), byClass ? "No class of equipment in this recipe publishes a report, so there is" + " nothing to wait on." : equipment + " publishes no report, so there is nothing to wait on.", "No reports", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -397,7 +397,7 @@ final class RecipeChartToolbar {
         if (operator == null) {
             return;
         }
-        String value = askForValue(recipe, plant, equipment, report, operator);
+        String value = askForValue(recipe, owner, bar, plant, equipment, report, operator);
         if (value == null) {
             return;
         }
@@ -418,10 +418,11 @@ final class RecipeChartToolbar {
      * A report that is an enumeration has a fixed set of values, and they are offered rather than
      * written. Anything else is written.
      */
-    private String askForValue(S88MasterRecipe recipe, S88PlantSnapshot plant, String equipment,
-                               String report, String operator) {
-        List<String> offered =
-                SetBarConditionUseCase.allowedValues(recipe, plant, equipment, report);
+    private String askForValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
+                               S88PlantSnapshot plant, String equipment, String report,
+                               String operator) {
+        List<String> offered = SetBarConditionUseCase.allowedValues(recipe, owner, barId, plant,
+                equipment, report);
         if (!offered.isEmpty()) {
             return chooseOne(offered,
                     "Value of " + report + " has to compare " + operator + " against",

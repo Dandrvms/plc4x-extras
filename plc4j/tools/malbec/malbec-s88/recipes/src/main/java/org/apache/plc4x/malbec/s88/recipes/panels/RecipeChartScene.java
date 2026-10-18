@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.List;
 import java.util.function.BiConsumer;
 import javax.swing.JComponent;
+import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
 import org.apache.plc4x.malbec.s88.api.PlatformVariable;
@@ -196,9 +197,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
             RecipeShapes.Shape shape =
                     element == null ? RecipeShapes.Shape.BOX : RecipeShapes.shapeOf(element.getKind());
 
-            boolean saysSomething = shape == RecipeShapes.Shape.BOX
-                    && element != null
-                    && namesEquipment(element);
+            boolean saysSomething = shape == RecipeShapes.Shape.BOX && element != null;
             what.put(step.getId(), new NodeSpec(shape,
                     saysSomething ? stepLabel(step, element) : null,
                     saysSomething ? stepTooltip(step, element) : null));
@@ -218,7 +217,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @return the lines to write
      */
     private static String stepLabel(S88ProcedureStep step, S88RecipeElement element) {
-        if (element == null || !namesEquipment(element)) {
+        if (element == null) {
             return null;
         }
         List<String> lines = new ArrayList<>();
@@ -290,16 +289,11 @@ final class RecipeChartScene extends GraphScene<String, String> {
         return String.join("\n", lines);
     }
 
-    /**
-     * Whether a step says what it works on, which is what makes it a step rather than a place the flow
-     * goes through.
-     */
-    private static boolean namesEquipment(S88RecipeElement element) {
-        return element.getEquipmentClassId() != null
-                || !element.getActualEquipmentIds().isEmpty();
-    }
-
     private static String conditionText(S88ProcedureTransition transition) {
+        S88ConditionExpression comparison = S88ConditionExpression.parse(transition.getCondition());
+        if (comparison != null) {
+            return comparison.toDisplay();
+        }
         String condition = transition.getCondition();
         return condition == null || condition.isBlank() ? null : condition;
     }

@@ -193,11 +193,8 @@ public final class RecipeChartView extends AbstractRecipeView {
         scene.draw(model.getRecipe(), model.currentStep());
         scene.markEmpty(model.justAddedStep());
         toolbar.refreshUpButton();
-        List<String> said = RecipeProblems.saidBy(model.conformance());
-        if (model.warning() != null) {
-            said.add(model.warning());
-        }
-        problems.show(said);
+        problems.show(RecipeProblems.toShow(model.conformance(), scene.complaints(),
+                model.warning()));
     }
 
     /**

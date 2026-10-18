@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -138,7 +137,6 @@ class SfcLayoutEngineTest {
     }
 
     @Test
-    @Disabled("N14. El unico carril de los bucles pasa por encima de la barra de al lado: BUCLE, L8>PACK>T_MIX_AGAIN atraviesa T_PACK_DONE. Hace falta un carril por bucle. Se rehabilita en la fase D.1.")
     void aLineDoesNotGoThroughAThingItIsNotJoinedTo() {
         for (S88MasterRecipe recipe : SfcFixtures.all()) {
             SfcLayoutEngine.Placement at = arrange(recipe);
@@ -168,9 +166,7 @@ class SfcLayoutEngineTest {
         if (box.contains(from) || box.contains(to)) {
             return false;
         }
-        return box.intersects(new Rectangle(
-                Math.min(from.x, to.x), Math.min(from.y, to.y),
-                Math.max(1, Math.abs(to.x - from.x)), Math.max(1, Math.abs(to.y - from.y))));
+        return box.intersectsLine(from.x + 0.5, from.y + 0.5, to.x + 0.5, to.y + 0.5);
     }
 
     @Test
@@ -192,8 +188,17 @@ class SfcLayoutEngineTest {
         return box == null ? 0 : box.x + box.width / 2;
     }
 
+    /** The line a node stands on: the middle of a box, and the bar itself on a transition. */
+    private static int lineOf(SfcLayoutEngine.Placement at, String node) {
+        Rectangle bar = at.bars().get(node);
+        if (bar != null) {
+            return bar.x + SfcMetrics.TRANSITION_WIDTH / 2;
+        }
+        Rectangle box = at.steps().get(node);
+        return box.x + box.width / 2;
+    }
+
     @Test
-    @Disabled("N7. La horquilla no queda centrada sobre sus ramas: widenConvergentRanges ensancha el rango de la hoja de cada nodo con el de todos sus predecesores, no solo de los que tienen dos o mas. Se rehabilita en la fase D.1.")
     void aBranchIsCentredOnWhereItLeft() {
         SfcLayoutEngine.Placement at = arrange(SfcFixtures.parallelDivergence());
 
@@ -205,6 +210,77 @@ class SfcLayoutEngineTest {
                 "two steps leaving one bar sit either side of that bar's line, so the chart reads as"
                         + " one thing splitting rather than two things that happen to be close");
         assertTrue(heatCentre != coolCentre, "and they are actually either side of it");
+    }
+
+    /** The two branches of a split are the same distance either side of the split's line. */
+    @Test
+    void theTwoBranchesOfASplitAreMirroredAboutItsLine() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.parallelDivergence());
+
+        int line = lineOf(at, "T_SPLIT");
+        int left = line - lineOf(at, "HEAT");
+        int right = lineOf(at, "COOL") - line;
+
+        assertEquals(left, right,
+                "so the chart reads as one thing splitting rather than one branch further out than"
+                        + " the other: " + left + " against " + right);
+        assertTrue(left > 0, "and the branches really are either side of the line");
+    }
+
+    /** A split and the join where its branches meet again stand on the same line. */
+    @Test
+    void aSplitAndItsJoinStandOnTheSameLine() {
+        SfcLayoutEngine.Placement parallel = arrange(SfcFixtures.parallelDivergence());
+        assertEquals(lineOf(parallel, "T_SPLIT"), lineOf(parallel, "T_MERGE"),
+                "the flow leaves and comes back on one line, so the block reads as one block");
+
+        SfcLayoutEngine.Placement selective = arrange(SfcFixtures.selectiveDivergence());
+        assertEquals(lineOf(selective, "CHARGE"), lineOf(selective, "T_PACKED"),
+                "and the same holds where the split leaves a step rather than a bar");
+    }
+
+    /** A three-way split stands over its middle branch, which is what makes it read as centred. */
+    @Test
+    void aThreeWaySplitStandsOverItsMiddleBranch() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.parallelWithThreeBranches());
+
+        int heat = centreX(at, "HEAT");
+        int cool = centreX(at, "COOL");
+        int wash = centreX(at, "WASH");
+
+        assertEquals(lineOf(at, "T_SPLIT"), cool,
+                "with three branches the middle one is what the split stands over");
+        assertTrue(heat < cool && cool < wash, "and the three are laid out in order, left to right");
+    }
+
+    /** Nothing the layout draws hangs off the chart it says it needs room for. */
+    @Test
+    void everyPointOfEveryLineIsInsideTheChartItAskedFor() {
+        for (S88MasterRecipe recipe : SfcFixtures.all()) {
+            SfcLayoutEngine.Placement at = arrange(recipe);
+            for (SfcLayoutEngine.Link link : at.links()) {
+                for (Point point : link.path()) {
+                    assertTrue(at.total().contains(point),
+                            recipe.getId() + ": " + link.id() + " goes to " + point
+                                    + ", which is outside " + at.total());
+                }
+            }
+        }
+    }
+
+    /** The bar across a split does not sit on top of the branches it joins. */
+    @Test
+    void theBarAcrossASplitDoesNotCoverABranch() {
+        for (S88MasterRecipe recipe : SfcFixtures.all()) {
+            SfcLayoutEngine.Placement at = arrange(recipe);
+            for (SfcLayoutEngine.SyncBar bar : at.syncBars().values()) {
+                for (Rectangle node : everything(at)) {
+                    assertFalse(bar.where().intersects(node),
+                            recipe.getId() + ": the bar across the branches at " + bar.where()
+                                    + " is drawn over " + node);
+                }
+            }
+        }
     }
 
     @Test
@@ -357,7 +433,6 @@ class SfcLayoutEngineTest {
 
     /** A bar wide enough for its comparison is not allowed to push its own branch sideways. */
     @Test
-    @Disabled("N7. La misma causa que aBranchIsCentredOnWhereItLeft, con el numero de barras que hacen falta para que no pase desapercibida. Se rehabilita en la fase D.1.")
     void twoBarsWithLongComparisonsEachStayOverTheirOwnBranch() {
         S88MasterRecipe recipe = SfcFixtures.selectiveDivergence();
         SfcLayoutEngine.Placement at = arrange(recipe);

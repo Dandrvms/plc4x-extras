@@ -56,6 +56,12 @@ final class SfcLayoutEngine {
     private final Map<String, Integer> axis = new LinkedHashMap<>();
     private final List<String> complaints = new ArrayList<>();
 
+    /** Where the flow starts, worked out once so that a chart's verdict is only given once. */
+    private String start;
+
+    /** The lane each line that goes back up is taken out to, by its two ends. */
+    private final Map<String, Integer> laneOfEdge = new LinkedHashMap<>();
+
     /**
      * @param chart       the chart to arrange
      * @param shapes      what each node is drawn as, which is what decides how much room it takes
@@ -132,7 +138,6 @@ final class SfcLayoutEngine {
         }
         readChart();
         numberRows();
-        refineOrder();
         assignAxis();
         return build();
     }
@@ -258,22 +263,28 @@ final class SfcLayoutEngine {
         return ordered;
     }
 
-    /** The step of kind begin, or the first node nothing leads to. */
+    /** The step of kind begin, or the first node nothing leads to. Worked out once and kept. */
     private String findStart() {
+        if (start != null) {
+            return start;
+        }
         for (String id : shapes.keySet()) {
             if (shapes.get(id) == RecipeShapes.Shape.START) {
-                return id;
+                start = id;
+                return start;
             }
         }
         for (String id : shapes.keySet()) {
             if (predecessors.get(id).isEmpty()) {
                 complaints.add("This chart has no step of kind begin, so the drawing starts at '"
                         + id + "', the first thing nothing leads to.");
-                return id;
+                start = id;
+                return start;
             }
         }
         complaints.add("This chart has no step to start at: every node has something leading to it.");
-        return shapes.keySet().iterator().next();
+        start = shapes.keySet().iterator().next();
+        return start;
     }
 
     /**
@@ -304,64 +315,6 @@ final class SfcLayoutEngine {
     // ========== Left to right ==========
 
     /**
-     * Orders each row so that branches do not cross: a node is better placed between the ones it is
-     * joined to than between the ones next to it, so each row is sorted on the row above and then
-     * the one below, a few times over.
-     */
-    private void refineOrder() {
-        List<List<String>> byRow = rowsOfEverything();
-        for (int pass = 0; pass < 4; pass++) {
-            for (int i = 1; i < byRow.size(); i++) {
-                reorder(byRow.get(i), byRow.get(i - 1));
-            }
-            for (int i = byRow.size() - 2; i >= 0; i--) {
-                reorder(byRow.get(i), byRow.get(i + 1));
-            }
-        }
-    }
-
-    private void reorder(List<String> inThisRow, List<String> inTheOther) {
-        Map<String, Integer> where = new HashMap<>();
-        for (int i = 0; i < inTheOther.size(); i++) {
-            where.put(inTheOther.get(i), i);
-        }
-        Map<String, Double> wanted = new HashMap<>();
-        for (String id : inThisRow) {
-            wanted.put(id, middleOfNeighbours(id, where).orElse(Double.MAX_VALUE));
-        }
-        inThisRow.sort(Comparator.comparingDouble(id -> wanted.getOrDefault(id, Double.MAX_VALUE)));
-    }
-
-    /** Where a node's neighbors sit in the other row, on average. */
-    private OptionalDouble middleOfNeighbours(String node, Map<String, Integer> where) {
-        List<Integer> at = new ArrayList<>();
-        for (String other : neighbors(node)) {
-            Integer one = where.get(other);
-            if (one != null) {
-                at.add(one);
-            }
-        }
-        if (at.isEmpty()) {
-            return OptionalDouble.empty();
-        }
-        double total = 0;
-        for (int one : at) {
-            total += one;
-        }
-        return OptionalDouble.of(total / at.size());
-    }
-
-    private List<String> neighbors(String node) {
-        List<String> before = new ArrayList<>();
-        for (String other : predecessors.getOrDefault(node, Set.of())) {
-            if (!goingBackwards.contains(edge(other, node))) {
-                before.add(other);
-            }
-        }
-        return before;
-    }
-
-    /**
      * Puts each node in the middle of the leaves it is responsible for.
      * <p>
      * A node that splits into two is given one leaf's worth of the chart for each branch, and each
@@ -379,9 +332,11 @@ final class SfcLayoutEngine {
         int room = used + shapes.size() + 1;
         int[] leafWidth = new int[room];
         for (Map.Entry<String, int[]> entry : leafRange.entrySet()) {
-            int width = widthOf(entry.getKey());
-            for (int leaf = entry.getValue()[0]; leaf < entry.getValue()[1]; leaf++) {
-                leafWidth[leaf] = Math.max(leafWidth[leaf], width);
+            int[] range = entry.getValue();
+            int covered = Math.max(1, range[1] - range[0]);
+            int each = (widthOf(entry.getKey()) + covered - 1) / covered;
+            for (int leaf = range[0]; leaf < range[1]; leaf++) {
+                leafWidth[leaf] = Math.max(leafWidth[leaf], each);
             }
         }
         int[] where = new int[room + 1];
@@ -408,45 +363,48 @@ final class SfcLayoutEngine {
         shiftRight();
     }
 
-    /** Widens the run of every node the flow rejoins at, to cover every branch that reaches it. */
+    /**
+     * Widens the run of an arrival to cover every line that reaches it, so that a join stands over
+     * all of its branches and the steps after it keep its line.
+     * <p>
+     * A split does the opposite: the line that leaves it already covers every branch, and the branch
+     * itself is only as wide as the leaves under it. Letting a branch take the split's whole run is
+     * what puts a fork's line in the middle of the chart instead of over the fork, and it is not
+     * done here.
+     */
     private void widenConvergentRanges() {
         boolean changed = true;
         int guard = 0;
         int ceiling = chart.getSteps().size() + 1;
         while (changed && guard++ <= ceiling) {
             changed = false;
-            for (String id : orderOfAppearance()) {
-                int[] mine = leafRange.get(id);
-                if (mine == null) {
+            for (S88ProcedureLink line : chart.getLinks()) {
+                if (line.isDivergent()) {
                     continue;
                 }
-                for (String before : predecessorsOf(id)) {
-                    int[] theirs = leafRange.get(before);
-                    if (theirs == null) {
+                List<String> froms = internalNames(line.getFrom());
+                for (String id : internalNames(line.getTo())) {
+                    int[] mine = leafRange.get(id);
+                    if (mine == null) {
                         continue;
                     }
-                    int low = Math.min(mine[0], theirs[0]);
-                    int high = Math.max(mine[1], theirs[1]);
-                    if (low != mine[0] || high != mine[1]) {
-                        leafRange.put(id, new int[]{low, high});
-                        changed = true;
+                    for (String before : froms) {
+                        int[] theirs = leafRange.get(before);
+                        if (theirs == null) {
+                            continue;
+                        }
+                        int low = Math.min(mine[0], theirs[0]);
+                        int high = Math.max(mine[1], theirs[1]);
+                        if (low != mine[0] || high != mine[1]) {
+                            leafRange.put(id, new int[]{low, high});
+                            changed = true;
+                        }
                     }
                 }
             }
         }
     }
 
-    /** The nodes the given one is reached from. */
-    private List<String> predecessorsOf(String id) {
-        Set<String> found = new LinkedHashSet<>();
-        for (S88ProcedureLink line : chart.getLinks()) {
-            if (line.getTo().stream().anyMatch(end -> id.equals(end.getValue()))) {
-                line.getFrom().forEach(end -> found.add(end.getValue()));
-            }
-        }
-        found.remove(id);
-        return new ArrayList<>(found);
-    }
     /**
      * Puts each row in the order of the leaves it stands over.
      */
@@ -564,6 +522,7 @@ final class SfcLayoutEngine {
         Map<String, SyncBar> drawnSyncBars = new LinkedHashMap<>();
         List<Link> drawn = new ArrayList<>();
         int rightmost = rightmostOf(corners);
+        assignLanes(corners);
         for (S88ProcedureLink link : links) {
             Rectangle bar = null;
             if (syncBars.containsKey(link.getId())) {
@@ -582,12 +541,39 @@ final class SfcLayoutEngine {
                 widestRight = Math.max(widestRight, point.x);
             }
         }
-        int height = SfcMetrics.MARGIN + (deepest + SfcMetrics.ROW);
+        Rectangle total = new Rectangle(0, 0,
+                Math.max(1, widestRight + SfcMetrics.BACK_EDGE_LANE),
+                Math.max(1, deepest + SfcMetrics.MARGIN));
         return new Placement(cornersOfKind(corners, false), cornersOfKind(corners, true),
-                drawnSyncBars, drawn,
-                new Rectangle(SfcMetrics.MARGIN, SfcMetrics.MARGIN,
-                        Math.max(1, widestRight + SfcMetrics.BACK_EDGE_LANE), height),
-                List.copyOf(complaints), goingBackwards.size());
+                drawnSyncBars, drawn, total, List.copyOf(complaints), goingBackwards.size());
+    }
+
+    /**
+     * Gives every line that goes back up a lane of its own to the right of everything else.
+     * <p>
+     * One lane for all of them is one lane they would share, and two loops drawn on the same line
+     * is a drawing that cannot be read. Each loop takes the next lane, in the order the recipe
+     * wrote the lines in, so the same recipe always comes out the same way.
+     */
+    private void assignLanes(Map<String, Rectangle> corners) {
+        int rightmost = rightmostOf(corners);
+        int lane = 1;
+        for (S88ProcedureLink link : links) {
+            List<String> tos = internalNames(link.getTo());
+            boolean takesOne = false;
+            for (String from : internalNames(link.getFrom())) {
+                for (String to : tos) {
+                    if (goingBackwards.contains(edge(from, to))) {
+                        laneOfEdge.put(edge(from, to),
+                                rightmost + lane * SfcMetrics.BACK_EDGE_LANE);
+                        takesOne = true;
+                    }
+                }
+            }
+            if (takesOne) {
+                lane++;
+            }
+        }
     }
 
     private Map<String, Rectangle> cornersOfKind(Map<String, Rectangle> corners, boolean asBar) {
@@ -672,14 +658,16 @@ final class SfcLayoutEngine {
         Point arriving = arrivesAt(to, target);
 
         if (goingBackwards.contains(edge(from, to))) {
-            int lane = rightmostOf(corners) + SfcMetrics.BACK_EDGE_LANE;
-            int dip = Math.max(leaving.y + SfcMetrics.ROW / 3, arriving.y - SfcMetrics.ROW / 3);
+            int lane = laneOfEdge.getOrDefault(edge(from, to),
+                    rightmostOf(corners) + SfcMetrics.BACK_EDGE_LANE);
+            Point into = sideOf(target);
+            int dip = Math.max(leaving.y + SfcMetrics.ROW / 3, into.y - SfcMetrics.ROW / 3);
             return new Link(linkId + ">" + from + ">" + to, linkId, true, List.of(
                     leaving,
                     new Point(leaving.x, dip),
                     new Point(lane, dip),
-                    new Point(lane, arriving.y),
-                    arriving));
+                    new Point(lane, into.y),
+                    into));
         }
         if (syncBar == null) {
             return new Link(linkId + ">" + from + ">" + to, linkId, false,
@@ -703,6 +691,16 @@ final class SfcLayoutEngine {
     /** Where a line arrives at a node, which is the middle of a bar and the top of a step. */
     private Point arrivesAt(String node, Rectangle box) {
         return new Point(acrossAt(node, box), barOrEdge(node, box, false));
+    }
+
+    /**
+     * Where a line that goes back up enters a node: its right side.
+     * <p>
+     * It comes in from the lane it was taken out to, so it arrives at the side rather than over the
+     * top of whatever is above the node, which is what it would have to cross to come in from there.
+     */
+    private Point sideOf(Rectangle box) {
+        return new Point(box.x + box.width, box.y + box.height / 2);
     }
 
     /** Across a node: the middle of a bar, and the middle of a box. */
