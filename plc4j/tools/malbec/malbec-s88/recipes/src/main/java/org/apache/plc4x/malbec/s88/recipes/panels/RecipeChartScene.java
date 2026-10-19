@@ -85,6 +85,13 @@ final class RecipeChartScene extends GraphScene<String, String> {
     private BiConsumer<String, String> onConnected = (from, to) -> {
     };
 
+    /** Told when the pick changes, so that the orders can be enabled for what is picked. */
+    private Runnable onSelectionChanged = () -> {
+    };
+
+    /** The one end of a join the operator has started, {@code null} when no drag is under way. */
+    private String joinFrom;
+
     /**
      * The lines the recipe holds, which is what tells a line apart from a box or a bar.
      * <p>
@@ -120,6 +127,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
      */
     void draw(S88MasterRecipe recipe, S88RecipeElement owner) {
         Map<String, NodeSpec> what = nodesOf(recipe, owner);
+        this.empty = emptiesOf(recipe, owner);
         placeBoxes(what);
         SfcLayoutEngine.Placement at = new SfcLayoutEngine(
                 EditProcedureLogicUseCase.existingChart(recipe, owner),
@@ -181,6 +189,15 @@ final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     /**
+     * Says when the pick changes, so that the orders can be enabled for what is now picked.
+     *
+     * @param listener what to call after a pick is put on or taken off
+     */
+    void setOnSelectionChanged(Runnable listener) {
+        this.onSelectionChanged = listener;
+    }
+
+    /**
      * Every box and bar of a recipe, each with the shape it is drawn as and the name it says.
      *
      * @param recipe the recipe to read
@@ -207,6 +224,32 @@ final class RecipeChartScene extends GraphScene<String, String> {
                     RecipeShapes.Shape.TRANSITION, conditionText(transition), transition.getId()));
         }
         return what;
+    }
+
+    /**
+     * The boxes whose step works on nothing yet, which the drawing marks with a broken outline.
+     *
+     * <p>Read from the recipe rather than remembered, so a step that is given equipment stops being
+     * marked without anything having to tell the drawing that it happened.
+     *
+     * @param recipe the recipe to read
+     * @param owner  step whose chart to read, {@code null} for the chart of the recipe
+     * @return the names of the boxes with nothing behind them
+     */
+    private static Set<String> emptiesOf(S88MasterRecipe recipe, S88RecipeElement owner) {
+        Set<String> empty = new HashSet<>();
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.existingChart(recipe, owner);
+        if (chart == null) {
+            return empty;
+        }
+        for (S88ProcedureStep step : chart.getSteps()) {
+            S88RecipeElement element = recipe.findElement(step.getRecipeElementId()).orElse(null);
+            String equipment = element == null ? null : equipmentOf(element);
+            if (equipment == null || equipment.isBlank()) {
+                empty.add(step.getId());
+            }
+        }
+        return empty;
     }
 
     /**
@@ -576,6 +619,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
             now.repaint();
         }
         restyle(wanted);
+        onSelectionChanged.run();
     }
 
     /** A pick that was asked for before the chart was drawn again. */
@@ -609,11 +653,47 @@ final class RecipeChartScene extends GraphScene<String, String> {
      */
     void setJoining(boolean joining) {
         this.joining = joining;
+        if (!joining) {
+            forgetJoinSource();
+        }
     }
 
     /** Whether a drag from one node to another joins them, which is off until it is asked for. */
     boolean isJoining() {
         return joining;
+    }
+
+    /**
+     * Forgets the end of a join that was started, which ends the highlighting of the other end.
+     */
+    void forgetJoinSource() {
+        joinFrom = null;
+        repaintEveryNode();
+    }
+
+    /**
+     * Whether a node is somewhere the join under way can land.
+     *
+     * <p>Joining is off until the operator asks for it, and then only a step and a transition of the
+     * other kind can be joined: a line always runs from one to the other, never between two of a
+     * kind.
+     *
+     * @param node name of the node
+     * @return whether the join under way would go through if it landed here
+     */
+    boolean isJoinTarget(String node) {
+        return joining && joinFrom != null && !joinFrom.equals(node)
+                && nodes.containsKey(node) && isBar(joinFrom) != isBar(node);
+    }
+
+    /** Draws every box and bar again, which is what shows and hides the join highlighting. */
+    private void repaintEveryNode() {
+        for (String id : nodes.keySet()) {
+            Widget widget = findWidget(id);
+            if (widget != null) {
+                widget.repaint();
+            }
+        }
     }
 
     /** Which node the buttons on the toolbar will act on, {@code null} when nothing is picked. */
@@ -626,32 +706,13 @@ final class RecipeChartScene extends GraphScene<String, String> {
         return selected != null && isNode(selected) ? selected : null;
     }
 
-    /**
-     * Marks one box as having nothing behind it, so the drawing says so.
-     *
-     * @param node name of the box to mark, {@code null} for none
-     */
-    void markEmpty(String node) {
-        String wanted = node != null && nodes.containsKey(node) ? node : null;
-        String was = empty;
-        this.empty = wanted;
-        Widget before = findWidget(was);
-        Widget after = findWidget(wanted);
-        if (before != null) {
-            before.repaint();
-        }
-        if (after != null) {
-            after.repaint();
-        }
-    }
-
     /** Whether a box is one that has no equipment behind it yet. */
     boolean isEmpty(String node) {
-        return empty != null && empty.equals(node);
+        return empty.contains(node);
     }
 
-    /** The box that has no equipment behind it yet, {@code null} when there is none. */
-    private String empty;
+    /** The boxes whose step works on nothing yet, which the drawing marks. */
+    private Set<String> empty = Set.of();
 
     /** Whether a box or a bar is the picked one, which is how the drawing knows to mark it. */
     boolean isSelected(String node) {
@@ -857,6 +918,8 @@ final class RecipeChartScene extends GraphScene<String, String> {
         public WidgetAction.State mousePressed(
                 Widget widget, WidgetAction.WidgetMouseEvent event) {
             dragged = joining ? fromWidget(widget) : null;
+            joinFrom = dragged;
+            repaintEveryNode();
             return WidgetAction.State.REJECTED;
         }
 
@@ -865,6 +928,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
             Widget widget, WidgetAction.WidgetMouseEvent event) {
             String from = dragged;
             dragged = null;
+            forgetJoinSource();
             if (from == null) {
                 return WidgetAction.State.REJECTED;
             }
@@ -988,6 +1052,12 @@ final class RecipeChartScene extends GraphScene<String, String> {
                 g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
                         10f, new float[]{3f, 3f}, 0f));
                 g.drawRect(2, 2, bounds.width - 5, bounds.height - 5);
+            }
+            if (chart.isJoinTarget(id)) {
+
+                g.setColor(new Color(0, 120, 0));
+                g.setStroke(new BasicStroke(2f));
+                g.drawRect(0, 0, bounds.width - 2, bounds.height - 2);
             }
         }
     }

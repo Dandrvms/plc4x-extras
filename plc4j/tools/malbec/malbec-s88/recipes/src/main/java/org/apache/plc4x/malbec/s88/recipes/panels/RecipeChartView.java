@@ -19,27 +19,27 @@
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.BorderLayout;
-import java.util.List;
+import java.awt.Cursor;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import javax.swing.Action;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JPopupMenu;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import org.apache.plc4x.malbec.s88.api.S88LinkType;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
-import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
-import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
-import org.apache.plc4x.malbec.s88.core.RecipeLevels;
+import javax.swing.KeyStroke;
 
 /**
- * The chart of a recipe, drawn as boxes and bars.
+ * The chart of a recipe, drawn as boxes and transitions.
  * <p>
  * The recipe is read into the scene on every redraw, so the chart and the table are two drawings of
  * one thing and cannot drift apart: whatever either of them changed is what the other shows.
  * <p>
- * <b>Joining two things is an edit.</b> A line dragged from a box to a bar becomes a link in the
- * recipe, and the connector refuses anything else.
+ * <b>Joining two things is an edit.</b> A line dragged from a box to a transition becomes a link in
+ * the recipe, and the connector refuses anything else.
  * <p>
  * <b>Where things are drawn is not part of the recipe.</b> A sequential chart is read from top to
  * bottom, so the chart is arranged again every time it is drawn rather than remembering where a box
@@ -49,16 +49,18 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     private final RecipeChartScene scene = new RecipeChartScene();
 
-    /** The buttons that act on the chart on show, which move as that chart moves. */
-    private RecipeChartToolbar toolbar;
+    /** The orders of this chart, which the bar, the menu and the keys all run. */
+    private final RecipeChartToolbar toolbar;
 
     public RecipeChartView(RecipeEditorModel model) {
         super(model);
-        scene.setOnConnected(this::onConnected);
+        toolbar = new RecipeChartToolbar(this, scene);
+        scene.setOnConnected(toolbar::join);
+        scene.setOnSelectionChanged(toolbar::refresh);
         view = scene.createView();
         pickWithThePointer();
+        bindKeys();
         zoomWithControlAndWheel(view, scene);
-        this.toolbar = new RecipeChartToolbar(this, scene);
         toolbar.addTo(toolBar());
         add(new JScrollPane(view), BorderLayout.CENTER);
 
@@ -74,28 +76,35 @@ public final class RecipeChartView extends AbstractRecipeView {
     /** What is wrong with the recipe, which only takes up room when there is something to say. */
     private final RecipeProblems problems;
 
+    /** The menu a right click brings up, filled when it comes up. */
+    private final JPopupMenu contextMenu = new JPopupMenu();
+
     /**
-     * Picks a box, a bar or a line when the operator clicks on it.
+     * Picks a box, a transition or a line when the operator clicks on it.
      *
-     * <p>A double click draws the chart of the step the box works on, which is the only way in.
-     * A right click offers the actions of the toolbar on whatever was picked.
+     * <p>A double click draws the chart of the step the box works on, which is the only way in. A
+     * right click offers the orders of the chart on whatever was picked. On some platforms a right
+     * click is the button going down and on others the button coming up, so both are asked.
      */
     private void pickWithThePointer() {
-        view.addMouseListener(new java.awt.event.MouseAdapter() {
+        view.addMouseListener(new MouseAdapter() {
             @Override
-            public void mousePressed(java.awt.event.MouseEvent event) {
+            public void mousePressed(MouseEvent event) {
                 scene.pickAtInView(view, event.getPoint());
-            }
-
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent event) {
-                if (event.getClickCount() == 2) {
-                    openChartOfPickedBox();
+                if (event.isPopupTrigger()) {
+                    showMenuFor(event);
                 }
             }
 
             @Override
-            public void mouseReleased(java.awt.event.MouseEvent event) {
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2) {
+                    toolbar.openChartOfPickedBox();
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
                 if (event.isPopupTrigger()) {
                     showMenuFor(event);
                 }
@@ -104,45 +113,35 @@ public final class RecipeChartView extends AbstractRecipeView {
     }
 
     /**
-     * Draws the chart of the step the picked box works on.
-     *
-     * <p>A step that holds no chart of its own is told apart from one whose chart has not been made
-     * yet: a unit procedure or an operation is meant to have one, so it is offered here rather than
-     * being told it is the last level when it is not.
-     */
-    private void openChartOfPickedBox() {
-        String box = scene.pickedBox();
-        if (box == null) {
-            return;
-        }
-        S88ProcedureStep picked = model.chartBeingEdited().findStep(box).orElse(null);
-        if (picked == null) {
-            return;
-        }
-        S88RecipeElement step = model.getRecipe()
-                .findElement(picked.getRecipeElementId()).orElse(null);
-        if (step == null) {
-            return;
-        }
-        if (step.getProcedureLogic() == null && !RecipeLevels.allowsSubChart(step.getKind())) {
-            JOptionPane.showMessageDialog(this, "Step '" + step.getId() + "' is a "
-                    + step.getKind() + ", which is the last level and holds no chart of its own.",
-                    "Nothing under it", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        model.editChartOf(step);
-    }
-
-    /**
-     * Offers the actions of the toolbar on whatever the pointer is over.
+     * Offers the orders of the chart on whatever the pointer is over.
      *
      * @param event where the right button went down, which is where the menu comes up
      */
-    private void showMenuFor(java.awt.event.MouseEvent event) {
-        scene.pickAtInView(view, event.getPoint());
-        JPopupMenu menu = new JPopupMenu();
-        RecipeChartToolbar.buildMenu(menu, model, scene, this::redraw);
-        menu.show(view, event.getX(), event.getY());
+    private void showMenuFor(MouseEvent event) {
+        if (contextMenu.isVisible()) {
+            return;
+        }
+        contextMenu.removeAll();
+        toolbar.fillMenu(contextMenu);
+        contextMenu.show(view, event.getX(), event.getY());
+    }
+
+    /**
+     * Binds the keys of the chart to the orders, which are the same instances the bar and the menu
+     * use.
+     */
+    private void bindKeys() {
+        InputMap keys = view.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap doings = view.getActionMap();
+        put(keys, doings, KeyEvent.VK_DELETE, "chart.delete", toolbar.deleteAction());
+        put(keys, doings, KeyEvent.VK_F2, "chart.renameOrCondition", toolbar.f2Action());
+        put(keys, doings, KeyEvent.VK_ENTER, "chart.openChart", toolbar.openChartAction());
+        put(keys, doings, KeyEvent.VK_ESCAPE, "chart.leaveLink", toolbar.leaveLinkAction());
+    }
+
+    private static void put(InputMap keys, ActionMap doings, int key, String name, Action action) {
+        keys.put(KeyStroke.getKeyStroke(key, 0), name);
+        doings.put(name, action);
     }
 
     /**
@@ -178,76 +177,23 @@ public final class RecipeChartView extends AbstractRecipeView {
         return model;
     }
 
-    /** The chart being drawn, {@code null} for a recipe that has none. */
-    S88ProcedureLogic chart() {
-        return model.chartBeingEdited();
-    }
-
-    /** The step whose chart is being drawn, {@code null} for the chart of the recipe. */
-    S88RecipeElement owner() {
-        return model.currentStep();
+    /**
+     * Says whether dragging from one thing to another joins them, which is what the Link order turns
+     * on and off.
+     *
+     * @param joining whether a drag joins two things
+     */
+    void showJoining(boolean joining) {
+        scene.setJoining(joining);
+        view.setCursor(Cursor.getPredefinedCursor(
+                joining ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR));
     }
 
     @Override
     protected void redraw() {
         scene.draw(model.getRecipe(), model.currentStep());
-        scene.markEmpty(model.justAddedStep());
-        toolbar.refreshUpButton();
+        toolbar.refresh();
         problems.show(RecipeProblems.toShow(model.conformance(), scene.complaints(),
                 model.warning()));
-    }
-
-    /**
-     * Remembers that the step just added has no equipment yet, so the chart marks it.
-     *
-     * @param elementId id of the step that was added
-     */
-    void markEmptyStep(String elementId) {
-        model.markEmptyStep(elementId);
-    }
-
-    /** Forgets which step was empty, once it has been given something to do. */
-    void forgetEmptyStep() {
-        model.forgetEmptyStep();
-    }
-
-    /**
-     * The problems panel of this view, for a test that reads what it is saying.
-     *
-     * @return the panel
-     */
-    RecipeProblems problems() {
-        return problems;
-    }
-
-    /**
-     * Adds a line to the recipe when two things are joined on the chart.
-     *
-     * @param from name of the node the line leaves
-     * @param to   name of the node it arrives at
-     */
-    private void onConnected(String from, String to) {
-        if (chart() == null) {
-            return;
-        }
-        model.edit("Join " + from + " to " + to,
-                () -> EditProcedureLogicUseCase.addLink(
-                        model.getRecipe(), model.currentStep(),
-                        nextLinkId(model.chartBeingEdited()),
-                        List.of(from), List.of(to), S88LinkType.CONTROL_LINK));
-    }
-
-    /**
-     * A name no link in this chart is using.
-     *
-     * @param chart the chart the line is being added to
-     * @return a name nothing is using
-     */
-    private static String nextLinkId(S88ProcedureLogic chart) {
-        int n = chart.getLinks().size() + 1;
-        while (chart.findLink("L" + n).isPresent()) {
-            n++;
-        }
-        return "L" + n;
     }
 }

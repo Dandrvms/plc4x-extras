@@ -25,7 +25,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.*;
 
-import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction;
 import org.netbeans.core.spi.multiview.CloseOperationState;
 import org.netbeans.core.spi.multiview.MultiViewElement;
@@ -66,17 +65,6 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
         event -> SwingUtilities.invokeLater(this::redrawSafely));
 
     protected AbstractRecipeView(RecipeEditorModel model) {
-        this(model, model == null ? null : model.plant());
-    }
-
-    /**
-     * Builds a view over a recipe that is not in a recipe set, which is what a test and a runtime
-     * reading recipes off a piece of equipment have.
-     *
-     * @param model editor state being shown
-     * @param plant  the plant it is written against, {@code null} when there is none
-     */
-    protected AbstractRecipeView(RecipeEditorModel model, S88PlantSnapshot plant) {
         this.model = model;
         this.onRecipeChanged = changed -> askForRedraw();
         pendingRedraw.setRepeats(false);

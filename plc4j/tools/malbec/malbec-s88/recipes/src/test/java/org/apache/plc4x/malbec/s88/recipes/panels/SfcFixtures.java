@@ -61,11 +61,17 @@ final class SfcFixtures {
     static List<S88MasterRecipe> buttons() {
         return List.of(
                 Buttons.lineal("BOTONES_LINEAL"),
-                Buttons.parallel(),
-                Buttons.parallelThreeBranches(),
-                Buttons.parallelStepInsideABranch(),
-                Buttons.bifurcation(),
-                Buttons.bifurcationStepInsideABranch());
+                Buttons.parallel("BOTONES_PARALELA"),
+                Buttons.parallelThreeBranches("BOTONES_PARALELA_TRES"),
+                Buttons.stepInsideAParallelBranch("BOTONES_PARALELA_PASO_EN_RAMA"),
+                Buttons.alternative("BOTONES_ALTERNATIVA"),
+                Buttons.alternativeThreeBranches("BOTONES_ALTERNATIVA_TRES"),
+                Buttons.stepInsideAnAlternativeBranch("BOTONES_ALTERNATIVA_PASO_EN_RAMA"),
+                Buttons.parallelInsideAlternative("BOTONES_PARALELA_EN_ALTERNATIVA"),
+                Buttons.alternativeInsideParallel("BOTONES_ALTERNATIVA_EN_PARALELA"),
+                Buttons.parallelInsideParallel("BOTONES_PARALELA_EN_PARALELA"),
+                Buttons.alternativeInsideAlternative("BOTONES_ALTERNATIVA_EN_ALTERNATIVA"),
+                Buttons.subchartTwoLevels("BOTONES_SUBGRAFICO"));
     }
 
     /**
@@ -142,9 +148,15 @@ final class SfcFixtures {
                 "botones-lineal",
                 "botones-paralela",
                 "botones-paralela-tres-ramas",
-                "botones-paralela-paso-en-una-rama",
-                "botones-bifurcacion",
-                "botones-bifurcacion-paso-en-una-rama");
+                "botones-paralela-paso-dentro-de-una-rama",
+                "botones-alternativa",
+                "botones-alternativa-tres-ramas",
+                "botones-alternativa-paso-dentro-de-una-rama",
+                "botones-paralela-dentro-de-alternativa",
+                "botones-alternativa-dentro-de-paralela",
+                "botones-paralela-dentro-de-paralela",
+                "botones-alternativa-dentro-de-alternativa",
+                "botones-subgrafico-dos-niveles");
     }
 
     /** Every fixture, in the order {@link #names()} lists them. */
@@ -175,106 +187,148 @@ final class SfcFixtures {
 
     /** Every fixture, in the order {@link #names()} lists them. */
     static List<S88MasterRecipe> all() {
-        return List.of(
-                lineal(),
-                withBackwardsLoop(),
-                selectiveDivergence(),
-                parallelDivergence(),
-                nestedParallelInsideSelective(),
-                withExternalReferences(),
-                parallelWithThreeBranches(),
-                selectiveWithThreeBranches(),
-                selectiveInsideParallel(),
-                parallelInsideParallel(),
-                selectiveInsideSelective(),
-                optionalBranch(),
-                loopAroundParallel(),
-                twoLevelsOfSubchart(),
-                Buttons.lineal("BOTONES_LINEAL"),
-                Buttons.parallel(),
-                Buttons.parallelThreeBranches(),
-                Buttons.parallelStepInsideABranch(),
-                Buttons.bifurcation(),
-                Buttons.bifurcationStepInsideABranch());
+        List<S88MasterRecipe> all = new java.util.ArrayList<>(structures());
+        all.addAll(buttons());
+        return all;
     }
 
     /**
- * The charts the toolbar buttons build, one press at a time.
- *
- * <p>Every one of these calls the same use cases a button press calls, so each picture is the
- * recipe for the presses that make it, written down rather than described.
- */
-static final class Buttons {
-
-    private Buttons() {
-    }
-
-    static S88MasterRecipe newRecipe(String id) {
-        return CreateMasterRecipeUseCase.execute(id, org.apache.plc4x.malbec.s88.api.S88RecipeKind.CLASS);
-    }
-
-    /** Pick the start, press Add step three times. */
-    static S88MasterRecipe lineal(String id) {
-        S88MasterRecipe recipe = newRecipe(id);
-        String last = "BEGIN";
-        for (int n = 0; n < 3; n++) {
-            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, last);
-            last = "STEP" + (n == 0 ? "" : "_" + n);
-        }
-        return recipe;
-    }
-
-    /** Two steps, then a parallel branch on the second one. */
-    static S88MasterRecipe parallel() {
-        S88MasterRecipe recipe = lineal("BOTONES_PARALELA");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
-        return recipe;
-    }
-
-    /** The same, pressing Add parallel branch once more. */
-    static S88MasterRecipe parallelThreeBranches() {
-        S88MasterRecipe recipe = lineal("BOTONES_PARALELA_TRES");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
-        ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_2");
-        return recipe;
-    }
-
-    /** Pick a step inside one branch and press Add step, which grows that branch. */
-    static S88MasterRecipe parallelStepInsideABranch() {
-        S88MasterRecipe recipe = parallel();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
-        return recipe;
-    }
-
-    /** Two steps, then a branch on the second one. */
-    static S88MasterRecipe bifurcation() {
-        S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
-        return recipe;
-    }
-
-    /**
-     * The same, pressing Add branch once more.
+     * The charts the toolbar buttons build, one press at a time.
      * <p>
-     * Not in {@link #all()}. A second alternative pressed on a step that already stands on the shared
-     * convergence is refused by {@link ChartBranchingUseCase}, which is finding N6 of the review: a
-     * branch that starts inside a block and finishes outside it. It goes back in when the use case
-     * is rewritten over blocks, phase C.1.
+     * Every one of these calls the same use cases a button press calls, so each picture is the
+     * recipe for the presses that make it, written down rather than described. A step they have just
+     * added is empty, which is why they are not part of {@link #structures()}.
      */
-    static S88MasterRecipe bifurcationThreeBranches() {
-        S88MasterRecipe recipe = lineal("BOTONES_BIFURCACION_TRES");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
-        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_2");
-        return recipe;
-    }
+    static final class Buttons {
 
-    /** Pick a step inside one branch and press Add step, which grows that branch. */
-    static S88MasterRecipe bifurcationStepInsideABranch() {
-        S88MasterRecipe recipe = bifurcation();
-        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
-        return recipe;
+        private Buttons() {
+        }
+
+        static S88MasterRecipe newRecipe(String id) {
+            return CreateMasterRecipeUseCase.execute(id, S88RecipeKind.CLASS);
+        }
+
+        /** One step between the start and the stop, which is what a block is built on. */
+        private static S88MasterRecipe oneStep(String id) {
+            S88MasterRecipe recipe = newRecipe(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
+            return recipe;
+        }
+
+        /** Pick the start and press Add step three times. */
+        static S88MasterRecipe lineal(String id) {
+            S88MasterRecipe recipe = oneStep(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** Pick the step and press Add parallel branch. */
+        static S88MasterRecipe parallel(String id) {
+            S88MasterRecipe recipe = oneStep(id);
+            ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");
+            return recipe;
+        }
+
+        /** The same, pressing Add parallel branch once more on a branch already there. */
+        static S88MasterRecipe parallelThreeBranches(String id) {
+            S88MasterRecipe recipe = parallel(id);
+            ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** Pick a step inside one branch and press Add step, which grows that branch. */
+        static S88MasterRecipe stepInsideAParallelBranch(String id) {
+            S88MasterRecipe recipe = parallel(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** Pick the step and press Add branch. */
+        static S88MasterRecipe alternative(String id) {
+            S88MasterRecipe recipe = oneStep(id);
+            ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+            return recipe;
+        }
+
+        /** The same, pressing Add branch once more on a branch already there. */
+        static S88MasterRecipe alternativeThreeBranches(String id) {
+            S88MasterRecipe recipe = alternative(id);
+            ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** Pick a step inside one branch and press Add step, which grows that branch. */
+        static S88MasterRecipe stepInsideAnAlternativeBranch(String id) {
+            S88MasterRecipe recipe = alternative(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** A parallel block put under a step of an alternative branch. */
+        static S88MasterRecipe parallelInsideAlternative(String id) {
+            S88MasterRecipe recipe = alternativeBranchWithRoom(id);
+            ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /** A block of turns put under a step of a parallel branch. */
+        static S88MasterRecipe alternativeInsideParallel(String id) {
+            S88MasterRecipe recipe = parallelBranchWithRoom(id);
+            ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /** A parallel block put under a step of a parallel branch. */
+        static S88MasterRecipe parallelInsideParallel(String id) {
+            S88MasterRecipe recipe = parallelBranchWithRoom(id);
+            ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /** A block of turns put under a step of an alternative branch. */
+        static S88MasterRecipe alternativeInsideAlternative(String id) {
+            S88MasterRecipe recipe = alternativeBranchWithRoom(id);
+            ChartBranchingUseCase.nestAlternativeBranch(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /**
+         * A branch with two more steps down it, so the middle one has bars of its own to hold a
+         * block of its own.
+         */
+        private static S88MasterRecipe parallelBranchWithRoom(String id) {
+            S88MasterRecipe recipe = parallel(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /** The same, on an alternative branch. */
+        private static S88MasterRecipe alternativeBranchWithRoom(String id) {
+            S88MasterRecipe recipe = alternative(id);
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_2");
+            return recipe;
+        }
+
+        /**
+         * A recipe with two charts under the one it starts with, made the way the Chart button makes
+         * them.
+         */
+        static S88MasterRecipe subchartTwoLevels(String id) {
+            S88MasterRecipe recipe = newRecipe(id);
+            S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
+                    "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", "TRAMO_CLASS");
+            CreateChartUseCase.forStep(recipe, tramo);
+            S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
+                    "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
+            CreateChartUseCase.forStep(recipe, paso);
+            EditProcedureLogicUseCase.insertStepAfter(recipe, paso, "BEGIN", "PULSO",
+                    "PULSO", "T_PULSO", "PULSO_CLASS");
+            return recipe;
+        }
     }
-}
 
 /** BEGIN, HEAT, MIX, PACK, END, with a bar between every two of them. */
     static S88MasterRecipe lineal() {

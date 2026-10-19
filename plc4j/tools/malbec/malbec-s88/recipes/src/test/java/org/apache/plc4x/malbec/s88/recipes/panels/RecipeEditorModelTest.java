@@ -434,18 +434,6 @@ class RecipeEditorModelTest {
     }
 
     @Test
-    void theStepJustAddedIsMarkedUntilItHasSomethingToDo() throws IOException {
-        RecipeEditorModel model = open();
-
-        model.markEmptyStep("HEAT");
-        assertEquals("HEAT", model.justAddedStep(),
-                "so the drawing marks the one with nothing behind it");
-
-        model.forgetEmptyStep();
-        assertNull(model.justAddedStep(), "and it stops being marked once it has something to do");
-    }
-
-    @Test
     void copyingARecipeGivesTheSameFileBack() {
         org.apache.plc4x.malbec.s88.api.S88MasterRecipe original = SfcFixtures.lineal();
         byte[] before = RecipeBytes.of(original);

@@ -67,9 +67,6 @@ public final class RecipeEditorModel {
      */
     private String currentStepId;
 
-    /** The step that was just added and has no equipment behind it yet. */
-    private String justAdded;
-
     private RecipeEditorModel(FileObject recipeFile, S88MasterRecipe recipe,
                               S88RecipeRepository repository, S88PlantSnapshot plant) {
         this.recipeFile = recipeFile;
@@ -254,25 +251,6 @@ public final class RecipeEditorModel {
      */
     public S88RecipeElementKind levelBeingEdited() {
         return RecipeLevels.levelOf(currentStep());
-    }
-
-    /**
-     * Remembers which step was just added, so the drawing marks the one with nothing behind it.
-     *
-     * @param elementId id of the step, {@code null} for none
-     */
-    public void markEmptyStep(String elementId) {
-        this.justAdded = elementId;
-    }
-
-    /** Forgets which step was empty, once it has been given something to do. */
-    public void forgetEmptyStep() {
-        this.justAdded = null;
-    }
-
-    /** The step that was added and has nothing behind it, {@code null} when there is none. */
-    public String justAddedStep() {
-        return justAdded;
     }
 
     /**

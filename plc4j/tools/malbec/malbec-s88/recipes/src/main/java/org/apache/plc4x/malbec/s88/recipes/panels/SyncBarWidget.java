@@ -27,7 +27,6 @@ import org.netbeans.api.visual.widget.Widget;
  */
 final class SyncBarWidget extends Widget {
 
-    private final RecipeChartScene chart;
     private final boolean doubled;
 
     /**
@@ -36,7 +35,6 @@ final class SyncBarWidget extends Widget {
      */
     SyncBarWidget(RecipeChartScene chart, boolean doubled) {
         super(chart);
-        this.chart = chart;
         this.doubled = doubled;
     }
 
