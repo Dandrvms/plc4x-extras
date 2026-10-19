@@ -87,7 +87,7 @@ public enum StructureQueries {
      * Every block that holds the node, the innermost first.
      *
      * <p>The walk goes back up the flow. Every line that splits the flow is a block the node is
-     * inside of, because the node is reached through one of its sides, and every such line that is
+     * inside, because the node is reached through one of its sides, and every such line that is
      * crossed adds the block it opens. The walk stops at the line that brings sides back together,
      * because by then the flow has come out of that block.
      *
@@ -153,10 +153,11 @@ public enum StructureQueries {
      *
      * <p>A line has to cross a bar, because the flow leaves a box, waits at a bar and arrives at a
      * box again. A line that does not cross is one the drawing cannot follow, and it is what a
-     * branch leaves behind when it is taken off without the line that held it.
+     * branch leaves behind when it is taken off without the line that held it. Ends that leave the
+     * chart are left out, because nothing is known about what alternates outside it.
      *
      * @param logic the chart to read
-     * @return the lines that run between two boxes or two bars
+     * @return the lines inside the chart that run between two boxes or two bars
      */
     public static List<S88ProcedureLink> linesThatDoNotCross(S88ProcedureLogic logic) {
         List<S88ProcedureLink> found = new ArrayList<>();
@@ -164,13 +165,114 @@ public enum StructureQueries {
             if (link.getFrom().isEmpty() || link.getTo().isEmpty()) {
                 continue;
             }
+            if (link.getFrom().stream().anyMatch(end -> !end.isInternal())
+                    || link.getTo().stream().anyMatch(end -> !end.isInternal())) {
+                continue;
+            }
             boolean fromIsBoxes = allAreBoxes(link.getFrom());
             boolean toIsBoxes = allAreBoxes(link.getTo());
             if (fromIsBoxes == toIsBoxes) {
+                if (!fromIsBoxes && isOptionalSkip(logic, link)) {
+                    continue;
+                }
                 found.add(link);
             }
         }
         return found;
+    }
+
+    /**
+     * Whether a line is the way round a step that can be left out.
+     *
+     * <p>The line leaves one side of a selective split and arrives at the bar where the other side
+     * comes back together. It is the only line allowed between two bars, and only when it really
+     * skips work: another side of the split has to reach a step that feeds the bar it arrives at.
+     *
+     * @param logic the chart to read
+     * @param link  the line to look at
+     * @return whether the line is an optional skip
+     */
+    public static boolean isOptionalSkip(S88ProcedureLogic logic, S88ProcedureLink link) {
+        if (logic == null || link == null || link.isDivergent() || link.isConvergent()
+                || link.getFrom().size() != 1 || link.getTo().size() != 1) {
+            return false;
+        }
+        S88IdRef from = link.getFrom().getFirst();
+        S88IdRef to = link.getTo().getFirst();
+        if (from.getType() != S88IdRefType.TRANSITION
+                || to.getType() != S88IdRefType.TRANSITION
+                || logic.findTransition(from.getValue()).isEmpty()
+                || logic.findTransition(to.getValue()).isEmpty()) {
+            return false;
+        }
+        List<S88ProcedureLink> arriving = linksMeeting(logic, from.getValue(), true);
+        List<S88ProcedureLink> leaving = linksMeeting(logic, from.getValue(), false);
+        if (arriving.size() != 1 || leaving.size() != 1) {
+            return false;
+        }
+        S88ProcedureLink split = arriving.getFirst();
+        if (split.equals(link) || !split.isDivergent()
+                || split.getLinkType().isParallel() || split.getTo().size() < 2) {
+            return false;
+        }
+        for (S88IdRef side : split.getTo()) {
+            if (side.getValue().equals(from.getValue())
+                    || side.getType() != S88IdRefType.TRANSITION) {
+                continue;
+            }
+            if (reachesAStepFeeding(logic, side.getValue(), to.getValue(), link)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether one side of a split reaches a step that goes on to the given bar. */
+    private static boolean reachesAStepFeeding(S88ProcedureLogic logic, String start,
+                                               String targetBar, S88ProcedureLink skip) {
+        for (S88ProcedureLink into : linksMeeting(logic, targetBar, true)) {
+            if (into == skip || into.getFrom().size() != 1 || into.getTo().size() != 1) {
+                continue;
+            }
+            S88IdRef from = into.getFrom().getFirst();
+            if (from.getType() == S88IdRefType.STEP
+                    && reachesWithout(logic, start, from.getValue(), skip)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the flow reaches one node from another without using the given line. */
+    private static boolean reachesWithout(S88ProcedureLogic logic, String start, String target,
+                                          S88ProcedureLink skip) {
+        Deque<String> open = new ArrayDeque<>();
+        Set<String> seen = new LinkedHashSet<>();
+        open.add(start);
+        while (!open.isEmpty()) {
+            String at = open.removeFirst();
+            if (!seen.add(at)) {
+                continue;
+            }
+            for (S88ProcedureLink link : logic.getLinks()) {
+                if (link == skip) {
+                    continue;
+                }
+                if (link.getFrom().stream()
+                        .anyMatch(end -> end.isInternal() && at.equals(end.getValue()))) {
+                    for (S88IdRef end : link.getTo()) {
+                        if (!end.isInternal()) {
+                            continue;
+                        }
+                        if (target.equals(end.getValue())) {
+                            return true;
+                        }
+                        open.addLast(end.getValue());
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**

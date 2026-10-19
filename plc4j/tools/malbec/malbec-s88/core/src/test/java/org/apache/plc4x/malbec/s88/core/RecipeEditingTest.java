@@ -331,16 +331,16 @@ class RecipeEditingTest {
     }
 
     @Test
-    void aLineCannotJoinTwoBoxesBecauseThereIsAlwaysABarBetweenThem() {
+    void aLineCannotJoinTwoStepsBecauseThereIsAlwaysATransitionBetweenThem() {
         S88Recipe recipe = completeChart();
         S88RecipeElement proc = recipe.findElement("PROC").orElseThrow();
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> EditProcedureLogicUseCase.addLink(recipe, proc, "LSTRAIGHT",
                         List.of("HEAT"), List.of("END"), null));
-        assertTrue(refused.getMessage().contains("bar"),
-                "a line straight from one box to the next is a chart that never says what lets the"
-                        + " flow go on, so the refusal says where the bar goes instead");
+        assertTrue(refused.getMessage().contains("transition"),
+                "a line straight from one step to the next is a chart that never says what lets the"
+                        + " flow go on, so the refusal says where the transition goes instead");
     }
 
     @Test

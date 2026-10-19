@@ -25,6 +25,7 @@ import java.util.*;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.core.StructureQueries;
 
 /**
  * Where everything on a chart goes, worked out from the chart alone.
@@ -61,6 +62,15 @@ final class SfcLayoutEngine {
 
     /** The lane each line that goes back up is taken out to, by its two ends. */
     private final Map<String, Integer> laneOfEdge = new LinkedHashMap<>();
+
+    /** The optional skips, by the two bars they join. */
+    private final Set<String> skips = new LinkedHashSet<>();
+
+    /** Whether each skip is drawn to the right of the work it leaves out. */
+    private final Map<String, Boolean> skipToTheRight = new LinkedHashMap<>();
+
+    /** How many skips are drawn to the left, which is how much room they need. */
+    private int leftSkips;
 
     /**
      * @param chart       the chart to arrange
@@ -163,6 +173,15 @@ final class SfcLayoutEngine {
                 continue;
             }
             links.add(link);
+            if (StructureQueries.isOptionalSkip(chart, link)) {
+                String edgeId = edge(from.getFirst(), to.getFirst());
+                boolean right = skipGoesRight(link);
+                skips.add(edgeId);
+                skipToTheRight.put(edgeId, right);
+                if (!right) {
+                    leftSkips++;
+                }
+            }
             for (String one : from) {
                 for (String other : to) {
                     successors.get(one).add(other);
@@ -187,6 +206,9 @@ final class SfcLayoutEngine {
 
     private void checkAlternation() {
         for (S88ProcedureLink link : links) {
+            if (StructureQueries.isOptionalSkip(chart, link)) {
+                continue;
+            }
             boolean fromIsBar = shapes.get(link.getFrom().getFirst().getValue())
                     == RecipeShapes.Shape.TRANSITION;
             for (S88IdRef end : link.getTo()) {
@@ -196,11 +218,31 @@ final class SfcLayoutEngine {
                 boolean toIsBar = shapes.get(end.getValue()) == RecipeShapes.Shape.TRANSITION;
                 if (fromIsBar == toIsBar) {
                     complaints.add("Line '" + link.getId() + "' joins "
-                            + (fromIsBar ? "two bars" : "two steps")
+                            + (fromIsBar ? "two transitions" : "two steps")
                             + ", and between two of the same there is nothing to wait on.");
                 }
             }
         }
+    }
+
+    /**
+     * Whether the skip is the first side of its split.
+     *
+     * <p>The split lists its sides left to right, so the first one is drawn on the left and the rest
+     * on the right.
+     */
+    private boolean skipGoesRight(S88ProcedureLink skip) {
+        String from = skip.getFrom().getFirst().getValue();
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.isDivergent()
+                    && link.getTo().stream().anyMatch(end -> from.equals(end.getValue()))) {
+                return link.getTo().stream()
+                        .map(S88IdRef::getValue)
+                        .toList()
+                        .indexOf(from) != 0;
+            }
+        }
+        return true;
     }
 
     // ========== Rows ==========
@@ -474,7 +516,7 @@ final class SfcLayoutEngine {
         for (String id : shapes.keySet()) {
             leftmost = Math.min(leftmost, axis.getOrDefault(id, 0) - halfWidthOf(id));
         }
-        int shift = SfcMetrics.MARGIN - leftmost;
+        int shift = SfcMetrics.MARGIN - leftmost + leftSkips * SfcMetrics.BACK_EDGE_LANE;
         for (String id : shapes.keySet()) {
             axis.merge(id, shift, Integer::sum);
         }
@@ -574,6 +616,14 @@ final class SfcLayoutEngine {
                 lane++;
             }
         }
+        int left = 0;
+        for (String skip : skips) {
+            if (skipToTheRight.getOrDefault(skip, true)) {
+                laneOfEdge.put(skip, rightmost + lane++ * SfcMetrics.BACK_EDGE_LANE);
+            } else {
+                laneOfEdge.put(skip, SfcMetrics.MARGIN + left++ * SfcMetrics.BACK_EDGE_LANE);
+            }
+        }
     }
 
     private Map<String, Rectangle> cornersOfKind(Map<String, Rectangle> corners, boolean asBar) {
@@ -657,12 +707,15 @@ final class SfcLayoutEngine {
         Point leaving = leavesAt(from, source);
         Point arriving = arrivesAt(to, target);
 
+        if (skips.contains(edge(from, to))) {
+            return skipRoute(linkId, from, to, source, target);
+        }
         if (goingBackwards.contains(edge(from, to))) {
             int lane = laneOfEdge.getOrDefault(edge(from, to),
                     rightmostOf(corners) + SfcMetrics.BACK_EDGE_LANE);
             Point into = sideOf(target);
             int dip = Math.max(leaving.y + SfcMetrics.ROW / 3, into.y - SfcMetrics.ROW / 3);
-            return new Link(linkId + ">" + from + ">" + to, linkId, true, List.of(
+            return new Link(linkId + ">" + from + ">" + to, linkId, true, false, List.of(
                     leaving,
                     new Point(leaving.x, dip),
                     new Point(lane, dip),
@@ -670,15 +723,43 @@ final class SfcLayoutEngine {
                     into));
         }
         if (syncBar == null) {
-            return new Link(linkId + ">" + from + ">" + to, linkId, false,
+            return new Link(linkId + ">" + from + ">" + to, linkId, false, false,
                     List.of(leaving, arriving));
         }
         int barY = syncBar.y + SfcMetrics.SYNC_BAR_HEIGHT / 2;
-        return new Link(linkId + ">" + from + ">" + to, linkId, false, List.of(
+        return new Link(linkId + ">" + from + ">" + to, linkId, false, false, List.of(
                 leaving,
                 new Point(leaving.x, barY),
                 new Point(arriving.x, barY),
                 arriving));
+    }
+
+    /**
+     * The line that skips a step, taken round the side of the block it leaves.
+     *
+     * <p>It leaves the bar below its own middle, goes out to a lane clear of every node, comes back
+     * above the bar it joins, and drops into it. That keeps it off the step it skips and off the
+     * condition written beside either bar.
+     */
+    private Link skipRoute(String linkId, String from, String to, Rectangle source,
+                           Rectangle target) {
+        String edgeId = edge(from, to);
+        boolean right = skipToTheRight.getOrDefault(edgeId, true);
+        int lane = laneOfEdge.getOrDefault(edgeId,
+                rightmostOf(Map.of(from, source, to, target)) + SfcMetrics.BACK_EDGE_LANE);
+        int sourceX = acrossAt(from, source);
+        int sourceY = barOrEdge(from, source, true);
+        int targetX = acrossAt(to, target);
+        int targetY = barOrEdge(to, target, false);
+        int below = sourceY + SfcMetrics.ROW / 3;
+        int above = targetY - SfcMetrics.ROW / 3;
+        return new Link(linkId + ">" + from + ">" + to, linkId, false, !right, List.of(
+                new Point(sourceX, sourceY),
+                new Point(sourceX, below),
+                new Point(lane, below),
+                new Point(lane, above),
+                new Point(targetX, above),
+                new Point(targetX, targetY)));
     }
 
     /**
@@ -758,11 +839,12 @@ final class SfcLayoutEngine {
     /**
      * One drawn line.
      *
-     * @param id        what it is known by inside the scene, which is not the line it came from
-     * @param lineId    the line of the recipe this is a piece of
-     * @param backwards whether it goes back up the chart, which is what asks for an arrow
-     * @param path      the points to draw through, in order
+     * @param id          what it is known by inside the scene, which is not the line it came from
+     * @param lineId      the line of the recipe this is a piece of
+     * @param backwards   whether it goes back up the chart, which is what asks for an arrow
+     * @param leavesLeft  whether it starts towards the left, which is what a skip round the left does
+     * @param path        the points to draw through, in order
      */
-    record Link(String id, String lineId, boolean backwards, List<Point> path) {
+    record Link(String id, String lineId, boolean backwards, boolean leavesLeft, List<Point> path) {
     }
 }

@@ -1,4 +1,4 @@
-/*
+    /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,6 +24,7 @@ import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
@@ -42,6 +43,7 @@ public final class ChartBranchingUseCase {
 
     private static final String STEP_STEM = "STEP";
     private static final String BAR_STEM = "T_BRANCH";
+    private static final String SKIP_STEM = "T_SKIP";
 
     private ChartBranchingUseCase() {
         /* This utility class should not be instantiated */
@@ -120,6 +122,82 @@ public final class ChartBranchingUseCase {
         return recipe.findElement(box).orElseThrow();
     }
 
+    /**
+     * Makes the picked step optional by adding a transition that skips it.
+     *
+     * <p>The transition that feeds the step is widened into a selective split. One side still goes
+     * through the step; the other goes straight to the transition after it. The bypass is the one
+     * line a chart may draw from one transition to another.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId  box of the step that becomes optional
+     * @return the transition that skips the step
+     * @throws IllegalArgumentException when there is no chart or no such box
+     * @throws IllegalStateException    when the step is where the flow starts or stops, when it has
+     *                                  no plain transition on either side, or when it is already at
+     *                                  the start of a branch
+     */
+    public static S88ProcedureTransition addOptionalBranch(S88Recipe recipe, S88RecipeElement step,
+                                                            String boxId) {
+        S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
+        OptionalBranch plan = optionalBranchPlan(chart, boxId);
+        String skipBar = newBar(recipe, step, chart, SKIP_STEM);
+
+        put(chart, plan.feeding(), widenArrival(plan.feeding(),
+                S88IdRef.transition(skipBar), S88LinkType.SERIAL_DIVERGENT));
+        chart.addLink(barToBar(skipBar + "_TO_" + plan.afterBar(), skipBar, plan.afterBar()));
+
+        announce(recipe);
+        return chart.findTransition(skipBar).orElseThrow();
+    }
+
+    /**
+     * Whether the picked step can be made optional.
+     *
+     * @param recipe recipe being edited, may be {@code null}
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId  box of the step to check
+     * @return whether {@link #addOptionalBranch} would go through
+     */
+    public static boolean canAddOptionalBranch(S88Recipe recipe, S88RecipeElement step,
+                                               String boxId) {
+        try {
+            optionalBranchPlan(chartToBranch(recipe, step, boxId), boxId);
+            return true;
+        } catch (RuntimeException refused) {
+            return false;
+        }
+    }
+
+    /** What an optional branch widens, found before anything is changed. */
+    private record OptionalBranch(S88ProcedureLink feeding, String afterBar) {
+    }
+
+    private static OptionalBranch optionalBranchPlan(S88ProcedureLogic chart, String boxId) {
+        S88ProcedureLink entering = arrivingAt(chart, boxId);
+        S88ProcedureLink leaving = leavingFrom(chart, boxId);
+        requireBarsOfItsOwn(boxId, entering, leaving);
+        if (entering.getFrom().size() != 1 || leaving.getTo().size() != 1) {
+            throw new IllegalStateException("Step '" + boxId + "' is already fed by a branch point"
+                    + " or already goes to more than one place, so there is no one transition to"
+                    + " widen.");
+        }
+        String incomingBar = entering.getFrom().getFirst().getValue();
+        String afterBar = leaving.getTo().getFirst().getValue();
+        if (incomingBar.equals(afterBar)) {
+            throw new IllegalStateException("Step '" + boxId + "' has the same transition before and"
+                    + " after it, so an optional branch would go round in a loop.");
+        }
+        S88ProcedureLink feeding = arrivingAt(chart, incomingBar);
+        if (feeding.getFrom().size() != 1 || feeding.getTo().size() != 1
+                || feeding.isDivergent() || feeding.isConvergent()) {
+            throw new IllegalStateException("Step '" + boxId + "' is already at the start of a"
+                    + " branch, so there is no plain transition to widen into an optional branch.");
+        }
+        return new OptionalBranch(feeding, afterBar);
+    }
+
     private static S88ProcedureLogic chartToBranch(S88Recipe recipe, S88RecipeElement step,
                                                    String boxId) {
         S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
@@ -127,7 +205,7 @@ public final class ChartBranchingUseCase {
             throw new IllegalArgumentException("There is no chart to branch.");
         }
         S88ProcedureStep box = chart.findStep(boxId).orElseThrow(
-                () -> new IllegalArgumentException("This chart has no box called '" + boxId + "'."));
+                () -> new IllegalArgumentException("This chart has no step called '" + boxId + "'."));
         S88RecipeElementKind kind = kindOf(recipe, box.getRecipeElementId());
         if (kind == S88RecipeElementKind.BEGIN || kind == S88RecipeElementKind.END) {
             throw new IllegalStateException("Step '" + boxId + "' is where the flow "
@@ -181,7 +259,7 @@ public final class ChartBranchingUseCase {
             }
         }
         if (found.size() != 1) {
-            throw new IllegalStateException("Box '" + id + "' has " + found.size() + " lines"
+            throw new IllegalStateException("Step '" + id + "' has " + found.size() + " lines"
                     + " arriving at it, so there is no one line to branch from.");
         }
         return found.getFirst();
@@ -195,7 +273,7 @@ public final class ChartBranchingUseCase {
             }
         }
         if (found.size() != 1) {
-            throw new IllegalStateException("Box '" + id + "' has " + found.size() + " lines"
+            throw new IllegalStateException("Step '" + id + "' has " + found.size() + " lines"
                     + " leaving it, so there is no one line to branch from.");
         }
         return found.getFirst();
@@ -299,7 +377,7 @@ public final class ChartBranchingUseCase {
         int here = laneOf(splitting, first);
         if (here != laneOf(closing, last)) {
             throw new IllegalStateException("Step '" + boxId + "' is on a branch of a block whose two"
-                    + " bars do not list its branches in the same order, so moving it sideways would"
+                    + " transitions do not list its branches in the same order, so moving it sideways would"
                     + " put it in one lane at the top and another at the bottom.");
         }
         int wanted = toTheRight ? here + 1 : here - 1;
@@ -364,7 +442,7 @@ public final class ChartBranchingUseCase {
     private static int laneOf(S88ProcedureLink bar, String nodeId) {
         int lane = branchEnds(bar).stream().map(S88IdRef::getValue).toList().indexOf(nodeId);
         if (lane < 0) {
-            throw new IllegalStateException("Bar '" + bar.getId() + "' does not reach '" + nodeId
+            throw new IllegalStateException("Transition '" + bar.getId() + "' does not reach '" + nodeId
                     + "', so its branches cannot be counted.");
         }
         return lane;
@@ -540,7 +618,7 @@ public final class ChartBranchingUseCase {
     private static void requireBarsOfItsOwn(String boxId, S88ProcedureLink entering,
                                             S88ProcedureLink leaving) {
         if (entering == null || leaving == null) {
-            throw new IllegalStateException("Step '" + boxId + "' does not sit between two bars, so"
+            throw new IllegalStateException("Step '" + boxId + "' does not sit between two transitions, so"
                     + " there is no flow to put a block under.");
         }
         if (entering.isDivergent() || entering.isConvergent()) {
@@ -589,6 +667,13 @@ public final class ChartBranchingUseCase {
         return line;
     }
 
+    private static S88ProcedureLink barToBar(String id, String fromBar, String toBar) {
+        S88ProcedureLink line = new S88ProcedureLink(id);
+        line.addFrom(S88IdRef.transition(fromBar));
+        line.addTo(S88IdRef.transition(toBar));
+        return line;
+    }
+
     private static void put(S88ProcedureLogic chart, S88ProcedureLink was, S88ProcedureLink now) {
         chart.removeLink(was);
         chart.addLink(now);
@@ -606,7 +691,12 @@ public final class ChartBranchingUseCase {
 
     private static String newBar(S88Recipe recipe, S88RecipeElement step,
                                  S88ProcedureLogic chart) {
-        String barId = freeName(recipe, chart, BAR_STEM);
+        return newBar(recipe, step, chart, BAR_STEM);
+    }
+
+    private static String newBar(S88Recipe recipe, S88RecipeElement step,
+                                 S88ProcedureLogic chart, String stem) {
+        String barId = freeName(recipe, chart, stem);
         EditProcedureLogicUseCase.addTransition(recipe, step, barId, null);
         return barId;
     }

@@ -23,6 +23,7 @@ import java.awt.event.ActionEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.*;
@@ -68,6 +69,7 @@ final class RecipeChartToolbar {
     private static final String ADD_STEP = "addStep";
     private static final String ADD_PARALLEL = "addParallel";
     private static final String ADD_BRANCH = "addBranch";
+    private static final String ADD_OPTIONAL = "addOptional";
     private static final String PARALLEL_HERE = "parallelHere";
     private static final String SELECTIVE_HERE = "selectiveHere";
     private static final String CHART = "chart";
@@ -114,7 +116,7 @@ final class RecipeChartToolbar {
     private void buildActions() {
         act(UP, upLabel(), "Draw the chart that holds this one", this::canGoUp, this::goUp);
         act(ADD_STEP, "Add step",
-                "Put an empty step and its bar in after the step that is picked. Press it again to"
+                "Put an empty step and its transition in after the step that is picked. Press it again to"
                         + " put another one under that.", this::canAddStep,
                 this::addStepAfterSelection);
         act(ADD_PARALLEL, "Add parallel branch",
@@ -125,6 +127,9 @@ final class RecipeChartToolbar {
                 "Put a step beside the one that is picked, with a transition of its own so it can"
                         + " wait on something of its own. Press it again for one more.",
                 this::canAddStep, () -> branch(this::addAlternativeBranch, "branch"));
+        act(ADD_OPTIONAL, "Add optional branch",
+                "Put a transition beside the one before the picked step, so the step can be skipped.",
+                this::canAddOptionalBranch, this::addOptionalBranch);
         act(PARALLEL_HERE, "Parallel branch here",
                 "Put a parallel block under the step that is picked, inside the branch it is in",
                 () -> canHaveABlockUnderIt(pickedBox()),
@@ -134,9 +139,9 @@ final class RecipeChartToolbar {
                         + " branch it is in", () -> canHaveABlockUnderIt(pickedBox()),
                 () -> branch(this::nestAlternativeBranch, "selective branch here"));
         act(CHART, "Chart", "Draw what the picked step does, step by step",
-                () -> holdsAChart(pickedStep()), () -> openChartOfSelection());
+                () -> holdsAChart(pickedStep()), this::openChartOfSelection);
         act(CREATE_CHART, "Create chart", "Put the chart this step is meant to have under it",
-                () -> holdsAChart(pickedStep()) && pickedStep().getProcedureLogic() == null,
+                () -> holdsAChart(pickedStep()) && Objects.requireNonNull(pickedStep()).getProcedureLogic() == null,
                 () -> openOrCreateChartOf(pickedStep()));
         act(CREATE_CHART_UNDER, "Create chart", "Put the chart the step on show is meant to have",
                 this::holdingAnUnbornChart, this::createChartOfCurrentStep);
@@ -225,6 +230,7 @@ final class RecipeChartToolbar {
         bar.add(actions.get(ADD_STEP));
         bar.add(actions.get(ADD_PARALLEL));
         bar.add(actions.get(ADD_BRANCH));
+        bar.add(actions.get(ADD_OPTIONAL));
         bar.add(actions.get(EQUIPMENT));
         bar.add(actions.get(VALUES));
         bar.add(actions.get(CONDITION));
@@ -246,6 +252,7 @@ final class RecipeChartToolbar {
         menu.add(actions.get(ADD_STEP));
         menu.add(actions.get(ADD_PARALLEL));
         menu.add(actions.get(ADD_BRANCH));
+        menu.add(actions.get(ADD_OPTIONAL));
         if (canHaveABlockUnderIt(pickedBox())) {
             menu.add(actions.get(PARALLEL_HERE));
             menu.add(actions.get(SELECTIVE_HERE));
@@ -393,6 +400,13 @@ final class RecipeChartToolbar {
         return pickedBox() != null;
     }
 
+    /** Whether the picked step can be made optional. */
+    private boolean canAddOptionalBranch() {
+        String box = pickedBox();
+        return box != null && ChartBranchingUseCase.canAddOptionalBranch(
+                model().getRecipe(), actionStep(), box);
+    }
+
     private boolean canCondition() {
         return pickedBar() != null;
     }
@@ -487,6 +501,20 @@ final class RecipeChartToolbar {
 
     private S88RecipeElement nestAlternativeBranch(String box) {
         return ChartBranchingUseCase.nestAlternativeBranch(model().getRecipe(), actionStep(), box);
+    }
+
+    /** Makes the picked step optional by adding a transition that skips it. */
+    private void addOptionalBranch() {
+        String box = pickedBox();
+        if (box == null) {
+            return;
+        }
+        S88ProcedureTransition[] made = new S88ProcedureTransition[1];
+        model().edit("Add optional branch", () -> made[0] =
+                ChartBranchingUseCase.addOptionalBranch(model().getRecipe(), actionStep(), box));
+        if (made[0] != null) {
+            scene.selectWhenDrawn(made[0].getId());
+        }
     }
 
     /**

@@ -71,7 +71,7 @@ public final class ChartDeletionUseCase {
             throw new IllegalArgumentException("There is no chart to delete from.");
         }
         S88ProcedureStep box = chart.findStep(boxId).orElseThrow(
-                () -> new IllegalArgumentException("This chart has no box called '" + boxId + "'."));
+                () -> new IllegalArgumentException("This chart has no step called '" + boxId + "'."));
         refuseIfEnd(recipe, box);
         String elementId = box.getRecipeElementId();
 
@@ -132,8 +132,8 @@ public final class ChartDeletionUseCase {
         List<String> barsBehind = names(leaving.getTo());
         if (barsBehind.size() > 1) {
             throw new IllegalStateException("Step '" + boxId + "' leads to " + barsBehind.size()
-                    + " bars at once, so the flow splits here and there is no one bar to join"
-                    + " across to.");
+                    + " transitions at once, so the flow splits here and there is no one transition"
+                    + " to join across to.");
         }
         String after = barsBehind.getFirst();
         List<String> nextSteps = branchEndsAt(chart, leaving, after) ? List.of()
@@ -295,7 +295,7 @@ public final class ChartDeletionUseCase {
                     + "'");
         }
         if (!EditProcedureLogicUseCase.isChartBipartite(chart)) {
-            complaints.add("a line runs from a box to a box or from a bar to a bar");
+            complaints.add("a line runs from a step to a step or from a transition to a transition");
         }
         for (S88ProcedureStep box : chart.getSteps()) {
             if (!box.getId().equals("BEGIN") && linesArrivingAt(chart, box.getId()) > 1) {
@@ -307,10 +307,10 @@ public final class ChartDeletionUseCase {
         }
         for (S88ProcedureTransition bar : chart.getTransitions()) {
             if (linesArrivingAt(chart, bar.getId()) > 1) {
-                complaints.add("more than one line arrives at bar '" + bar.getId() + "'");
+                complaints.add("more than one line arrives at transition '" + bar.getId() + "'");
             }
             if (linesLeaving(chart, bar.getId()) > 1) {
-                complaints.add("more than one line leaves bar '" + bar.getId() + "'");
+                complaints.add("more than one line leaves transition '" + bar.getId() + "'");
             }
         }
         if (!complaints.isEmpty()) {

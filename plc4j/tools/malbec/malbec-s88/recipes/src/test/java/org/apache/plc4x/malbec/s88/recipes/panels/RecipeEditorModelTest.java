@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
@@ -33,6 +34,7 @@ import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
@@ -588,6 +590,8 @@ class RecipeEditorModelTest {
         model.edit("Condition of T_ONE_OF",
                 () -> EditProcedureLogicUseCase.setCondition(
                         model.getRecipe(), null, "T_ONE_OF", "Reports/STATE#=#COMPLETE"));
+        model.edit("Make MIX optional",
+                () -> ChartBranchingUseCase.addOptionalBranch(model.getRecipe(), null, "MIX"));
         model.edit("Rename HEAT",
                 () -> EditProcedureLogicUseCase.renameStep(
                         model.getRecipe(), null, "HEAT", "HEATING"));
@@ -595,8 +599,8 @@ class RecipeEditorModelTest {
 
         assertFalse(Arrays.equals(asOpened, afterEdits),
                 "and the edits together changed the recipe, or none of them did anything");
-        assertEquals(5, howManyCanBeTakenBack(model), "and each of them is one the operator can"
-                + " take back on its own, rather than five edits that have become one step");
+        assertEquals(6, howManyCanBeTakenBack(model), "and each of them is one the operator can"
+                + " take back on its own, rather than six edits that have become one step");
 
         while (model.getUndoRedo().canUndo()) {
             model.getUndoRedo().undo();
@@ -726,5 +730,34 @@ class RecipeEditorModelTest {
         assertArrayEquals(onDisk, storage.written(),
                 "an edit that was made and then taken back has left nothing on the file, and "
                         + RecipeBytes.difference(onDisk, storage.written()));
+    }
+
+    /**
+     * An optional branch written to the file comes back with the line that skips the step.
+     *
+     * <p>The line from one transition to another is the one the drawing accepts only for a skip, so
+     * a file that does not carry it would give back a chart the editor would not have drawn.
+     */
+    @Test
+    void anOptionalBranchSurvivesTheFile() throws IOException {
+        RecipeBytes.Memory storage = RecipeBytes.holding(SfcFixtures.lineal());
+        RecipeEditorModel model = RecipeBytes.openOn(storage);
+        model.edit("Make MIX optional",
+                () -> ChartBranchingUseCase.addOptionalBranch(model.getRecipe(), null, "MIX"));
+        model.save();
+
+        S88ProcedureLogic reopened = RecipeBytes.openOn(storage).getRecipe().getProcedureLogic();
+
+        assertTrue(reopened.getLinks().stream().anyMatch(link -> skipsFromOneTransitionToAnother(link)),
+                "and the line that goes round MIX is still there after the file, in: "
+                        + reopened.getLinks());
+    }
+
+    /** Whether a line runs from one transition straight to another, which only a skip does. */
+    private static boolean skipsFromOneTransitionToAnother(
+            org.apache.plc4x.malbec.s88.api.S88ProcedureLink link) {
+        return link.getFrom().size() == 1 && link.getTo().size() == 1
+                && link.getFrom().get(0).getType() == S88IdRefType.TRANSITION
+                && link.getTo().get(0).getType() == S88IdRefType.TRANSITION;
     }
 }

@@ -375,7 +375,7 @@ class ChartEditingUseCaseTest {
     }
 
     @Test
-    void aBoxCannotBeGivenANameSomethingElseAlreadyHas() {
+    void aStepCannotBeGivenANameSomethingElseAlreadyHas() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.insertStepAfter(
                 recipe, operationOf(recipe), "BEGIN", "QUENCH", "QUENCH", "T_QUENCH",
@@ -385,8 +385,8 @@ class ChartEditingUseCaseTest {
                 () -> EditProcedureLogicUseCase.renameStep(recipe, operationOf(recipe), "QUENCH",
                         "T1"));
 
-        assertTrue(failure.getMessage().contains("already has a box"),
-                "and it says which, rather than swapping two boxes behind the operator's back");
+        assertTrue(failure.getMessage().contains("already has a step"),
+                "and it says which, rather than swapping two steps behind the operator's back");
     }
 
     @Test

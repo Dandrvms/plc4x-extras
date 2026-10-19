@@ -21,7 +21,6 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
-import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -29,12 +28,13 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
+import org.apache.plc4x.malbec.s88.core.StructureQueries;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -71,24 +71,19 @@ class SfcFixturesTest {
     }
 
     /**
-     * Every line crosses between a box and a bar.
+     * Every line crosses between a box and a bar, unless it skips a step.
      * <p>
-     * Ends that leave the chart are left out, because the model says nothing about what has to
-     * alternate with something outside.
+     * A line from a bar to a bar is allowed only when the other side of its split carries the step
+     * that the line jumps over. Ends that leave the chart are left out, because the model says
+     * nothing about what has to alternate with something outside.
      */
     @Test
-    void everyFixtureIsABipartiteChart() {
+    void everyLineCrossesBetweenABoxAndABarOrSkipsAStep() {
         for (S88MasterRecipe recipe : walkable()) {
-            List<S88ProcedureLink> internal = recipe.getProcedureLogic().getLinks().stream()
-                    .filter(SfcFixturesTest::hasBothEndsInside)
-                    .toList();
-            String culprit = internal.stream()
-                    .filter(link -> link.getFrom().get(0).getType() == link.getTo().get(0).getType())
-                    .map(Object::toString)
-                    .findFirst()
-                    .orElse(null);
-            assertNull(culprit, () -> recipe.getId() + " has a line that does not cross a bar: "
-                    + culprit);
+            List<S88ProcedureLink> stray = StructureQueries.linesThatDoNotCross(
+                    recipe.getProcedureLogic());
+            assertTrue(stray.isEmpty(), () -> recipe.getId()
+                    + " has a line that does not cross a bar and does not skip a step: " + stray);
         }
     }
 
@@ -107,11 +102,6 @@ class SfcFixturesTest {
                 .toList();
     }
 
-    private static boolean hasBothEndsInside(S88ProcedureLink link) {
-        return !link.getFrom().isEmpty() && !link.getTo().isEmpty()
-                && link.getFrom().stream().allMatch(S88IdRef::isInternal)
-                && link.getTo().stream().allMatch(S88IdRef::isInternal);
-    }
 
     @Test
     void everyFixtureStartsWhereTheFlowStartsAndStopsWhereItEnds() {

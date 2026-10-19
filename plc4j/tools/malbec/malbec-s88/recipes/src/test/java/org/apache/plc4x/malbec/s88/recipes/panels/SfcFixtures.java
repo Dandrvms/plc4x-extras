@@ -71,7 +71,8 @@ final class SfcFixtures {
                 Buttons.alternativeInsideParallel("BOTONES_ALTERNATIVA_EN_PARALELA"),
                 Buttons.parallelInsideParallel("BOTONES_PARALELA_EN_PARALELA"),
                 Buttons.alternativeInsideAlternative("BOTONES_ALTERNATIVA_EN_ALTERNATIVA"),
-                Buttons.subchartTwoLevels("BOTONES_SUBGRAFICO"));
+                Buttons.subchartTwoLevels("BOTONES_SUBGRAFICO"),
+                Buttons.optionalBranch("BOTONES_RAMA_OPCIONAL"));
     }
 
     /**
@@ -125,7 +126,7 @@ final class SfcFixtures {
      * for. {@link SfcStructureTest} is the one that says what is wrong with them.
      */
     static List<S88MasterRecipe> refused() {
-        return List.of(optionalBranch());
+        return List.of(barsJoinedWithNoStep());
     }
 
     /** The name each recipe of {@link #all()} is written under, in the same order. */
@@ -156,7 +157,8 @@ final class SfcFixtures {
                 "botones-alternativa-dentro-de-paralela",
                 "botones-paralela-dentro-de-paralela",
                 "botones-alternativa-dentro-de-alternativa",
-                "botones-subgrafico-dos-niveles");
+                "botones-subgrafico-dos-niveles",
+                "botones-rama-opcional");
     }
 
     /** Every fixture, in the order {@link #names()} lists them. */
@@ -262,6 +264,13 @@ final class SfcFixtures {
         static S88MasterRecipe stepInsideAnAlternativeBranch(String id) {
             S88MasterRecipe recipe = alternative(id);
             BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP_1");
+            return recipe;
+        }
+
+        /** Pick the middle step of a line and press Add optional branch. */
+        static S88MasterRecipe optionalBranch(String id) {
+            S88MasterRecipe recipe = lineal(id);
+            ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP_1");
             return recipe;
         }
 
@@ -824,9 +833,8 @@ final class SfcFixtures {
      * A branch that is there so it can be taken or jumped.
      * <p>
      * One side of the split carries the work, the other goes straight to the bar the flow joins
-     * at. That is what makes it optional, and it is also why it does not hold together: the jumped
-     * side is a line from one bar to another, and the model draws no line that does not cross.
-     * Finding N6.
+     * at. The jumped side is a line from one bar to another, which is allowed only when it skips a
+     * step that the other side feeds.
      */
     static S88MasterRecipe optionalBranch() {
         Chart chart = new Chart("RAMA_OPCIONAL");
@@ -842,6 +850,27 @@ final class SfcFixtures {
         chart.down("WORK", "T_JOIN");
         chart.barToBar("T_SKIP", "T_JOIN");
         chart.up("T_JOIN", "PACK");
+        chart.down("PACK", "T_END");
+        return chart.finishFrom("T_END");
+    }
+
+    /**
+     * Two bars joined with no step between them.
+     * <p>
+     * A chart cannot carry this, because the drawing has no line that does not cross. It is what
+     * is left of a broken chart, so the structural tests have one to refuse.
+     */
+    static S88MasterRecipe barsJoinedWithNoStep() {
+        Chart chart = new Chart("BARRAS_UNIDAS");
+        chart.bar("T_START");
+        chart.bar("T_LEFT");
+        chart.bar("T_RIGHT");
+        chart.bar("T_END");
+        chart.down("BEGIN", "T_START");
+        chart.up("T_START", "CHARGE");
+        chart.down("CHARGE", "T_LEFT");
+        chart.barToBar("T_LEFT", "T_RIGHT");
+        chart.up("T_RIGHT", "PACK");
         chart.down("PACK", "T_END");
         return chart.finishFrom("T_END");
     }

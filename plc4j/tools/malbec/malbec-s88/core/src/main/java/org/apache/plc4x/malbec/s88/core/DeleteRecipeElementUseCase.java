@@ -114,7 +114,7 @@ public class DeleteRecipeElementUseCase {
         }
         for (S88ProcedureStep box : chart.getSteps()) {
             if (id.equals(box.getRecipeElementId())) {
-                pointing.add("box '" + box.getId() + "' of the chart of "
+                pointing.add("step '" + box.getId() + "' of the chart of "
                         + (owner != null ? "'" + owner + "'" : "the recipe")
                         + ", which works on it");
             }

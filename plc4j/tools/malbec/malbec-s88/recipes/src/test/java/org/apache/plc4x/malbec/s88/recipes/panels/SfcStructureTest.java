@@ -70,16 +70,11 @@ class SfcStructureTest {
     }
 
     /**
-     * No structure says anything the conformance has to object to.
-     * <p>
-     * The branch that jumps is refused here on purpose: it carries a line from one bar straight to
-     * another, which is the model saying that the structure cannot be drawn the way it is written.
-     */
-    /**
      * A structure drawn so that it does not hold together gets said so.
      * <p>
-     * The jumped branch has a line from one bar straight to another. The conformance has nothing
-     * against it, and it is the drawing that refuses it, so that is where it is shown.
+     * Two bars joined with no step between them are a line the drawing has no way to cross. The
+     * conformance has nothing against it, and it is the drawing that refuses it, so that is where
+     * it is shown.
      */
     @Test
     void aStructureDrawnNotToHoldTogetherIsSaidOutLoud() {
@@ -89,6 +84,34 @@ class SfcStructureTest {
                     recipe.getId() + " is drawn so that it does not hold together, and the"
                             + " drawing has to say so");
         }
+    }
+
+    /**
+     * A branch that skips a step is drawn round the step instead of through it.
+     */
+    @Test
+    void anOptionalBranchIsDrawnRoundTheStepItSkips() {
+        S88MasterRecipe recipe = SfcFixtures.optionalBranch();
+        SfcLayoutEngine.Placement at = SfcFixtures.arranged(recipe);
+
+        assertTrue(at.complaints().isEmpty(),
+                "a skip round a step holds together: " + at.complaints());
+        java.awt.Rectangle work = at.steps().get("WORK");
+        String skipLine = recipe.getProcedureLogic().getLinks().stream()
+                .filter(link -> link.getFrom().stream()
+                        .anyMatch(end -> "T_SKIP".equals(end.getValue())))
+                .filter(link -> link.getTo().stream()
+                        .anyMatch(end -> "T_JOIN".equals(end.getValue())))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+        SfcLayoutEngine.Link drawn = at.links().stream()
+                .filter(link -> link.lineId().equals(skipLine))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(6, drawn.path().size(), "the skip is drawn in six turns");
+        assertTrue(drawn.path().stream().noneMatch(work::contains),
+                "and none of them is inside the step it skips: " + drawn.path());
     }
 
     /**

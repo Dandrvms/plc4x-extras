@@ -191,6 +191,70 @@ class ChartBranchingUseCaseTest {
     }
 
     @Test
+    void anOptionalBranchSkipsTheStepWithoutTakingItOff() {
+        S88MasterRecipe recipe = withOneStep();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
+
+        var skip = ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP");
+
+        assertEquals("T_SKIP", skip.getId(), "the bar that skips the step has a name of its own");
+        assertEquals(List.of("T_STEP", "T_SKIP"), departuresOf(recipe, "BEGIN"),
+                "and the flow before the step now goes two ways");
+        assertEquals(S88LinkType.SERIAL_DIVERGENT, leaving(recipe, "BEGIN").getLinkType(),
+                "and the two ways are taken one at a time");
+        assertEquals(List.of("T_STEP_1"), departuresOf(recipe, "T_SKIP"),
+                "and the skipped side goes straight to the bar after the step");
+        assertEquals(List.of("STEP", "T_SKIP"), arrivalsOf(recipe, "T_STEP_1"),
+                "so the bar after the step is reached either through the step or round it");
+        assertTrue(StructureQueries.isOptionalSkip(chartOf(recipe),
+                        chartOf(recipe).getLinks().stream()
+                                .filter(link -> link.getFrom().stream()
+                                        .anyMatch(end -> "T_SKIP".equals(end.getValue())))
+                                .findFirst()
+                                .orElseThrow()),
+                "and the drawing is told which line is the way round, not a broken chart");
+        assertTrue(StructureQueries.linesThatDoNotCross(chartOf(recipe)).isEmpty(),
+                "so nothing in the chart is refused");
+        assertTrue(RecipeConformance.of(recipe).excess().isEmpty(),
+                "and the conformance has nothing against it either");
+    }
+
+    @Test
+    void onlyAPlainStepCanBeMadeOptional() {
+        S88MasterRecipe recipe = withOneStep();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
+
+        assertTrue(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "STEP"),
+                "a step with one bar on each side has a whole other way round");
+        assertFalse(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "BEGIN"),
+                "the start has nothing before it to split");
+        assertFalse(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "END"),
+                "and the stop is where the flow ends");
+    }
+
+    @Test
+    void aStepAtTheStartOfABranchCannotBeMadeOptional() {
+        S88MasterRecipe recipe = withOneStep();
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+
+        assertFalse(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "STEP"),
+                "the line that feeds a branch is already split, so there is no plain one to widen");
+    }
+
+    @Test
+    void aStepAtTheStartOfABranchIsRefusedAndNothingIsChanged() {
+        S88MasterRecipe recipe = withOneStep();
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+        List<String> before = List.copyOf(departuresOf(recipe, "BEGIN"));
+
+        assertThrows(IllegalStateException.class,
+                () -> ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP"));
+
+        assertEquals(before, departuresOf(recipe, "BEGIN"),
+                "and the chart is left the way it was");
+    }
+
+    @Test
     void aStepCanBeAddedInsideAParallelBranchAndItStaysThere() {
         S88MasterRecipe recipe = withOneStep();
         ChartBranchingUseCase.addParallelBranch(recipe, null, "STEP");

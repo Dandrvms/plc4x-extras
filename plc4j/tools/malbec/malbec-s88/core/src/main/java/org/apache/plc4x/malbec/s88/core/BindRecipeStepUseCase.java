@@ -184,10 +184,10 @@ public final class BindRecipeStepUseCase {
                                               String boxId) {
         S88ProcedureStep box = chart.findStep(boxId)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "This chart has no box called '" + boxId + "'."));
+                        "This chart has no step called '" + boxId + "'."));
         String elementId = box.getRecipeElementId();
         return recipe.findElement(elementId)
-                .orElseThrow(() -> new IllegalArgumentException("Box '" + boxId + "' works on '"
+                .orElseThrow(() -> new IllegalArgumentException("Step '" + boxId + "' works on '"
                         + elementId + "', which this recipe does not carry."));
     }
 

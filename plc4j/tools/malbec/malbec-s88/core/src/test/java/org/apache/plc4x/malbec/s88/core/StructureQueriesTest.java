@@ -21,6 +21,8 @@ package org.apache.plc4x.malbec.s88.core;
 import java.util.List;
 
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
+import org.apache.plc4x.malbec.s88.api.S88IdRefType;
+import org.apache.plc4x.malbec.s88.api.S88IdScope;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
@@ -249,6 +251,27 @@ class StructureQueriesTest {
                 "and the one that lost an end is still there with only one side on it");
         assertTrue(StructureQueries.linesThatDoNotCross(parallel()).isEmpty(),
                 "and a chart that holds together has none of them");
+    }
+
+    /**
+     * A line with an end outside the chart is not checked for crossing a bar.
+     *
+     * <p>Nothing is known about what alternates with a step of another part of the process.
+     */
+    @Test
+    void aLineLeavingTheChartIsLeftOutOfTheCrossingCheck() {
+        S88ProcedureLogic logic = linear();
+        S88ProcedureLink out = new S88ProcedureLink("L_OUT");
+        out.addFrom(S88IdRef.step("BEGIN"));
+        out.addTo(new S88IdRef("OTHER_PART", S88IdRefType.STEP, S88IdScope.EXTERNAL));
+        logic.addLink(out);
+        S88ProcedureLink back = new S88ProcedureLink("L_BACK");
+        back.addFrom(new S88IdRef("OTHER_PART", S88IdRefType.STEP, S88IdScope.EXTERNAL));
+        back.addTo(S88IdRef.step("END"));
+        logic.addLink(back);
+
+        assertTrue(StructureQueries.linesThatDoNotCross(logic).isEmpty(),
+                "and the two ends that leave the chart are left out of the check");
     }
 
     /** A loop connection is the bar the flow comes back by, and the lines that meet at it. */

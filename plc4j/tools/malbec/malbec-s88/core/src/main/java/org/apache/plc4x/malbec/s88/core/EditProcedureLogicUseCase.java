@@ -130,17 +130,17 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("Step cannot be null");
         }
         if (boxId == null || boxId.isBlank()) {
-            throw new IllegalArgumentException("A box on the chart needs a name.");
+            throw new IllegalArgumentException("A step on the chart needs a name.");
         }
         if (chart.findStep(boxId).isPresent()) {
-            throw new IllegalArgumentException("The chart already has a box called '" + boxId + "'.");
+            throw new IllegalArgumentException("The chart already has a step called '" + boxId + "'.");
         }
         if (elementId == null || elementId.isBlank()) {
-            throw new IllegalArgumentException("A box has to work on a step of the recipe.");
+            throw new IllegalArgumentException("A step on the chart has to name a step of the recipe.");
         }
         if (recipe != null && recipe.findElement(elementId).isEmpty()) {
             throw new IllegalArgumentException("This recipe has no step called '" + elementId
-                    + "', so there is nothing for the box to work on.");
+                    + "', so there is nothing for the chart step to work on.");
         }
         S88ProcedureStep box = new S88ProcedureStep(boxId, elementId);
         chart.addStep(box);
@@ -164,7 +164,7 @@ public class EditProcedureLogicUseCase {
         }
         List<S88ProcedureLink> lines = chart.linksFrom(boxId);
         if (!lines.isEmpty()) {
-            throw new IllegalStateException("Box '" + boxId + "' is still joined by line "
+            throw new IllegalStateException("Step '" + boxId + "' is still joined by line "
                     + lines.stream().map(S88ProcedureLink::getId).toList()
                     + ". Take those off first, or the chart would be left with a line that has"
                     + " nothing at one end.");
@@ -212,8 +212,9 @@ public class EditProcedureLogicUseCase {
         boolean fromAreBars = kindOf(chart, fromIds) == S88IdRefType.TRANSITION;
         boolean toAreBars = kindOf(chart, toIds) == S88IdRefType.TRANSITION;
         if (fromAreBars == toAreBars) {
-            throw new IllegalStateException("A line cannot join two boxes or two bars. Between one"
-                    + " box and the next there is always a bar, and a bar with nothing to wait on is"
+            throw new IllegalStateException("A line cannot join two steps or two transitions."
+                    + " Between one step and the next there is always a transition, and a transition"
+                    + " with nothing to wait on is"
                     + " how a chart says it goes straight on.");
         }
         S88ProcedureLink line = new S88ProcedureLink(lineId);
@@ -251,7 +252,7 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("There is no chart to join on.");
         }
         if (!chart.findStep(fromBoxId).isPresent() || !chart.findStep(toBoxId).isPresent()) {
-            throw new IllegalArgumentException("A join runs from one box of this chart to another.");
+            throw new IllegalArgumentException("A join runs from one step of this chart to another.");
         }
         if (fromBoxId.equals(toBoxId)) {
             throw new IllegalArgumentException("A step cannot be joined to itself.");
@@ -310,14 +311,14 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("There is no chart to insert into.");
         }
         if (!chart.findStep(afterBoxId).isPresent()) {
-            throw new IllegalArgumentException("This chart has no box called '" + afterBoxId + "'.");
+            throw new IllegalArgumentException("This chart has no step called '" + afterBoxId + "'.");
         }
         requireRoomAfter(recipe, chart, afterBoxId);
 
         List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
         if (onward.size() > 1) {
 
-            throw new IllegalStateException("Box '" + afterBoxId + "' already goes to "
+            throw new IllegalStateException("Step '" + afterBoxId + "' already goes to "
                     + onward.size() + " places, so there is no single flow to put a step in the"
                     + " middle of.");
         }
@@ -327,16 +328,16 @@ public class EditProcedureLogicUseCase {
         }
         if (onward.size() == 1 && onward.get(0).getTo().size() > 1) {
 
-            throw new IllegalStateException("Box '" + afterBoxId + "' goes to "
-                    + onward.get(0).getTo().size() + " bars, so it is a branch point and there is no"
+            throw new IllegalStateException("Step '" + afterBoxId + "' goes to "
+                    + onward.get(0).getTo().size() + " transitions, so it is a branch point and there is no"
                     + " single flow to put a step in. Pick a step inside one of the branches."
                     + " The branches are " + namesOf(onward.get(0).getTo()) + ".");
         }
 
 
         requireFreeStepName(recipe, newStepId);
-        requireFreeName(chart, newBoxId, "box");
-        requireFreeName(chart, barId, "bar");
+        requireFreeName(chart, newBoxId, "step");
+        requireFreeName(chart, barId, "transition");
 
         S88LinkType onwardType = onward.isEmpty() ? null : onward.get(0).getLinkType();
 
@@ -499,7 +500,7 @@ public class EditProcedureLogicUseCase {
         if (chart == null || recipe == null) {
             throw new IllegalArgumentException("There is no chart to split.");
         }
-        requireOnChart(chart, fromBoxId, "box");
+        requireOnChart(chart, fromBoxId, "step");
         addTransition(recipe, step, firstBar);
         addTransition(recipe, step, secondBar);
         return addLink(recipe, step, fromBoxId + "_TO_" + firstBar + "_OR_" + secondBar,
@@ -548,15 +549,15 @@ public class EditProcedureLogicUseCase {
         if (chart == null || recipe == null) {
             throw new IllegalArgumentException("There is no chart to split.");
         }
-        requireOnChart(chart, fromBarId, "bar");
+        requireOnChart(chart, fromBarId, "transition");
         if (firstId != null && firstId.equals(secondId)) {
             throw new IllegalStateException("A split leads towards two different steps, not one step"
                     + " twice.");
         }
         String firstBox = firstId;
         String secondBox = secondId;
-        requireFreeName(chart, firstBox, "box");
-        requireFreeName(chart, secondBox, "box");
+        requireFreeName(chart, firstBox, "step");
+        requireFreeName(chart, secondBox, "step");
         List<S88ProcedureLink> wasLeadingTo = linksLeaving(chart, fromBarId);
 
         CreateRecipeElementUseCase.forEquipmentClass(
@@ -568,9 +569,9 @@ public class EditProcedureLogicUseCase {
         if (!wasLeadingTo.isEmpty()) {
             String carriedOn = joinBarId;
             if (carriedOn == null || carriedOn.isBlank()) {
-                carriedOn = freeName(chart, fromBarId + "_BACK_TOGETHER", "bar");
+                carriedOn = freeName(chart, fromBarId + "_BACK_TOGETHER", "transition");
             } else {
-                requireFreeName(chart, carriedOn, "bar");
+                requireFreeName(chart, carriedOn, "transition");
             }
             addTransition(recipe, step, carriedOn);
             addLink(recipe, step, firstBox + "_AND_" + secondBox + "_TO_" + carriedOn,
@@ -663,8 +664,8 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("There is no chart to join.");
         }
         if (firstBox != null && firstBox.equals(secondBox)) {
-            throw new IllegalStateException("A join brings two different boxes together, not one"
-                    + " box with itself.");
+            throw new IllegalStateException("A join brings two different steps together, not one"
+                    + " step with itself.");
         }
         addTransition(recipe, step, toBarId);
         return addLink(recipe, step, firstBox + "_AND_" + secondBox + "_TO_" + toBarId,
@@ -687,7 +688,7 @@ public class EditProcedureLogicUseCase {
         S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureTransition bar = chart != null ? chart.findTransition(barId).orElse(null) : null;
         if (bar == null) {
-            throw new IllegalArgumentException("This chart has no bar called '" + barId + "'.");
+            throw new IllegalArgumentException("This chart has no transition called '" + barId + "'.");
         }
         boolean nothing = text == null || text.trim().isEmpty();
         if (nothing) {
@@ -696,7 +697,7 @@ public class EditProcedureLogicUseCase {
         } else {
             S88TransitionCondition expression = S88TransitionCondition.parse(text);
             if (expression == null) {
-                throw new IllegalArgumentException("'" + text.trim() + "' is not something a bar"
+                throw new IllegalArgumentException("'" + text.trim() + "' is not something a transition"
                         + " can wait on. One thing is written as ADDRESS#COMPARISON#LITERAL, for"
                         + " example Reports/STATE#=#COMPLETE; several are joined as AND(...) or"
                         + " OR(...); and a wait is written as WAIT(seconds)");
@@ -747,7 +748,7 @@ public class EditProcedureLogicUseCase {
                 continue;
             }
             if (chart.findStep(name).isEmpty() && chart.findTransition(name).isEmpty()) {
-                throw new IllegalArgumentException("The chart has no box or bar called '" + name
+                throw new IllegalArgumentException("The chart has no step or transition called '" + name
                         + "' for a line to point at.");
             }
         }
@@ -883,10 +884,10 @@ public class EditProcedureLogicUseCase {
             throw new IllegalArgumentException("Step cannot be null");
         }
         if (barId == null || barId.isBlank()) {
-            throw new IllegalArgumentException("A bar needs a name.");
+            throw new IllegalArgumentException("A transition needs a name.");
         }
         if (chart.findTransition(barId).isPresent()) {
-            throw new IllegalArgumentException("The chart already has a bar called '" + barId + "'.");
+            throw new IllegalArgumentException("The chart already has a transition called '" + barId + "'.");
         }
         S88ProcedureTransition bar = new S88ProcedureTransition();
         bar.setId(barId);
@@ -912,7 +913,7 @@ public class EditProcedureLogicUseCase {
         }
         List<S88ProcedureLink> lines = chart.linksTouching(S88IdRef.transition(barId));
         if (!lines.isEmpty()) {
-            throw new IllegalStateException("Bar '" + barId + "' is still joined by line "
+            throw new IllegalStateException("Transition '" + barId + "' is still joined by line "
                     + lines.stream().map(S88ProcedureLink::getId).toList()
                     + ". Take those off first, or the chart would be left with a line that has"
                     + " nothing at one end.");
@@ -936,13 +937,13 @@ public class EditProcedureLogicUseCase {
         S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureStep box = chart != null ? chart.findStep(boxId).orElse(null) : null;
         if (box == null) {
-            throw new IllegalArgumentException("This chart has no box called '" + boxId + "'.");
+            throw new IllegalArgumentException("This chart has no step called '" + boxId + "'.");
         }
         refuseRenamingAStartOrAnEnd(recipe, box);
         if (boxId.equals(newId)) {
             return;
         }
-        requireFreeName(chart, newId, "box");
+        requireFreeName(chart, newId, "step");
         S88RecipeElement element = recipe != null
                 ? recipe.findElement(box.getRecipeElementId()).orElse(null)
                 : null;
@@ -993,10 +994,10 @@ public class EditProcedureLogicUseCase {
         S88ProcedureLogic chart = existingChart(recipe, step);
         S88ProcedureTransition bar = chart != null ? chart.findTransition(barId).orElse(null) : null;
         if (bar == null) {
-            throw new IllegalArgumentException("This chart has no bar called '" + barId + "'.");
+            throw new IllegalArgumentException("This chart has no transition called '" + barId + "'.");
         }
         if (!barId.equals(newId)) {
-            requireFreeName(chart, newId, "bar");
+            requireFreeName(chart, newId, "transition");
         }
         chart.removeTransition(bar);
         bar.setId(newId);
@@ -1051,7 +1052,8 @@ public class EditProcedureLogicUseCase {
         if (chart.findTransition(name).isPresent()) {
             return S88IdRef.transition(name);
         }
-        throw new IllegalArgumentException("The chart has no box or bar called '" + name + "' for a"
+        throw new IllegalArgumentException("The chart has no step or transition called '" + name
+                + "' for a"
                 + " line that " + doing + ".");
     }
 

@@ -92,7 +92,7 @@ public final class SetBarConditionUseCase {
                                  String operator, String literal) {
         S88ProcedureLogic chart = chartOf(recipe, step, plant);
         S88ProcedureTransition bar = chart.findTransition(barId)
-                .orElseThrow(() -> new IllegalArgumentException("This chart has no bar called '"
+                .orElseThrow(() -> new IllegalArgumentException("This chart has no transition called '"
                         + barId + "'."));
         S88ConditionOperator how = S88ConditionOperator.fromSymbol(operator);
         if (how == null) {
@@ -316,7 +316,8 @@ public final class SetBarConditionUseCase {
                                            String reportName) {
         if (equipmentId == null || equipmentId.isBlank()) {
             throw new IllegalArgumentException("A recipe written for particular equipment has to say"
-                    + " which equipment the bar reads from, because two of them can publish a report"
+                    + " which equipment the transition reads from, because two of them can publish"
+                    + " a report"
                     + " of the same name.");
         }
         DeclaredReport report = equipmentOf(plant, equipmentId).reports().get(reportName);
@@ -374,7 +375,7 @@ public final class SetBarConditionUseCase {
      */
     private static void checkLiteral(S88PlantSnapshot plant, DeclaredReport report, String literal) {
         if (literal == null || literal.isBlank()) {
-            throw new IllegalArgumentException("A bar has to say what the value has to be.");
+            throw new IllegalArgumentException("A transition has to say what the value has to be.");
         }
         switch (typeOf(report.type())) {
             case INTEGER -> number(literal, Long::parseLong);
@@ -459,11 +460,11 @@ public final class SetBarConditionUseCase {
                                              S88PlantSnapshot plant) {
         S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
         if (chart == null || recipe == null) {
-            throw new IllegalArgumentException("There is no chart to put a bar on.");
+            throw new IllegalArgumentException("There is no chart to put a transition on.");
         }
         if (plant == null) {
-            throw new IllegalArgumentException("There is no plant to read a report from. What a bar"
-                    + " waits on is something the plant declares.");
+            throw new IllegalArgumentException("There is no plant to read a report from. What a"
+                    + " transition waits on is something the plant declares.");
         }
         return chart;
     }

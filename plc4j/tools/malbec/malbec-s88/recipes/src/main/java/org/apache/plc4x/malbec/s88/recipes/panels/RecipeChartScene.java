@@ -464,7 +464,8 @@ final class RecipeChartScene extends GraphScene<String, String> {
         paths.put(id, new ArrayList<>(path));
         pieceOf.put(id, link.lineId());
         pieces.computeIfAbsent(link.lineId(), line -> new ArrayList<>()).add(id);
-        connection.setSourceAnchor(new SfcAnchor(this, path.getFirst(), Anchor.Direction.RIGHT));
+        connection.setSourceAnchor(new SfcAnchor(this, path.getFirst(),
+                link.leavesLeft() ? Anchor.Direction.LEFT : Anchor.Direction.RIGHT));
         connection.setTargetAnchor(new SfcAnchor(this, path.getLast(),
                 Anchor.Direction.TOP));
         connection.setRouter(new SfcRouter(path));
