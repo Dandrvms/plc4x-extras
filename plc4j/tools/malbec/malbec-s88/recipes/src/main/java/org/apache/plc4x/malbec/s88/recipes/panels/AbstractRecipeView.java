@@ -55,6 +55,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     protected final RecipeEditorModel model;
     private final JToolBar toolBar = new JToolBar();
+    private final Action save;
     private final Consumer<RecipeEditorModel> onRecipeChanged;
     private transient MultiViewElementCallback callback;
 
@@ -66,13 +67,19 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     protected AbstractRecipeView(RecipeEditorModel model) {
         this.model = model;
-        this.onRecipeChanged = changed -> askForRedraw();
+        this.onRecipeChanged = changed -> refreshSaveAndRedraw();
+        this.save = new RecipeSaveAction().createContextAwareInstance(getLookup());
         pendingRedraw.setRepeats(false);
         setLayout(new BorderLayout());
         toolBar.setFloatable(false);
-        toolBar.add(new RecipeSaveAction()
-                .createContextAwareInstance(getLookup()));
+        toolBar.add(save);
         add(toolBar, BorderLayout.NORTH);
+    }
+
+    /** Keeps the Save button in step with whether there is anything to save, then redraws. */
+    private void refreshSaveAndRedraw() {
+        save.setEnabled(model.isModified());
+        askForRedraw();
     }
 
     /**
@@ -130,6 +137,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     @Override
     public void componentOpened() {
         model.addChangeListener(onRecipeChanged);
+        save.setEnabled(model.isModified());
         redrawSafely();
     }
 

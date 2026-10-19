@@ -51,6 +51,15 @@ class RecipeCloseTest {
         }
     }
 
+    /** A recipe opened from a file that cannot be written to. */
+    private static RecipeEditorModel openReadOnly() {
+        try {
+            return RecipeBytes.openOn(RecipeBytes.readOnlyHolding(SfcFixtures.lineal()));
+        } catch (IOException failure) {
+            throw new AssertionError("a recipe that was just written could not be read", failure);
+        }
+    }
+
     /** A view with nothing of its own, so that what is checked is the state it reports. */
     private static RecipeEditorViewStub opened() {
         return new RecipeEditorViewStub(open());
@@ -108,6 +117,48 @@ class RecipeCloseTest {
         assertEquals(1, RecipeCloseHandler.howManyKinds(fromBothViews),
                 "and asking the same question twice before it was answered once is how an operator"
                         + " answers about one tab and loses the other");
+    }
+
+    @Test
+    void aSaveThatFailsKeepsTheWindowOpen() {
+        onSwingThread(() -> {
+            RecipeEditorModel model = openReadOnly();
+            RecipeEditorViewStub view = new RecipeEditorViewStub(model);
+            addAChangeTo(view);
+            RecipeCloseHandler handler = new RecipeCloseHandler(model);
+
+            assertFalse(handler.decide(RecipeCloseHandler.Choice.SAVE),
+                    "because a recipe that could not be written is still only in the model, and"
+                            + " closing would throw it away");
+            assertTrue(model.isModified(),
+                    "and the changes are still there to be written again");
+        });
+    }
+
+    @Test
+    void writingTheRecipeOutLetsTheHandlerClose() {
+        onSwingThread(() -> {
+            RecipeEditorModel model = open();
+            RecipeEditorViewStub view = new RecipeEditorViewStub(model);
+            addAChangeTo(view);
+            RecipeCloseHandler handler = new RecipeCloseHandler(model);
+
+            assertTrue(handler.decide(RecipeCloseHandler.Choice.SAVE),
+                    "because the recipe went onto disk and there is nothing left to lose");
+            assertFalse(model.isModified(), "and there is nothing left to save");
+        });
+    }
+
+    @Test
+    void leavingTheChangesClosesAndGoingBackDoesNot() {
+        onSwingThread(() -> {
+            RecipeCloseHandler handler = new RecipeCloseHandler(open());
+
+            assertTrue(handler.decide(RecipeCloseHandler.Choice.DISCARD),
+                    "because leaving the changes behind is a choice the operator can make");
+            assertFalse(handler.decide(RecipeCloseHandler.Choice.GO_BACK),
+                    "and keeping the window open is how every other answer is taken");
+        });
     }
 
     /** One change on the recipe of a view, which is what makes it worth asking about. */

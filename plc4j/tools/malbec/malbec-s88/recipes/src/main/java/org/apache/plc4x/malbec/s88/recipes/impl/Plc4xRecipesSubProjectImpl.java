@@ -53,10 +53,8 @@ public class Plc4xRecipesSubProjectImpl implements Project {
     @Override
     public Lookup getLookup() {
         if (lkp == null) {
-            lkp = Lookups.fixed(new Object[]{
-                new Plc4xRecipesSubProjectInformation(),
-                new Plc4xRecipesSubProjectLogicalViewProviderImpl(this),
-            });
+            lkp = Lookups.fixed(new Plc4xRecipesSubProjectInformation(),
+                new Plc4xRecipesSubProjectLogicalViewProviderImpl(this));
         }
         return lkp;
     }

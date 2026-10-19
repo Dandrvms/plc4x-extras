@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import javax.swing.Action;
+import org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction;
 import org.netbeans.core.spi.multiview.CloseOperationHandler;
 import org.netbeans.core.spi.multiview.CloseOperationState;
 import org.openide.DialogDisplayer;
@@ -34,8 +34,11 @@ import org.openide.NotifyDescriptor;
  */
 final class RecipeCloseHandler implements CloseOperationHandler {
 
+    private final RecipeEditorModel model;
 
-    static final String GO_BACK = "Go back";
+    RecipeCloseHandler(RecipeEditorModel model) {
+        this.model = model;
+    }
 
     @Override
     public boolean resolveCloseOperation(CloseOperationState[] elements) {
@@ -70,35 +73,56 @@ final class RecipeCloseHandler implements CloseOperationHandler {
      * @param state what is wrong and what could be done about it
      * @return true when the window may close
      */
-    private static boolean askAbout(CloseOperationState state) {
-        Answer write = new Answer("Save", state.getProceedAction());
-        Answer leave = new Answer("Discard", state.getDiscardAction());
-        Answer goBack = new Answer(GO_BACK, null);
+    private boolean askAbout(CloseOperationState state) {
         Object answer = DialogDisplayer.getDefault().notify(new NotifyDescriptor(
                 "This recipe has changes that are not on disk.",
                 "Close without saving?",
                 NotifyDescriptor.QUESTION_MESSAGE,
                 NotifyDescriptor.DEFAULT_OPTION,
-                new Object[]{write, leave, goBack},
-                write));
-        if (answer == goBack || answer == null) {
-            return false;
+                Choice.values(),
+                Choice.SAVE));
+        Choice choice = answer instanceof Choice chosen ? chosen : Choice.GO_BACK;
+        boolean mayClose = decide(choice);
+        if (!mayClose && choice == Choice.SAVE) {
+            RecipeSaveAction.reportCouldNotSave(model);
+        } else if (mayClose && choice == Choice.DISCARD) {
+            state.getDiscardAction().actionPerformed(
+                    new ActionEvent(state, ActionEvent.ACTION_PERFORMED, "close"));
         }
-        if (answer instanceof Answer chosen && chosen.does() != null) {
-            chosen.does().actionPerformed(
-                    new ActionEvent(chosen, ActionEvent.ACTION_PERFORMED, "close"));
-        }
-
-        return true;
+        return mayClose;
     }
 
     /**
-     * One of the things the operator can choose.
+     * Whether the window closes, once the operator has said what to do.
      *
-     * @param label how the choice is written on the button
-     * @param does  what choosing it carries out, {@code null} for a choice that only answers
+     * <p>Writing the recipe is part of this, because a save that did not work leaves the changes
+     * only in the model, and closing would throw them away. Kept apart from the question itself so
+     * that it can be checked without a window.
+     *
+     * @param choice what the operator chose
+     * @return true when the window may close
      */
-    private record Answer(String label, Action does) {
+    boolean decide(Choice choice) {
+        if (choice == Choice.SAVE) {
+            return RecipeSaveAction.save(model);
+        }
+        return choice != Choice.GO_BACK;
+    }
+
+    /** What the operator can choose when a recipe has changes. */
+    enum Choice {
+        /** Write the changes out. */
+        SAVE("Save"),
+        /** Leave the changes behind. */
+        DISCARD("Discard"),
+        /** Keep the window open. */
+        GO_BACK("Go back");
+
+        private final String label;
+
+        Choice(String label) {
+            this.label = label;
+        }
 
         @Override
         public String toString() {

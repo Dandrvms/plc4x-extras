@@ -20,6 +20,8 @@ package org.apache.plc4x.malbec.s88.recipes.actions;
 
 import java.awt.event.ActionEvent;
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.recipes.panels.RecipeEditorModel;
@@ -32,6 +34,8 @@ import org.openide.util.Lookup;
  * Writes the recipe on disk.
  */
 public final class RecipeSaveAction extends AbstractAction implements ContextAwareAction {
+
+    private static final Logger LOG = Logger.getLogger(RecipeSaveAction.class.getName());
 
     private final Lookup context;
 
@@ -50,23 +54,36 @@ public final class RecipeSaveAction extends AbstractAction implements ContextAwa
         if (model == null) {
             return;
         }
-        save(model);
+        if (!save(model)) {
+            reportCouldNotSave(model);
+        }
     }
 
     /**
-     * Writes a recipe out, and says so out loud when it cannot be written.
+     * Writes a recipe out.
      *
-     * @param model  the recipe to write
+     * @param model the recipe to write
+     * @return true when it got onto disk, false when it did not
      */
-    public static void save(RecipeEditorModel model) {
+    public static boolean save(RecipeEditorModel model) {
         try {
             model.save();
-        } catch (IOException e) {
-            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
-                    "'" + model.getRecipeFile().getNameExt() + "' could not be saved.\n"
-                            + e.getMessage(),
-                    NotifyDescriptor.ERROR_MESSAGE));
+            return true;
+        } catch (IOException | RuntimeException couldNotWrite) {
+            LOG.log(Level.WARNING, "The recipe could not be saved.", couldNotWrite);
+            return false;
         }
+    }
+
+    /**
+     * Says out loud that the recipe could not be written.
+     *
+     * @param model the recipe that did not get onto disk
+     */
+    public static void reportCouldNotSave(RecipeEditorModel model) {
+        DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
+                "'" + model.getRecipeFile().getNameExt() + "' could not be saved.",
+                NotifyDescriptor.ERROR_MESSAGE));
     }
 
     @Override

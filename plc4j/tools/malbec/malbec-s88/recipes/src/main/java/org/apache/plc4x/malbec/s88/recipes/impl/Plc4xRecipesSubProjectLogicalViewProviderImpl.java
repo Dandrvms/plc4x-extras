@@ -82,7 +82,7 @@ public class Plc4xRecipesSubProjectLogicalViewProviderImpl implements LogicalVie
             throws DataObjectNotFoundException {
             // The children are built here rather than by the composite provider, because a recipe
             // is shown as our own node instead of as a plain file. That is the whole point of the
-            // node: it carries the action that opens the recipe and it says what a recipe looks
+            // node: it carries the action that opens the recipe, and it says what a recipe looks
             // like, and neither of those comes with a file that has no type registered for it.
             super(node,
                     Children.create(new RecipeNodeFactory(project), true),

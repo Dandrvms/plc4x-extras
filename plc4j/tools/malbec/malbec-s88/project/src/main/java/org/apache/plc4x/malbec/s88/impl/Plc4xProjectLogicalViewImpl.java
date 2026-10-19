@@ -85,10 +85,8 @@ public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
                   NodeFactorySupport.createCompositeChildren(project,
                             "Projects/org-plc4x-s88-project/Nodes"),
                   new ProxyLookup(
-                  new Lookup[]{
-                  Lookups.singleton(project),
-                  node.getLookup()
-            }));
+                      Lookups.singleton(project),
+                      node.getLookup()));
             this.project = project;
         }
 

@@ -53,16 +53,13 @@ public class Plc4xProjectImpl implements Project{
     @Override
     public Lookup getLookup() {
         if (lkp == null) {
-            lkp = Lookups.fixed(new Object[]{
-                this,
+            lkp = Lookups.fixed(this,
                 new Plc4xProjectInfoImpl(),
                 new Plc4xProjectLogicalViewImpl(this),
                 new Plc4xCustomizerProviderImpl(this),
                 new Plc4xGeneralPropertiesImpl(),
                 new Plc4xPlantSubProjectProviderImpl(this),
-                new Plc4xRecipesSubProjectProviderImpl(this)
-                 
-            });
+                new Plc4xRecipesSubProjectProviderImpl(this));
         }
         return lkp;
     }

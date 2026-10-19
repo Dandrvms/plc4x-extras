@@ -66,6 +66,19 @@ final class RecipeBytes {
     }
 
     /**
+     * A storage that holds a recipe and refuses to be written to, which is what a file the operator
+     * cannot change looks like.
+     *
+     * @param recipe what the storage holds
+     * @return the storage
+     */
+    static Memory readOnlyHolding(S88MasterRecipe recipe) {
+        Memory memory = holding(recipe);
+        memory.writable = false;
+        return memory;
+    }
+
+    /**
      * Opens an editor on a recipe held in a storage.
      *
      * @param storage where the recipe is
@@ -123,6 +136,7 @@ final class RecipeBytes {
     static final class Memory implements S88Storage {
 
         private byte[] bytes = new byte[0];
+        private boolean writable = true;
 
         @Override
         public InputStream openInput() {
@@ -130,7 +144,10 @@ final class RecipeBytes {
         }
 
         @Override
-        public OutputStream openOutput() {
+        public OutputStream openOutput() throws IOException {
+            if (!writable) {
+                throw new IOException("This storage is read only.");
+            }
             ByteArrayOutputStream sink = new ByteArrayOutputStream();
             return new OutputStream() {
                 @Override
