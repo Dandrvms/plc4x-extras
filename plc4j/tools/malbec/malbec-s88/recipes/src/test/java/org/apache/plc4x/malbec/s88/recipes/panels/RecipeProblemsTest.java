@@ -18,10 +18,18 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
+import java.util.ArrayList;
 import java.util.List;
+import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,5 +54,56 @@ class RecipeProblemsTest {
         assertTrue(said.contains(fromTheEditor),
                 "and so is what the editor is warning about, beside the recipe's own findings: "
                         + said);
+    }
+
+    @Test
+    void pickingAFindingPutsTheFrameOnTheStepItIsAbout() {
+        RecipeProblems problems = new RecipeProblems();
+        List<String> picked = new ArrayList<>();
+        problems.onPick(picked::add);
+
+        problems.show(aReportAboutAStep(), List.of("a chart complaint"), "an editor warning");
+
+        problems.pickLineAt(0);
+
+        assertEquals(List.of("ORPHAN"), picked,
+                "picking a finding about a step puts the frame on that step");
+    }
+
+    @Test
+    void pickingALineThatIsAboutNoNodePutsTheFrameNowhere() {
+        RecipeProblems problems = new RecipeProblems();
+        List<String> picked = new ArrayList<>();
+        problems.onPick(picked::add);
+
+        problems.show(aReportAboutAStep(), List.of("a chart complaint"), "an editor warning");
+
+        problems.pickLineAt(problems.saying().size() - 1);
+
+        assertEquals(List.of(), picked,
+                "a line about the recipe or the editor names no node, so there is nothing to pick");
+    }
+
+    /**
+     * A report with a finding about a step: the chart names a step the flow never reaches.
+     */
+    private static RecipeConformance aReportAboutAStep() {
+        S88MasterRecipe recipe = new S88MasterRecipe("R1", S88RecipeKind.CLASS);
+        addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
+        addElement(recipe, "ORPHAN", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "END", S88RecipeElementKind.END);
+
+        S88ProcedureLogic logic = new S88ProcedureLogic();
+        logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
+        logic.addStep(new S88ProcedureStep("ORPHAN", "ORPHAN"));
+        logic.addStep(new S88ProcedureStep("END", "END"));
+        recipe.setProcedureLogic(logic);
+        return RecipeConformance.of(recipe);
+    }
+
+    private static void addElement(S88MasterRecipe recipe, String id, S88RecipeElementKind kind) {
+        S88RecipeElement element = new S88RecipeElement(id, kind);
+        element.setEquipmentClassId("HEATER");
+        recipe.addRecipeElement(element);
     }
 }

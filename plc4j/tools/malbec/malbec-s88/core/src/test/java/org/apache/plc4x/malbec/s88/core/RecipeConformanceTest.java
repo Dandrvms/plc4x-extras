@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
+import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
@@ -185,8 +186,11 @@ class RecipeConformanceTest {
     @Test
     void aChartThatGoesBackToItsStartIsNotReportedForIt() {
         S88MasterRecipe recipe = completeChartRecipe();
-        recipe.getProcedureLogic().addLink(
-                S88ProcedureLink.betweenSteps("LB", "HEAT", "BEGIN"));
+        recipe.getProcedureLogic().addTransition(new S88ProcedureTransition("T_BACK", null));
+        addLine(recipe.getProcedureLogic(), "L_BACK_OUT",
+                S88IdRef.step("HEAT"), S88IdRef.transition("T_BACK"));
+        addLine(recipe.getProcedureLogic(), "L_BACK",
+                S88IdRef.transition("T_BACK"), S88IdRef.step("BEGIN"));
 
         assertFalse(RecipeConformance.of(recipe).excess().stream()
                         .anyMatch(saying -> saying.contains("where the flow starts")),
@@ -235,7 +239,11 @@ class RecipeConformanceTest {
     @Test
     void aChartThatGoesBackToAnEarlierStepIsNotAMistakeButStillEndsTheWalk() {
         S88MasterRecipe recipe = completeChartRecipe();
-        recipe.getProcedureLogic().addLink(S88ProcedureLink.betweenSteps("LB", "END", "BEGIN"));
+        recipe.getProcedureLogic().addTransition(new S88ProcedureTransition("T_RETRY", null));
+        addLine(recipe.getProcedureLogic(), "L_RETRY_OUT",
+                S88IdRef.step("END"), S88IdRef.transition("T_RETRY"));
+        addLine(recipe.getProcedureLogic(), "L_RETRY",
+                S88IdRef.transition("T_RETRY"), S88IdRef.step("BEGIN"));
 
         RecipeConformance report = RecipeConformance.of(recipe);
 
@@ -257,6 +265,139 @@ class RecipeConformanceTest {
         assertFalse(RecipeConformance.of(null).isConforming());
     }
 
+    // ========== The rules of a structured chart ==========
+
+    @Test
+    void aLineFromOneStepToAnotherIsReported() {
+        S88MasterRecipe recipe = completeChartRecipe();
+        recipe.getProcedureLogic().addLink(
+                S88ProcedureLink.betweenSteps("L_DIRECT", "HEAT", "BEGIN"));
+
+        assertTrue(excessMentions(recipe, "L_DIRECT"),
+                "a line straight from one step to another has no bar to wait at, so the flow has"
+                        + " nothing to follow");
+    }
+
+    @Test
+    void aSplitWhoseSidesDoNotComeBackTogetherIsReported() {
+        S88MasterRecipe recipe = master();
+        addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
+        addElement(recipe, "LEFT", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "RIGHT", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "OTHER", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "END", S88RecipeElementKind.END);
+
+        S88ProcedureLogic logic = new S88ProcedureLogic();
+        logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
+        logic.addStep(new S88ProcedureStep("LEFT", "LEFT"));
+        logic.addStep(new S88ProcedureStep("RIGHT", "RIGHT"));
+        logic.addStep(new S88ProcedureStep("OTHER", "OTHER"));
+        logic.addStep(new S88ProcedureStep("END", "END"));
+        logic.addTransition(new S88ProcedureTransition("T_OPEN", null));
+        logic.addTransition(new S88ProcedureTransition("T_JOIN", null));
+        logic.addTransition(new S88ProcedureTransition("T_RIGHT", null));
+        addLine(logic, "L1", S88IdRef.step("BEGIN"), S88IdRef.transition("T_OPEN"));
+
+        S88ProcedureLink open = new S88ProcedureLink("L_OPEN");
+        open.addFrom(S88IdRef.transition("T_OPEN"));
+        open.addTo(S88IdRef.step("LEFT"));
+        open.addTo(S88IdRef.step("RIGHT"));
+        open.addTo(S88IdRef.step("OTHER"));
+        open.setLinkType(S88LinkType.SERIAL_DIVERGENT);
+        logic.addLink(open);
+
+        S88ProcedureLink join = new S88ProcedureLink("L_JOIN");
+        join.addFrom(S88IdRef.step("LEFT"));
+        join.addFrom(S88IdRef.step("RIGHT"));
+        join.addTo(S88IdRef.transition("T_JOIN"));
+        join.setLinkType(S88LinkType.PARALLEL_CONVERGENT);
+        logic.addLink(join);
+
+        addLine(logic, "L_JOIN_ON", S88IdRef.transition("T_JOIN"), S88IdRef.step("END"));
+        addLine(logic, "L_OTHER", S88IdRef.step("OTHER"), S88IdRef.transition("T_RIGHT"));
+        addLine(logic, "L_RIGHT_ON", S88IdRef.transition("T_RIGHT"), S88IdRef.step("END"));
+        recipe.setProcedureLogic(logic);
+
+        assertTrue(excessMentions(recipe, "L_OPEN"),
+                "two sides close on one bar and the third closes on none, so they no longer come"
+                        + " back together where the split opened");
+    }
+
+    @Test
+    void aLineThatGoesBackThroughAParallelBlockIsReported() {
+        S88MasterRecipe recipe = master();
+        addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
+        addElement(recipe, "WORK", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "OTHER", S88RecipeElementKind.OPERATION);
+        addElement(recipe, "END", S88RecipeElementKind.END);
+
+        S88ProcedureLogic logic = new S88ProcedureLogic();
+        logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
+        logic.addStep(new S88ProcedureStep("WORK", "WORK"));
+        logic.addStep(new S88ProcedureStep("OTHER", "OTHER"));
+        logic.addStep(new S88ProcedureStep("END", "END"));
+        logic.addTransition(new S88ProcedureTransition("T_OPEN", null));
+        logic.addTransition(new S88ProcedureTransition("T_CLOSE", null));
+        logic.addTransition(new S88ProcedureTransition("T_RETRY", null));
+        addLine(logic, "L1", S88IdRef.step("BEGIN"), S88IdRef.transition("T_OPEN"));
+
+        S88ProcedureLink open = new S88ProcedureLink("L_OPEN");
+        open.addFrom(S88IdRef.transition("T_OPEN"));
+        open.addTo(S88IdRef.step("WORK"));
+        open.addTo(S88IdRef.step("OTHER"));
+        open.setLinkType(S88LinkType.PARALLEL_DIVERGENT);
+        logic.addLink(open);
+
+        S88ProcedureLink close = new S88ProcedureLink("L_CLOSE");
+        close.addFrom(S88IdRef.step("WORK"));
+        close.addFrom(S88IdRef.step("OTHER"));
+        close.addTo(S88IdRef.transition("T_CLOSE"));
+        close.setLinkType(S88LinkType.PARALLEL_CONVERGENT);
+        logic.addLink(close);
+
+        addLine(logic, "L_ON", S88IdRef.transition("T_CLOSE"), S88IdRef.step("END"));
+        addLine(logic, "L_RETRY_OUT", S88IdRef.step("END"), S88IdRef.transition("T_RETRY"));
+        addLine(logic, "L_RETRY", S88IdRef.transition("T_RETRY"), S88IdRef.step("WORK"));
+        recipe.setProcedureLogic(logic);
+
+        assertTrue(excessMentions(recipe, "parallel block"),
+                "a retry into a parallel branch holds that branch back for the others, which a"
+                        + " parallel block is not");
+    }
+
+    @Test
+    void anAlternativeSplitWhoseSidesSayNothingIsWarnedAbout() {
+        S88MasterRecipe recipe = master();
+        addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
+        addElement(recipe, "END", S88RecipeElementKind.END);
+
+        S88ProcedureLogic logic = new S88ProcedureLogic();
+        logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
+        logic.addStep(new S88ProcedureStep("END", "END"));
+        logic.addTransition(new S88ProcedureTransition("T_ONE", null));
+        logic.addTransition(new S88ProcedureTransition("T_TWO", null));
+
+        S88ProcedureLink split = new S88ProcedureLink("L_SPLIT");
+        split.addFrom(S88IdRef.step("BEGIN"));
+        split.addTo(S88IdRef.transition("T_ONE"));
+        split.addTo(S88IdRef.transition("T_TWO"));
+        split.setLinkType(S88LinkType.SERIAL_DIVERGENT);
+        logic.addLink(split);
+
+        addLine(logic, "L_ONE_ON", S88IdRef.transition("T_ONE"), S88IdRef.step("END"));
+        addLine(logic, "L_TWO_ON", S88IdRef.transition("T_TWO"), S88IdRef.step("END"));
+        recipe.setProcedureLogic(logic);
+
+        RecipeConformance report = RecipeConformance.of(recipe);
+
+        assertTrue(report.warnings().stream().anyMatch(said -> said.contains("cannot be told")),
+                "the sides are taken one after another and neither says how, so the author has to"
+                        + " be told which one is read first: " + report.warnings());
+        assertTrue(report.isConforming(),
+                "but a warning is not something in the way of running it: "
+                        + report.excess() + " / " + report.deficit());
+    }
+
     // ========== Fixtures ==========
 
     /** A master recipe written by class, which is the shape most recipes start out in. */
@@ -268,7 +409,9 @@ class RecipeConformanceTest {
         return new S88RecipeElement(id, kind);
     }
 
-    /** Begin, one operation and End, joined in a line and nothing else wrong with it. */
+    /**
+     * Begin, one operation and End, each line crossing a bar and nothing else wrong with it.
+     */
     private static S88MasterRecipe completeChartRecipe() {
         S88MasterRecipe recipe = master();
         addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
@@ -276,14 +419,24 @@ class RecipeConformanceTest {
         addElement(recipe, "END", S88RecipeElementKind.END);
 
         S88ProcedureLogic logic = new S88ProcedureLogic();
-        logic.addLink(S88ProcedureLink.betweenSteps("L1", "BEGIN", "HEAT"));
-        logic.addLink(S88ProcedureLink.betweenSteps("L2", "HEAT", "END"));
         logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
         logic.addStep(new S88ProcedureStep("HEAT", "HEAT"));
         logic.addStep(new S88ProcedureStep("END", "END"));
-        logic.addTransition(new S88ProcedureTransition("T1", "TEMP_OK"));
+        logic.addTransition(new S88ProcedureTransition("T_IN", "START"));
+        logic.addTransition(new S88ProcedureTransition("T_OUT", "TEMP_OK"));
+        addLine(logic, "L1", S88IdRef.step("BEGIN"), S88IdRef.transition("T_IN"));
+        addLine(logic, "L2", S88IdRef.transition("T_IN"), S88IdRef.step("HEAT"));
+        addLine(logic, "L3", S88IdRef.step("HEAT"), S88IdRef.transition("T_OUT"));
+        addLine(logic, "L4", S88IdRef.transition("T_OUT"), S88IdRef.step("END"));
         recipe.setProcedureLogic(logic);
         return recipe;
+    }
+
+    private static void addLine(S88ProcedureLogic logic, String id, S88IdRef from, S88IdRef to) {
+        S88ProcedureLink line = new S88ProcedureLink(id);
+        line.addFrom(from);
+        line.addTo(to);
+        logic.addLink(line);
     }
 
     private static void addElement(S88MasterRecipe recipe, String id, S88RecipeElementKind kind) {

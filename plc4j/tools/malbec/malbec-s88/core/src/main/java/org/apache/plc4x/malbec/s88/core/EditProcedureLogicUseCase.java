@@ -232,6 +232,60 @@ public class EditProcedureLogicUseCase {
     }
 
     /**
+     * Joins two steps by putting a transition of its own between them.
+     *
+     * <p>The transition starts with nothing to wait on, which the drawing shows as TRUE.
+     *
+     * @param recipe    recipe being edited, may be {@code null} when no change event is wanted
+     * @param step      step whose chart is being drawn on
+     * @param fromBoxId box the flow leaves
+     * @param toBoxId   box the flow arrives at
+     * @return the transition that was put in between, which is the one to give a condition to
+     * @throws IllegalArgumentException when there is no chart, a box is not on it, or both boxes are
+     *                                  the same
+     */
+    public static S88ProcedureTransition joinStepsThroughATransition(
+            S88Recipe recipe, S88RecipeElement step, String fromBoxId, String toBoxId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart == null) {
+            throw new IllegalArgumentException("There is no chart to join on.");
+        }
+        if (!chart.findStep(fromBoxId).isPresent() || !chart.findStep(toBoxId).isPresent()) {
+            throw new IllegalArgumentException("A join runs from one box of this chart to another.");
+        }
+        if (fromBoxId.equals(toBoxId)) {
+            throw new IllegalArgumentException("A step cannot be joined to itself.");
+        }
+        String barId = freeChartName(chart, "T_" + fromBoxId + "_" + toBoxId);
+        S88ProcedureTransition bar = addTransition(recipe, step, barId);
+        addLink(recipe, step, freeLineName(chart, fromBoxId + "_TO_" + barId),
+                List.of(fromBoxId), List.of(barId), S88LinkType.CONTROL_LINK);
+        addLink(recipe, step, freeLineName(chart, barId + "_TO_" + toBoxId),
+                List.of(barId), List.of(toBoxId), S88LinkType.CONTROL_LINK);
+        return bar;
+    }
+
+    /** A name no box or bar of the chart is using. */
+    private static String freeChartName(S88ProcedureLogic chart, String stem) {
+        String candidate = stem;
+        int n = 2;
+        while (chart.findStep(candidate).isPresent() || chart.findTransition(candidate).isPresent()) {
+            candidate = stem + "_" + n++;
+        }
+        return candidate;
+    }
+
+    /** A name no line of the chart is using. */
+    private static String freeLineName(S88ProcedureLogic chart, String stem) {
+        String candidate = stem;
+        int n = 2;
+        while (chart.findLink(candidate).isPresent()) {
+            candidate = stem + "_" + n++;
+        }
+        return candidate;
+    }
+
+    /**
      * Puts a step between a step and whatever the flow went on to.
      *
      * @param recipe     recipe being edited, may be {@code null} when no change event is wanted
@@ -732,6 +786,25 @@ public class EditProcedureLogicUseCase {
         chart.removeLink(line);
         announce(recipe);
         return true;
+    }
+
+    /**
+     * Takes a loop connection off the chart: its bar and the two lines that meet at it.
+     *
+     * @param recipe recipe the step belongs to, may be {@code null}
+     * @param step   step whose chart the link is on
+     * @param nodeId the bar or one of its lines
+     * @throws IllegalArgumentException when the node is not part of a loop connection
+     */
+    public static void removeLoopLink(S88Recipe recipe, S88RecipeElement step, String nodeId) {
+        S88ProcedureLogic chart = existingChart(recipe, step);
+        String barId = chart == null ? null : StructureQueries.loopTransitionOf(chart, nodeId);
+        if (barId == null) {
+            throw new IllegalArgumentException("Only a loop connection is taken off this way.");
+        }
+        new ArrayList<>(chart.linksTouching(S88IdRef.transition(barId))).forEach(chart::removeLink);
+        chart.findTransition(barId).ifPresent(chart::removeTransition);
+        announce(recipe);
     }
 
     /**

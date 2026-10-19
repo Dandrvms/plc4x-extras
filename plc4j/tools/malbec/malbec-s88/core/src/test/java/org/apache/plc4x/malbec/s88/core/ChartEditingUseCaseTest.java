@@ -32,6 +32,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -468,11 +470,55 @@ class ChartEditingUseCaseTest {
         return Levels.owner(recipe, "PASO");
     }
 
-        /** A box on the chart working on a step of the recipe of the same name. */
+    /** A box on the chart working on a step of the recipe of the same name. */
     private static void addOperation(S88MasterRecipe recipe, String id) {
         S88RecipeElement operation = operationOf(recipe);
         Levels.phase(recipe, "PASO", id, "MACHINE");
         EditProcedureLogicUseCase.addStep(recipe, operation, id, id);
+    }
+
+    // ========== Joining two steps ==========
+
+    @Test
+    void joiningTwoStepsPutsATransitionOfItsOwnBetweenThem() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        addOperation(recipe, "COOL");
+        addOperation(recipe, "DRY");
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
+
+        S88ProcedureTransition made = EditProcedureLogicUseCase.joinStepsThroughATransition(
+                recipe, operationOf(recipe), "COOL", "DRY");
+
+        assertEquals(List.of(made.getId()), targetsOf(chart, "COOL"),
+                "the join leaves the first step for a transition of its own");
+        assertEquals(List.of("DRY"), targetsOf(chart, made.getId()),
+                "and that transition arrives at the second step");
+        assertNull(made.getCondition(), "which starts with nothing to wait on, drawn as TRUE");
+    }
+
+    @Test
+    void aStepCannotBeJoinedToItself() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        addOperation(recipe, "COOL");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> EditProcedureLogicUseCase.joinStepsThroughATransition(
+                        recipe, operationOf(recipe), "COOL", "COOL"));
+    }
+
+    @Test
+    void aSecondJoinBetweenTheSameTwoStepsGetsNamesOfItsOwn() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        addOperation(recipe, "COOL");
+        addOperation(recipe, "DRY");
+
+        S88ProcedureTransition first = EditProcedureLogicUseCase.joinStepsThroughATransition(
+                recipe, operationOf(recipe), "COOL", "DRY");
+        S88ProcedureTransition second = EditProcedureLogicUseCase.joinStepsThroughATransition(
+                recipe, operationOf(recipe), "COOL", "DRY");
+
+        assertNotEquals(first.getId(), second.getId(),
+                "the second join gets a transition name of its own");
     }
 
     /**

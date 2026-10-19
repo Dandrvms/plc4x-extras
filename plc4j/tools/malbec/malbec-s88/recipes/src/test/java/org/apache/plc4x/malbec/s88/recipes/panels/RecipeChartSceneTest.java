@@ -204,6 +204,44 @@ class RecipeChartSceneTest {
         });
     }
 
+    /** A drag from one step to another joins them, and one that lands anywhere else asks for nothing. */
+    @Test
+    void aJoinIsOnlyMadeBetweenTwoSteps() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+            AtomicReference<String> joined = new AtomicReference<>();
+            scene.setOnConnected((from, to) -> joined.set(from + " -> " + to));
+
+            assertTrue(scene.joinAt("HEAT", centreOf(scene, "MIX")),
+                    "a drag from one step that lands on another is a join the chart takes");
+            assertEquals("HEAT -> MIX", joined.get(), "and it names both ends");
+
+            joined.set(null);
+            assertFalse(scene.joinAt("HEAT", centreOf(scene, "T_HEAT")),
+                    "a transition is not a place a join lands, because the join puts its own there");
+            assertFalse(scene.joinAt("T_HEAT", centreOf(scene, "MIX")),
+                    "and a join does not start from a transition either");
+            assertFalse(scene.joinAt(null, centreOf(scene, "T_HEAT")),
+                    "a drag that started on nothing joins nothing");
+            assertFalse(scene.joinAt("HEAT", new Point(-100, -100)),
+                    "and one that lands on empty chart has nothing to arrive at");
+            assertNull(joined.get(), "so none of those asks for a join");
+
+            joined.set(null);
+            assertFalse(scene.joinAt("HEAT", centreOf(scene, "HEAT")),
+                    "a step cannot be joined to itself");
+            assertFalse(scene.joinAt("BEGIN", centreOf(scene, "MIX")),
+                    "the start is not a place a join leaves from");
+            assertFalse(scene.joinAt("MIX", centreOf(scene, "BEGIN")),
+                    "and nothing is joined into the start");
+            assertFalse(scene.joinAt("END", centreOf(scene, "MIX")),
+                    "the stop is not a place a join leaves from either");
+            assertFalse(scene.joinAt("MIX", centreOf(scene, "END")),
+                    "and nothing is joined into the stop");
+            assertNull(joined.get(), "so none of those asks for a join");
+        });
+    }
+
     @Test
     void aBarIsNotAPlaceToPutAStepAfter() {
         onSwingThread(() -> {

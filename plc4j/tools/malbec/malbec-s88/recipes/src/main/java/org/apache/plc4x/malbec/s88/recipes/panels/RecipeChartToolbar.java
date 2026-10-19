@@ -27,7 +27,6 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.*;
 
-import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -149,8 +148,8 @@ final class RecipeChartToolbar {
         act(CONDITION, "Condition", "Say what the transition that is picked waits on",
                 this::canCondition, this::editCondition);
         act(RENAME, "Rename", "Give the picked step another name", this::canAddStep, this::rename);
-        act(DELETE, "Delete", "Take the picked step, transition or line off the chart",
-                () -> picked() != null, this::delete);
+        act(DELETE, "Delete", "Take the picked step off the chart; a loop link comes off on its own too",
+                () -> pickedBox() != null || pickedLoop() != null, this::delete);
         buildLinkAction();
     }
 
@@ -177,7 +176,7 @@ final class RecipeChartToolbar {
         return action;
     }
 
-    /** The order that joins two things by dragging, which is what a back edge is made with. */
+    /** The order that joins two steps, with a transition of their own in between. */
     private void buildLinkAction() {
         AbstractAction link = new AbstractAction("Link") {
 
@@ -185,13 +184,14 @@ final class RecipeChartToolbar {
 
             @Override
             public void actionPerformed(ActionEvent event) {
-                boolean on = !Boolean.TRUE.equals(getValue(Action.SELECTED_KEY));
+                boolean on = !scene.isJoining();
                 putValue(Action.SELECTED_KEY, on);
                 view.showJoining(on);
             }
         };
         link.putValue(Action.SHORT_DESCRIPTION,
-                "Drag from one step or transition to another to join them. Esc leaves this mode.");
+                "Drag from one step to another to join them, with a transition in between."
+                        + " Esc leaves this mode.");
         link.setEnabled(true);
         whenItRuns.put(link, () -> true);
         actions.put(LINK, link);
@@ -375,6 +375,14 @@ final class RecipeChartToolbar {
     private String pickedBar() {
         String node = picked();
         return node != null && !scene.isBox(node) && !scene.isLine(node) ? node : null;
+    }
+
+    /** The bar of the loop connection the picked thing belongs to, {@code null} when it is none. */
+    private String pickedLoop() {
+        S88ProcedureLogic chart = model().chartBeingEdited();
+        String node = picked();
+        return chart == null || node == null
+                ? null : StructureQueries.loopTransitionOf(chart, node);
     }
 
     private boolean canGoUp() {
@@ -610,31 +618,42 @@ final class RecipeChartToolbar {
     }
 
     /**
-     * Takes the picked thing off the chart.
+     * Takes the picked step off the chart, or the loop link it is part of.
      * <p>
-     * A box or a transition is refused while lines run into it, because leaving those lines behind
-     * gives a chart with lines that have nothing at one end. A line is taken off whatever it joined,
-     * which is the only way a chart ever comes back from being unjoinable.
+     * The lines and transitions that run into or out of a step go with it. A loop link comes off on
+     * its own: its two lines and its bar go, and the steps it joins stay. Other lines and
+     * transitions are not taken off here, because a chart is kept whole by moving the steps it joins.
      */
     private void delete() {
         String node = picked();
         if (node == null) {
             return;
         }
-        int answer = JOptionPane.showConfirmDialog(bar(), "Take " + node + " off the chart?", "Delete",
+        String loop = pickedLoop();
+        if (loop != null) {
+            int answer = JOptionPane.showConfirmDialog(bar(),
+                    "Take the loop link " + loop + " off the chart?", "Delete",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.OK_OPTION) {
+                return;
+            }
+            model().edit("Delete loop link " + loop,
+                    () -> EditProcedureLogicUseCase.removeLoopLink(
+                            model().getRecipe(), actionStep(), node));
+            scene.select(null);
+            return;
+        }
+        String step = pickedBox();
+        if (step == null) {
+            return;
+        }
+        int answer = JOptionPane.showConfirmDialog(bar(), "Take " + step + " off the chart?", "Delete",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
         if (answer != JOptionPane.OK_OPTION) {
             return;
         }
-        model().edit("Delete " + node, () -> {
-            if (scene.isLine(node)) {
-                EditProcedureLogicUseCase.removeLink(model().getRecipe(), actionStep(), node);
-            } else if (scene.isBox(node)) {
-                ChartDeletionUseCase.deleteBox(model().getRecipe(), actionStep(), node);
-            } else {
-                EditProcedureLogicUseCase.removeTransition(model().getRecipe(), actionStep(), node);
-            }
-        });
+        model().edit("Delete " + step,
+                () -> ChartDeletionUseCase.deleteBox(model().getRecipe(), actionStep(), step));
         scene.select(null);
     }
 
@@ -647,38 +666,27 @@ final class RecipeChartToolbar {
     // ========== Joining two things ==========
 
     /**
-     * Adds a line to the recipe when two things are joined on the chart.
+     * Joins one step to another, with a transition of its own in between.
      *
      * <p>This is the same path a button takes, so a join that the recipe refuses is said so rather
-     * than dying in the thread that draws.
+     * than dying in the thread that draws. The transition is picked when it is drawn, which is
+     * where the operator gives it its condition.
      *
-     * @param from name of the node the line leaves
-     * @param to   name of the node it arrives at
+     * @param from name of the box the line leaves
+     * @param to   name of the box it arrives at
      */
     void join(String from, String to) {
         if (model().chartBeingEdited() == null) {
             return;
         }
+        S88ProcedureTransition[] made = new S88ProcedureTransition[1];
         run("Join " + from + " to " + to,
                 () -> model().edit("Join " + from + " to " + to,
-                        () -> EditProcedureLogicUseCase.addLink(
-                                model().getRecipe(), model().currentStep(),
-                                nextLinkId(model().chartBeingEdited()),
-                                List.of(from), List.of(to), S88LinkType.CONTROL_LINK)));
-    }
-
-    /**
-     * A name no link in this chart is using.
-     *
-     * @param chart the chart the line is being added to
-     * @return a name nothing is using
-     */
-    private static String nextLinkId(S88ProcedureLogic chart) {
-        int n = chart.getLinks().size() + 1;
-        while (chart.findLink("L" + n).isPresent()) {
-            n++;
+                        () -> made[0] = EditProcedureLogicUseCase.joinStepsThroughATransition(
+                                model().getRecipe(), model().currentStep(), from, to)));
+        if (made[0] != null) {
+            scene.selectWhenDrawn(made[0].getId());
         }
-        return "L" + n;
     }
 
     // ========== What the chart will take ==========

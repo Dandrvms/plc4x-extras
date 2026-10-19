@@ -18,7 +18,9 @@
  */
 package org.apache.plc4x.malbec.s88.core;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -169,6 +171,137 @@ public enum StructureQueries {
             }
         }
         return found;
+    }
+
+    /**
+     * The bar of the loop connection a node belongs to.
+     *
+     * <p>A loop connection leaves a step, waits at a bar of its own and arrives at a step the flow
+     * already went through. Its bar has one line in and one line out, and the step it leaves has
+     * another way on, or the step it arrives at another way in.
+     *
+     * @param logic  the chart to read
+     * @param nodeId a bar, or a line that ends at one
+     * @return the bar of the loop connection, or {@code null} when the node is not part of one
+     */
+    public static String loopTransitionOf(S88ProcedureLogic logic, String nodeId) {
+        String barId = barOf(logic, nodeId);
+        if (barId == null) {
+            return null;
+        }
+        List<S88ProcedureLink> arriving = linksMeeting(logic, barId, true);
+        List<S88ProcedureLink> leaving = linksMeeting(logic, barId, false);
+        if (arriving.size() != 1 || leaving.size() != 1) {
+            return null;
+        }
+        S88ProcedureLink in = arriving.getFirst();
+        S88ProcedureLink out = leaving.getFirst();
+        if (in.getFrom().size() != 1 || out.getTo().size() != 1) {
+            return null;
+        }
+        S88IdRef from = in.getFrom().getFirst();
+        S88IdRef to = out.getTo().getFirst();
+        if (!from.isInternal() || !to.isInternal()
+                || logic.findStep(from.getValue()).isEmpty()
+                || logic.findStep(to.getValue()).isEmpty()) {
+            return null;
+        }
+        boolean rejoinsTheFlow = reaches(logic, to.getValue(), from.getValue());
+        boolean atAJunction = incomingWays(logic, to.getValue()) > 1
+                || outgoingWays(logic, from.getValue()) > 1;
+        return rejoinsTheFlow && atAJunction ? barId : null;
+    }
+
+    /** The bar a node is, or the single bar a line ends at. */
+    private static String barOf(S88ProcedureLogic logic, String nodeId) {
+        if (nodeId == null) {
+            return null;
+        }
+        if (logic.findTransition(nodeId).isPresent()) {
+            return nodeId;
+        }
+        S88ProcedureLink line = logic.findLink(nodeId).orElse(null);
+        if (line == null) {
+            return null;
+        }
+        String bar = null;
+        for (S88IdRef end : line.getFrom()) {
+            if (end.getType() == S88IdRefType.TRANSITION) {
+                if (bar != null) {
+                    return null;
+                }
+                bar = end.getValue();
+            }
+        }
+        for (S88IdRef end : line.getTo()) {
+            if (end.getType() == S88IdRefType.TRANSITION) {
+                if (bar != null) {
+                    return null;
+                }
+                bar = end.getValue();
+            }
+        }
+        return bar;
+    }
+
+    /** The lines that arrive at the bar, or the ones that leave it. */
+    private static List<S88ProcedureLink> linksMeeting(
+            S88ProcedureLogic logic, String barId, boolean arriving) {
+        List<S88ProcedureLink> found = new ArrayList<>();
+        for (S88ProcedureLink link : logic.getLinks()) {
+            List<S88IdRef> ends = arriving ? link.getTo() : link.getFrom();
+            if (ends.stream().anyMatch(end -> barId.equals(end.getValue()))) {
+                found.add(link);
+            }
+        }
+        return found;
+    }
+
+    /** How many places the flow can go on to from the node. */
+    private static int outgoingWays(S88ProcedureLogic logic, String nodeId) {
+        int ways = 0;
+        for (S88ProcedureLink link : logic.getLinks()) {
+            if (link.getFrom().stream().anyMatch(end -> nodeId.equals(end.getValue()))) {
+                ways += link.getTo().size();
+            }
+        }
+        return ways;
+    }
+
+    /** How many places the flow can arrive from at the node. */
+    private static int incomingWays(S88ProcedureLogic logic, String nodeId) {
+        int ways = 0;
+        for (S88ProcedureLink link : logic.getLinks()) {
+            if (link.getTo().stream().anyMatch(end -> nodeId.equals(end.getValue()))) {
+                ways += link.getFrom().size();
+            }
+        }
+        return ways;
+    }
+
+    /** Whether the flow reaches one node from another by following the lines. */
+    private static boolean reaches(S88ProcedureLogic logic, String start, String target) {
+        Deque<String> open = new ArrayDeque<>();
+        Set<String> seen = new LinkedHashSet<>();
+        open.add(start);
+        while (!open.isEmpty()) {
+            String at = open.removeFirst();
+            if (at.equals(target)) {
+                return true;
+            }
+            if (!seen.add(at)) {
+                continue;
+            }
+            for (S88ProcedureLink link : logic.getLinks()) {
+                if (link.getFrom().stream()
+                        .anyMatch(end -> end.isInternal() && at.equals(end.getValue()))) {
+                    link.getTo().stream()
+                            .filter(S88IdRef::isInternal)
+                            .forEach(end -> open.addLast(end.getValue()));
+                }
+            }
+        }
+        return false;
     }
 
     /**

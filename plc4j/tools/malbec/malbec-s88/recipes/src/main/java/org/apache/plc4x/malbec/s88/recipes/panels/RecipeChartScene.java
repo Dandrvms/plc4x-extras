@@ -677,16 +677,15 @@ final class RecipeChartScene extends GraphScene<String, String> {
     /**
      * Whether a node is somewhere the join under way can land.
      *
-     * <p>Joining is off until the operator asks for it, and then only a step and a transition of the
-     * other kind can be joined: a line always runs from one to the other, never between two of a
-     * kind.
+     * <p>Joining is off until the operator asks for it, and then only a step can be joined to
+     * another step. The start and the stop of the chart are left out, because the flow enters at
+     * one and leaves at the other.
      *
      * @param node name of the node
      * @return whether the join under way would go through if it landed here
      */
     boolean isJoinTarget(String node) {
-        return joining && joinFrom != null && !joinFrom.equals(node)
-                && nodes.containsKey(node) && isBar(joinFrom) != isBar(node);
+        return joining && canJoin(joinFrom, node);
     }
 
     /** Draws every box and bar again, which is what shows and hides the join highlighting. */
@@ -915,13 +914,12 @@ final class RecipeChartScene extends GraphScene<String, String> {
     private final class JoinOnRelease extends WidgetAction.Adapter {
 
         private static final long serialVersionUID = 1L;
-        private String dragged;
 
         @Override
         public WidgetAction.State mousePressed(
                 Widget widget, WidgetAction.WidgetMouseEvent event) {
-            dragged = joining ? fromWidget(widget) : null;
-            joinFrom = dragged;
+            String from = fromWidget(widget);
+            joinFrom = joining && isJoinEnd(from) ? from : null;
             repaintEveryNode();
             return WidgetAction.State.REJECTED;
         }
@@ -929,19 +927,47 @@ final class RecipeChartScene extends GraphScene<String, String> {
         @Override
         public WidgetAction.State mouseReleased(
             Widget widget, WidgetAction.WidgetMouseEvent event) {
-            String from = dragged;
-            dragged = null;
+            String from = joinFrom;
             forgetJoinSource();
-            if (from == null) {
-                return WidgetAction.State.REJECTED;
-            }
-            String to = fromWidget(widget);
-
-            if (to != null && !to.equals(from) && isBar(from) != isBar(to)) {
-                onConnected.accept(from, to);
-            }
+            joinAt(from, widget.convertLocalToScene(event.getPoint()));
             return WidgetAction.State.REJECTED;
         }
+    }
+
+    /**
+     * Joins the end of a drag to whatever step is under a point, when the chart takes it.
+     *
+     * <p>A join runs from one step to another, with a transition put in between, so a drag that
+     * ends on the step it started from, on nothing, on a transition, or on the start or stop asks
+     * for no join.
+     *
+     * @param from       node the drag started from, {@code null} when there was none
+     * @param scenePoint where the drag ended, in the coordinates of the scene
+     * @return whether a join was asked for
+     */
+    boolean joinAt(String from, Point scenePoint) {
+        String to = nodeAt(scenePoint);
+        if (!canJoin(from, to)) {
+            return false;
+        }
+        onConnected.accept(from, to);
+        return true;
+    }
+
+    /**
+     * Whether a join can run from one step to another.
+     *
+     * <p>Both nodes have to be steps on the chart, and neither may be the start or the stop, which
+     * the flow enters and leaves but is never joined to.
+     */
+    private boolean canJoin(String from, String to) {
+        return from != null && to != null && !to.equals(from)
+                && isJoinEnd(from) && isJoinEnd(to);
+    }
+
+    /** Whether a node is a step a join can start or end at. */
+    private boolean isJoinEnd(String node) {
+        return isBox(node) && !isStartOrStop(node);
     }
 
     private String fromWidget(Widget widget) {
@@ -952,9 +978,16 @@ final class RecipeChartScene extends GraphScene<String, String> {
         return object == null ? null : object.toString();
     }
 
-    private boolean isBar(String node) {
+    /**
+     * Whether a node is where the flow starts or stops.
+     *
+     * <p>Those two boxes are the ends of the chart: the flow enters at one and leaves at the other,
+     * so no line is joined to either of them.
+     */
+    private boolean isStartOrStop(String node) {
         NodeSpec spec = nodes.get(node);
-        return spec != null && spec.shape() == RecipeShapes.Shape.TRANSITION;
+        return spec != null && (spec.shape() == RecipeShapes.Shape.START
+                || spec.shape() == RecipeShapes.Shape.END);
     }
 
     @Override

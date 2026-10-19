@@ -19,10 +19,15 @@
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.util.List;
+import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
+import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
+import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
+import org.apache.plc4x.malbec.s88.core.StructureQueries;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -149,6 +154,34 @@ class SfcStructureTest {
                 .anyMatch(link -> link.getTo().stream()
                         .anyMatch(to -> "MIX".equals(to.getValue())));
         assertTrue(back, "the flow really does go back round the mixer");
+    }
+
+    /**
+     * A loop connection comes off on its own, because no step can be taken off while it is there.
+     *
+     * <p>Taking a step off means taking the lines that meet at it off along with it, and a loop
+     * leaves a step with two ways on. The loop link goes as a whole: its bar and both of its lines.
+     */
+    @Test
+    void aLoopConnectionComesOffOnItsOwn() {
+        S88MasterRecipe recipe = SfcFixtures.lineal();
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        S88ProcedureTransition bar = EditProcedureLogicUseCase.joinStepsThroughATransition(
+                recipe, null, "PACK", "MIX");
+
+        assertEquals(bar.getId(), StructureQueries.loopTransitionOf(chart, bar.getId()),
+                "the bar that closes the loop is one");
+        assertEquals(2, chart.linksTouching(S88IdRef.transition(bar.getId())).size(),
+                "with the two lines that meet at it");
+
+        EditProcedureLogicUseCase.removeLoopLink(recipe, null, bar.getId());
+
+        assertTrue(chart.findTransition(bar.getId()).isEmpty(), "the bar is gone");
+        assertTrue(chart.linksTouching(S88IdRef.transition(bar.getId())).isEmpty(),
+                "and so are both lines");
+        ChartDeletionUseCase.deleteBox(recipe, null, "PACK");
+        assertTrue(chart.findStep("PACK").isEmpty(),
+                "and the step the loop left is free to be taken off again");
     }
 
     /**

@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.BorderLayout;
 import java.awt.Cursor;
+import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -65,6 +66,7 @@ public final class RecipeChartView extends AbstractRecipeView {
         add(new JScrollPane(view), BorderLayout.CENTER);
 
         problems = new RecipeProblems();
+        problems.onPick(scene::select);
         JPanel below = new JPanel(new BorderLayout());
         below.add(problems, BorderLayout.CENTER);
         add(below, BorderLayout.SOUTH);
@@ -185,15 +187,26 @@ public final class RecipeChartView extends AbstractRecipeView {
      */
     void showJoining(boolean joining) {
         scene.setJoining(joining);
-        view.setCursor(Cursor.getPredefinedCursor(
-                joining ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR));
+        Cursor cursor = Cursor.getPredefinedCursor(
+                joining ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR);
+        view.setCursor(cursor);
+        scene.setCursor(cursor);
     }
 
     @Override
     protected void redraw() {
         scene.draw(model.getRecipe(), model.currentStep());
+        Graphics2D onScreen = (Graphics2D) view.getGraphics();
+        if (onScreen != null) {
+            try {
+                scene.validate(onScreen);
+            } finally {
+                onScreen.dispose();
+            }
+        }
+        view.revalidate();
+        view.repaint();
         toolbar.refresh();
-        problems.show(RecipeProblems.toShow(model.conformance(), scene.complaints(),
-                model.warning()));
+        problems.show(model.conformance(), scene.complaints(), model.warning());
     }
 }

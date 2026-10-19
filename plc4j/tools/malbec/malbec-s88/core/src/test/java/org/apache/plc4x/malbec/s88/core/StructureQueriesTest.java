@@ -251,6 +251,44 @@ class StructureQueriesTest {
                 "and a chart that holds together has none of them");
     }
 
+    /** A loop connection is the bar the flow comes back by, and the lines that meet at it. */
+    @Test
+    void aLoopConnectionIsFoundFromItsBarAndFromItsLines() {
+        S88ProcedureLogic logic = withALoopBackToHeat();
+
+        assertEquals("T_BACK", StructureQueries.loopTransitionOf(logic, "T_BACK"),
+                "and the bar it comes back by is one");
+        assertEquals("T_BACK", StructureQueries.loopTransitionOf(logic, "L_BACK_OUT"),
+                "and the line that leaves the step for it");
+        assertEquals("T_BACK", StructureQueries.loopTransitionOf(logic, "L_BACK_IN"),
+                "and the line that arrives back at the step");
+        assertNull(StructureQueries.loopTransitionOf(logic, "T_END"),
+                "and a bar of the ordinary flow is not one");
+        assertNull(StructureQueries.loopTransitionOf(logic, "HEAT"),
+                "and neither is a step");
+    }
+
+    /**
+     * A chart with a loop that leaves the last step and comes back to one before it.
+     *
+     * <p>The flow leaves {@code PACK}, waits at a bar of its own and arrives back at {@code HEAT}.
+     * {@code PACK} has another way on and {@code HEAT} another way in, so the bar is a loop
+     * connection and not one of the bars of the ordinary flow.
+     */
+    static S88ProcedureLogic withALoopBackToHeat() {
+        S88ProcedureLogic logic = parallel();
+        logic.addTransition(new S88ProcedureTransition("T_BACK", null));
+        S88ProcedureLink out = new S88ProcedureLink("L_BACK_OUT");
+        out.addFrom(S88IdRef.step("PACK"));
+        out.addTo(S88IdRef.transition("T_BACK"));
+        logic.addLink(out);
+        S88ProcedureLink in = new S88ProcedureLink("L_BACK_IN");
+        in.addFrom(S88IdRef.transition("T_BACK"));
+        in.addTo(S88IdRef.step("HEAT"));
+        logic.addLink(in);
+        return logic;
+    }
+
     /**
      * A chart and its boxes under construction.
      *
