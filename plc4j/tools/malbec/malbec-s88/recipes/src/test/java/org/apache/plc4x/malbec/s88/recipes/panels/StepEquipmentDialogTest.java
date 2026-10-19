@@ -34,10 +34,11 @@ import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
+import org.apache.plc4x.malbec.s88.core.CreateRecipeElementUseCase;
 import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,7 +52,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * No window is opened here. What is checked is what the tables say and what the values written back
  * are, because that is the part that can be wrong without anybody seeing a window appear.
  */
-@Disabled("El paso de estas pruebas es UNIT_PROCEDURE y su clase de equipo es un EQUIPMENTMODULE, que es el nivel de una PHASE. Lo dejo la jerarquia de niveles del paso 5. Se rehabilita al migrar los fixtures a RecipeLevels, fase A.3.")
 class StepEquipmentDialogTest {
 
     /** A class of heaters and two of them, one with its own variable names. */
@@ -137,11 +137,30 @@ class StepEquipmentDialogTest {
     }
 
     private static S88MasterRecipe recipeBoundToTheClass(S88PlantSnapshot plant) {
+        return recipeWithAPhaseBoundTo(plant, S88RecipeKind.CLASS, "CALENTAMIENTO");
+    }
+
+    /**
+     * A recipe whose one phase sits where the hierarchy puts it, bound to the named class or to the
+     * named equipment.
+     * <p>
+     * A phase is the level a module is bound to, so it is an operation's chart that holds it and a
+     * module's chart that does not exist.
+     */
+    private static S88MasterRecipe recipeWithAPhaseBoundTo(S88PlantSnapshot plant, S88RecipeKind kind,
+                                                           String target) {
         S88MasterRecipe recipe = org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase
-                .execute("REC", S88RecipeKind.CLASS);
-        S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-        BindRecipeStepUseCase.bindToClass(recipe, null, empty.getId(),
-                "CALENTAMIENTO", plant);
+                .execute("REC", kind);
+        S88RecipeElement unitProcedure = CreateRecipeElementUseCase.execute(recipe, null, "TRAMO",
+                S88RecipeElementKind.UNIT_PROCEDURE);
+        S88RecipeElement operation = CreateRecipeElementUseCase.execute(recipe, unitProcedure, "PASO",
+                S88RecipeElementKind.OPERATION);
+        S88RecipeElement phase = BindRecipeStepUseCase.addEmptyStepAfter(recipe, operation, "BEGIN");
+        if (kind == S88RecipeKind.CLASS) {
+            BindRecipeStepUseCase.bindToClass(recipe, operation, phase.getId(), target, plant);
+        } else {
+            BindRecipeStepUseCase.bindToEquipment(recipe, operation, phase.getId(), target, plant);
+        }
         return recipe;
     }
 
@@ -149,14 +168,13 @@ class StepEquipmentDialogTest {
     void aStepBoundToAEquipmentShowsThatEquipmentsOwnParameters() {
         onSwingThread(() -> {
             S88PlantSnapshot plant = plant();
-            S88MasterRecipe recipe = org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase
-                    .execute("REC", S88RecipeKind.INSTANCE);
-            S88RecipeElement empty = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
-            BindRecipeStepUseCase.bindToEquipment(recipe, null, empty.getId(),
-                    "CALENTAMIENTO_TANQUE_1", plant);
+            S88MasterRecipe recipe =
+                    recipeWithAPhaseBoundTo(plant, S88RecipeKind.INSTANCE, "CALENTAMIENTO_TANQUE_1");
+            S88RecipeElement element =
+                    recipe.findElement("CALENTAMIENTO_TANQUE_1").orElseThrow();
             RecipeEditorModel model = modelOf(recipe, plant);
 
-            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, empty);
+            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, element);
 
             assertEquals(List.of("TEMPERATURA_SP_CALENTAMIENTO_TANQUE_1=100"),
                     dialog.valuesShown(),
@@ -209,8 +227,10 @@ class StepEquipmentDialogTest {
 
             dialog.putValue("TEMPERATURA_SP", "95");
             dialog.saveForTest();
+            S88RecipeElement writtenBack =
+                    model.getRecipe().findElement("CALENTAMIENTO").orElseThrow();
             S88ParameterValue written =
-                    element.findParameter("TEMPERATURA_SP").orElseThrow().getFirstValue();
+                    writtenBack.findParameter("TEMPERATURA_SP").orElseThrow().getFirstValue();
 
             assertEquals("95", written.getFirstValueString(), "and the value is what was typed");
             assertEquals(DataType.REAL, written.getDataType(),
@@ -282,6 +302,75 @@ class StepEquipmentDialogTest {
         model.registerClass(heaters);
         model.registerEnumeration(PlatformEnumerations.commandValues());
         return PlantSnapshotUseCase.of(model);
+    }
+
+    @Test
+    void anEnumerationOffersItsMembersRatherThanFreeText() {
+        onSwingThread(() -> {
+            S88PlantSnapshot plant = plantWithAnEnumeration();
+            S88MasterRecipe recipe = recipeBoundToTheClass(plant);
+            S88RecipeElement element = recipe.findElement("CALENTAMIENTO").orElseThrow();
+            RecipeEditorModel model = modelOf(recipe, plant);
+
+            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, element);
+
+            assertTrue(dialog.choicesFor("MODO").containsAll(List.of("AUTOMATICO", "MANUAL")),
+                    "because the members are what the parameter can hold, so they are offered rather"
+                            + " than only checked");
+        });
+    }
+
+    @Test
+    void aValueOutsideWhatThePlantAllowsIsRefusedBeforeItIsWritten() {
+        onSwingThread(() -> {
+            S88PlantSnapshot plant = plant();
+            S88MasterRecipe recipe = recipeBoundToTheClass(plant);
+            S88RecipeElement element = recipe.findElement("CALENTAMIENTO").orElseThrow();
+            RecipeEditorModel model = modelOf(recipe, plant);
+            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, element);
+
+            dialog.putValue("TEMPERATURA_SP", "200");
+
+            assertTrue(dialog.checkValues().contains("120"),
+                    "because the plant says the highest is 120 and a value above it is one the"
+                            + " equipment will never take");
+        });
+    }
+
+    @Test
+    void aValueOfTheWrongTypeIsRefusedBeforeItIsWritten() {
+        onSwingThread(() -> {
+            S88PlantSnapshot plant = plant();
+            S88MasterRecipe recipe = recipeBoundToTheClass(plant);
+            S88RecipeElement element = recipe.findElement("CALENTAMIENTO").orElseThrow();
+            RecipeEditorModel model = modelOf(recipe, plant);
+            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, element);
+
+            dialog.putValue("TEMPERATURA_SP", "warm");
+
+            assertTrue(dialog.checkValues().contains("number"),
+                    "because a temperature that is a word is a temperature the plant will never see");
+        });
+    }
+
+    @Test
+    void aValueThatOnlyGainedSpacesIsNotWrittenAgain() {
+        onSwingThread(() -> {
+            S88PlantSnapshot plant = plant();
+            S88MasterRecipe recipe = recipeBoundToTheClass(plant);
+            S88RecipeElement element = recipe.findElement("CALENTAMIENTO").orElseThrow();
+            RecipeEditorModel model = modelOf(recipe, plant);
+            StepEquipmentDialog dialog = new StepEquipmentDialog(null, model, element);
+
+            dialog.putValue("TEMPERATURA_SP", "80 ");
+            dialog.saveForTest();
+
+            assertEquals("80", model.getRecipe().findElement("CALENTAMIENTO").orElseThrow()
+                            .findParameter("TEMPERATURA_SP").orElseThrow()
+                            .getFirstValue().getFirstValueString(),
+                    "because the same value surrounded by spaces is the same value, so nothing is"
+                            + " written");
+        });
     }
 
     private static void onSwingThread(Runnable what) {

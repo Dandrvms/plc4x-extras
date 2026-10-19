@@ -101,10 +101,7 @@ public final class SetBarConditionUseCase {
         }
 
         boolean byClass = recipe.addressesByClass();
-        DeclaredReport report = byClass
-                ? reportOfAClassThisBarCanRead(recipe, step, barId, plant, reportName)
-                : reportOf(plant, equipmentId, reportName);
-        checkLiteral(plant, report, literal);
+        checkValue(recipe, step, barId, plant, byClass ? null : equipmentId, reportName, literal);
 
         S88VariableAddress address = byClass
                 ? S88VariableAddress.parse(REPORTS + "/" + reportName)
@@ -112,6 +109,39 @@ public final class SetBarConditionUseCase {
         EditProcedureLogicUseCase.setCondition(recipe, step, barId,
                 S88ConditionExpression.on(byClass ? null : equipmentId, address, how, literal)
                         .toText());
+    }
+
+    /**
+     * Whether a bar may be told to wait for this value, without changing anything.
+     * <p>
+     * A dialog asks this before it closes, so that a value the report can never hold is refused where
+     * the operator wrote it rather than by the edit that writes the bar.
+     *
+     * @param recipe      recipe being edited, to find the class a report is read from
+     * @param owner       step whose chart holds the bar, {@code null} for the chart of the recipe
+     * @param barId       bar of that chart that waits on the report
+     * @param plant       the plant the recipe is written against
+     * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
+     * @param reportName  report the bar waits on
+     * @param literal     the value it is compared against
+     * @throws IllegalArgumentException when there is no such report, or a value it can never hold
+     */
+    public static void checkValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
+                                  S88PlantSnapshot plant, String equipmentId, String reportName,
+                                  String literal) {
+        checkLiteral(plant, reportReadable(recipe, owner, barId, plant, equipmentId, reportName),
+                literal);
+    }
+
+    /**
+     * The report a bar of this chart reads, settled by the recipe kind and the steps into the bar.
+     */
+    private static DeclaredReport reportReadable(S88MasterRecipe recipe, S88RecipeElement owner,
+                                                String barId, S88PlantSnapshot plant,
+                                                String equipmentId, String reportName) {
+        return recipe != null && recipe.addressesByClass()
+                ? reportOfAClassThisBarCanRead(recipe, owner, barId, plant, reportName)
+                : reportOf(plant, equipmentId, reportName);
     }
 
     /**
@@ -131,9 +161,7 @@ public final class SetBarConditionUseCase {
                                              String reportName) {
         DeclaredReport report;
         try {
-            report = recipe != null && recipe.addressesByClass()
-                    ? reportOfAClassThisBarCanRead(recipe, owner, barId, plant, reportName)
-                    : reportOf(plant, equipmentId, reportName);
+            report = reportReadable(recipe, owner, barId, plant, equipmentId, reportName);
         } catch (IllegalArgumentException notThere) {
             return List.of();
         }

@@ -30,19 +30,16 @@ import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
-import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
 import org.apache.plc4x.malbec.s88.core.UpdateRecipeParameterUseCase;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -52,14 +49,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checked here without opening a window: what the box is given to draw and how big it ends up is what
  * an author sees, and both can be wrong without anything else saying so.
  */
-@Disabled("Los pasos de estas pruebas son UNIT_PROCEDURE y se atan a un EQUIPMENTMODULE, que es el nivel de una PHASE. No es un hallazgo de la revision, es lo que dejo la jerarquia de niveles del paso 5. Se rehabilita al migrar los fixtures a RecipeLevels, fase A.3.")
 class StepBoxOnTheChartTest {
 
     /** A plant with one class of heaters, with a long name on the equipment behind it. */
     private static S88PlantSnapshot plant() {
         S88ElementClass heaters = new S88ElementClass();
         heaters.setName("CALENTAMIENTO_DE_TANQUE");
-        heaters.setTargetLevel(S88Level.EQUIPMENTMODULE);
+        heaters.setTargetLevel(S88Level.UNIT);
 
         S88Element root = new S88Element();
         root.setId("PLANT");
@@ -89,16 +85,15 @@ class StepBoxOnTheChartTest {
     }
 
     @Test
-    void aStepWithNoEquipmentSaysNothingAndIsAsBigAsAnyOther() {
+    void aStepWithNoEquipmentStillSaysItsNameAndIsAsBigAsAnyOther() {
         S88MasterRecipe recipe = withAnEmptyStep();
-        S88RecipeElement empty = recipe.findElement("STEP").orElseThrow();
         String box = recipe.getProcedureLogic().findStep("STEP").orElseThrow().getId();
 
         RecipeChartScene.NodeSpec spec = RecipeChartScene.nodesOf(recipe, null).get(box);
 
-        assertNull(spec.label(),
-                "because its name is one the editor made up so the chart could hold it, and an"
-                        + " author reading it would be reading something meant for nobody");
+        assertEquals("STEP", spec.label(),
+                "because a box with no name reads as nothing being there rather than as a step the"
+                        + " author has not given equipment to yet");
         assertEquals(SfcMetrics.widthOf(RecipeShapes.Shape.BOX), widthOf(box, recipe),
                 "and an empty box is the size every other box is, because a box that shrinks to"
                         + " nothing reads as nothing being there rather than as something waiting");
@@ -125,7 +120,7 @@ class StepBoxOnTheChartTest {
     private static S88PlantSnapshot plantWithParameters() {
         S88ElementClass heaters = new S88ElementClass();
         heaters.setName("CALENTAMIENTO");
-        heaters.setTargetLevel(S88Level.EQUIPMENTMODULE);
+        heaters.setTargetLevel(S88Level.UNIT);
         heaters.setProperty("Parameters", Map.of(
                 "TEMPERATURA_SP", Map.of("Type", "REAL", "Eng_Units/Enum", "C", "Default", "100"),
                 "TIEMPO_SP", Map.of("Type", "REAL", "Eng_Units/Enum", "MIN", "Default", "5"),

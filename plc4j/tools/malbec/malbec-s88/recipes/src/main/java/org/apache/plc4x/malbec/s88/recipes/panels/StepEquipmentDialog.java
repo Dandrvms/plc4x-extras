@@ -28,6 +28,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -41,6 +42,7 @@ import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
+import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.apache.plc4x.malbec.s88.core.UpdateRecipeParameterUseCase;
 
 /**
@@ -85,6 +87,11 @@ final class StepEquipmentDialog extends JDialog {
         private static final long serialVersionUID = 1L;
     };
 
+    /** What each parameter row offers to choose from, empty when the value is typed. */
+    private final Map<Integer, List<String>> valueChoices = new LinkedHashMap<>();
+
+    private JTable parametersTable;
+
     StepEquipmentDialog(Window owner, RecipeEditorModel model, S88RecipeElement step) {
         super(owner, "Equipment of " + step.getId(), ModalityType.APPLICATION_MODAL);
         this.model = model;
@@ -93,8 +100,8 @@ final class StepEquipmentDialog extends JDialog {
         this.byClass = model.getRecipe().addressesByClass();
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab(PARAMETERS, table(parameters));
-        tabs.addTab(REPORTS, table(reports));
+        tabs.addTab(PARAMETERS, new JScrollPane(parametersTable()));
+        tabs.addTab(REPORTS, new JScrollPane(plainTable(reports)));
         add(tabs, BorderLayout.CENTER);
         add(buttons(), BorderLayout.SOUTH);
         read();
@@ -102,10 +109,35 @@ final class StepEquipmentDialog extends JDialog {
         setLocationRelativeTo(owner);
     }
 
-    private static JScrollPane table(DefaultTableModel model) {
+    /**
+     * The parameters table, whose value column offers the members of an enumeration rather than
+     * letting a person write something the equipment can never hold.
+     */
+    private JTable parametersTable() {
+        parametersTable = new JTable(parameters) {
+
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public javax.swing.table.TableCellEditor getCellEditor(int row, int column) {
+                if (column == 1) {
+                    List<String> choices = valueChoices.get(row);
+                    if (choices != null && !choices.isEmpty()) {
+                        return new javax.swing.DefaultCellEditor(
+                                new javax.swing.JComboBox<>(choices.toArray(new String[0])));
+                    }
+                }
+                return super.getCellEditor(row, column);
+            }
+        };
+        parametersTable.setFillsViewportHeight(true);
+        return parametersTable;
+    }
+
+    private static JTable plainTable(DefaultTableModel model) {
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
-        return new JScrollPane(table);
+        return table;
     }
 
     private JPanel buttons() {
@@ -142,6 +174,7 @@ final class StepEquipmentDialog extends JDialog {
     private void read() {
         parameters.setRowCount(0);
         reports.setRowCount(0);
+        valueChoices.clear();
         Map<String, Object> published = publishedBy();
         Map<String, Map<String, Object>> plantParameters = container(published, PARAMETERS);
         Map<String, Map<String, Object>> plantReports = container(published, REPORTS);
@@ -154,6 +187,7 @@ final class StepEquipmentDialog extends JDialog {
             Map<String, Object> definition = plantParameters.get(name);
             S88ParameterValue carried = parameter.getFirstValue();
             DataType dataType = dataTypeOf(definition, carried);
+            int row = parameters.getRowCount();
             parameters.addRow(new Object[]{
                 name,
                 carried == null ? "" : carried.getFirstValueString(),
@@ -163,6 +197,13 @@ final class StepEquipmentDialog extends JDialog {
                         : unitOf(definition, carried, dataType),
                 allowedOf(definition)
             });
+            if (dataType == DataType.ENUMERATION) {
+                List<String> members =
+                        SetBarConditionUseCase.membersOf(plant, enumOf(definition, carried));
+                if (!members.isEmpty()) {
+                    valueChoices.put(row, members);
+                }
+            }
         }
         for (Map.Entry<String, Map<String, Object>> report : plantReports.entrySet()) {
             reports.addRow(new Object[]{
@@ -233,10 +274,57 @@ final class StepEquipmentDialog extends JDialog {
 
     /**
      * Writes the values the author changed back into the recipe.
+     * <p>
+     * A value the plant would never accept is refused where it was typed rather than written, and a
+     * value left empty is the same as one that was never there.
      */
     private void saveValues() {
-        Map<String, Map<String, Object>> declared =
-                container(publishedBy(), PARAMETERS);
+        String problem = checkValues();
+        if (problem != null) {
+            JOptionPane.showMessageDialog(this, problem, "Not a value it can hold",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        writeTheValues();
+        dispose();
+    }
+
+    private void writeTheValues() {
+        List<ValuesToWrite> writes = valuesToWrite();
+        if (writes.isEmpty()) {
+            return;
+        }
+        model.edit("Value of " + step.getId(), () -> {
+            for (ValuesToWrite write : writes) {
+                S88RecipeElement current = model.getRecipe().findElement(step.getId()).orElse(step);
+                UpdateRecipeParameterUseCase.execute(model.getRecipe(), current, write.name(),
+                        write.value(), write.type(), write.unit());
+            }
+        });
+    }
+
+    /**
+     * The first value that is not one the plant would accept, or {@code null} when every one is.
+     *
+     * @return what is wrong, in a sentence the author can read
+     */
+    String checkValues() {
+        stopEditing();
+        Map<String, Map<String, Object>> declared = container(publishedBy(), PARAMETERS);
+        for (int row = 0; row < parameters.getRowCount(); row++) {
+            String name = (String) parameters.getValueAt(row, 0);
+            Object typed = parameters.getValueAt(row, 1);
+            String problem = problemWith(declared.get(name), name, typed == null ? "" : typed.toString());
+            if (problem != null) {
+                return problem;
+            }
+        }
+        return null;
+    }
+
+    private List<ValuesToWrite> valuesToWrite() {
+        stopEditing();
+        Map<String, Map<String, Object>> declared = container(publishedBy(), PARAMETERS);
         List<ValuesToWrite> writes = new ArrayList<>();
         for (int row = 0; row < parameters.getRowCount(); row++) {
             String name = (String) parameters.getValueAt(row, 0);
@@ -246,25 +334,104 @@ final class StepEquipmentDialog extends JDialog {
             String already = parameter == null || parameter.getFirstValue() == null
                 ? null
                 : parameter.getFirstValue().getFirstValueString();
-            if (java.util.Objects.equals(wanted, already)) {
+            if (sameValue(wanted, already)) {
                 continue;
             }
             Map<String, Object> definition = declared.get(name);
-            DataType dataType = dataTypeOf(definition, parameter == null ? null : parameter.getFirstValue());
-            writes.add(new ValuesToWrite(name, wanted, dataType, unitOf(definition, parameter == null ? null : parameter.getFirstValue(), dataType)));
+            DataType dataType = dataTypeOf(definition,
+                    parameter == null ? null : parameter.getFirstValue());
+            writes.add(new ValuesToWrite(name, wanted, dataType,
+                    unitOf(definition, parameter == null ? null : parameter.getFirstValue(), dataType)));
+        }
+        return writes;
+    }
 
+    /** A value left empty is the same as one that was never there. */
+    private static boolean sameValue(String wanted, String already) {
+        return normalize(wanted).equals(normalize(already));
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    /**
+     * What is wrong with one value: its type, and whether it sits inside what the plant allows.
+     */
+    private String problemWith(Map<String, Object> definition, String name, String wanted) {
+        if (wanted == null || wanted.isBlank()) {
+            return null;
         }
-        if(writes.isEmpty()){
-            dispose();
-            return;
-        }
-        model.edit("Value of " + step.getId(), () -> {
-            for(ValuesToWrite write : writes){
-                S88RecipeElement current = model.getRecipe().findElement(step.getId()).orElse(step);
-                UpdateRecipeParameterUseCase.execute(model.getRecipe(), current, write.name(), write.value(), write.type(), write.unit());
+        String trimmed = wanted.trim();
+        DataType dataType = dataTypeOf(definition, null);
+        switch (dataType == null ? DataType.STRING : dataType) {
+            case INTEGER -> {
+                if (asDouble(trimmed) == null || trimmed.contains(".")) {
+                    return name + " has to be a whole number, and '" + wanted + "' is not one.";
+                }
             }
-        });
-        dispose();
+            case REAL -> {
+                if (asDouble(trimmed) == null) {
+                    return name + " has to be a number, and '" + wanted + "' is not one.";
+                }
+            }
+            case ENUMERATION -> {
+                List<String> members = membersOfTheEnumeration(definition);
+                if (!members.isEmpty() && !members.contains(trimmed)) {
+                    return name + " has to be one of " + String.join(", ", members)
+                            + ", and '" + wanted + "' is not one of them.";
+                }
+            }
+            default -> {
+                /* A string can hold what a person writes. */
+            }
+        }
+        return outOfRange(definition, name, trimmed, dataType);
+    }
+
+    /**
+     * Whether the value sits between the lowest and the highest the plant allows, when it says.
+     */
+    private static String outOfRange(Map<String, Object> definition, String name, String trimmed,
+                                     DataType dataType) {
+        if (dataType != DataType.INTEGER && dataType != DataType.REAL) {
+            return null;
+        }
+        Double value = asDouble(trimmed);
+        if (value == null) {
+            return null;
+        }
+        Double lowest = asDouble(text(definition, "Min"));
+        Double highest = asDouble(text(definition, "Max"));
+        if (lowest != null && value < lowest) {
+            return name + " has to be at least " + text(definition, "Min") + ".";
+        }
+        if (highest != null && value > highest) {
+            return name + " has to be at most " + text(definition, "Max") + ".";
+        }
+        return null;
+    }
+
+    private static Double asDouble(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Double.valueOf(text.trim());
+        } catch (NumberFormatException notANumber) {
+            return null;
+        }
+    }
+
+    private List<String> membersOfTheEnumeration(Map<String, Object> definition) {
+        return SetBarConditionUseCase.membersOf(plant, text(definition, UNITS_OR_ENUM));
+    }
+
+    /** Stops an edit still open in the table, so what is read is what was typed. */
+    private void stopEditing() {
+        if (parametersTable != null && parametersTable.isEditing()) {
+            parametersTable.getCellEditor().stopCellEditing();
+        }
     }
 
     private record ValuesToWrite(String name, String value, DataType type, String unit){}
@@ -328,6 +495,17 @@ final class StepEquipmentDialog extends JDialog {
         return parameters.getRowCount() == 0
                 ? ""
                 : String.valueOf(parameters.getValueAt(0, 4));
+    }
+
+    /** What a parameter offers to choose from, for a test that reads it. */
+    List<String> choicesFor(String name) {
+        for (int row = 0; row < parameters.getRowCount(); row++) {
+            if (name.equals(parameters.getValueAt(row, 0))) {
+                List<String> choices = valueChoices.get(row);
+                return choices == null ? List.of() : choices;
+            }
+        }
+        return List.of();
     }
 
     /** The type and unit columns as they now stand, for a test that reads them. */

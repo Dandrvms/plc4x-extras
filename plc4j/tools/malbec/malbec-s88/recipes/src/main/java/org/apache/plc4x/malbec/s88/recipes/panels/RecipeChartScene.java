@@ -25,7 +25,6 @@ import java.util.*;
 import java.util.List;
 import java.util.function.BiConsumer;
 import javax.swing.JComponent;
-import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
 import org.apache.plc4x.malbec.s88.api.PlatformVariable;
@@ -33,6 +32,7 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
+import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.netbeans.api.visual.action.ActionFactory;
@@ -333,12 +333,15 @@ final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     private static String conditionText(S88ProcedureTransition transition) {
-        S88ConditionExpression comparison = S88ConditionExpression.parse(transition.getCondition());
-        if (comparison != null) {
-            return comparison.toDisplay();
+        S88TransitionCondition condition = S88TransitionCondition.parse(transition.getCondition());
+        if (condition != null) {
+            return condition.toDisplay();
         }
-        String condition = transition.getCondition();
-        return condition == null || condition.isBlank() ? null : condition;
+        String raw = transition.getCondition();
+        if (raw == null || raw.isBlank()) {
+            return "TRUE";
+        }
+        return raw;
     }
 
     private static Map<String, RecipeShapes.Shape> shapesOf(Map<String, NodeSpec> what) {

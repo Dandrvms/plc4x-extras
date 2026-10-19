@@ -31,6 +31,7 @@ import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 
 import java.util.ArrayList;
@@ -639,13 +640,13 @@ public class EditProcedureLogicUseCase {
             bar.setExpression(null);
             bar.setCondition(null);
         } else {
-            S88ConditionExpression expression = S88ConditionExpression.parse(text);
+            S88TransitionCondition expression = S88TransitionCondition.parse(text);
             if (expression == null) {
                 throw new IllegalArgumentException("'" + text.trim() + "' is not something a bar"
-                        + " can wait on. It is written as ADDRESS#COMPARISON#LITERAL, for"
-                        + " example Reports/STATE#=#COMPLETE");
+                        + " can wait on. One thing is written as ADDRESS#COMPARISON#LITERAL, for"
+                        + " example Reports/STATE#=#COMPLETE; several are joined as AND(...) or"
+                        + " OR(...); and a wait is written as WAIT(seconds)");
             }
-            bar.setExpression(expression);
             bar.setCondition(expression.toText());
         }
         announce(recipe);

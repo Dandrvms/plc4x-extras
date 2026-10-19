@@ -27,11 +27,11 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.*;
 
-import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
@@ -40,7 +40,6 @@ import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
-import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.apache.plc4x.malbec.s88.core.StructureQueries;
 
 /**
@@ -577,103 +576,18 @@ final class RecipeChartToolbar {
                             + " from.", "No plant", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        boolean byClass = recipe.addressesByClass();
-        String equipment = null;
-        if (!byClass) {
-            List<String> withReports = SetBarConditionUseCase.equipmentWithReports(plant, owner);
-            if (withReports.isEmpty()) {
-                JOptionPane.showMessageDialog(bar(),
-                        "No equipment in this plant publishes a report, so there is nothing a"
-                                + " transition can wait on.", "No reports",
-                        JOptionPane.INFORMATION_MESSAGE);
-                return;
-            }
-            equipment = chooseOne(withReports, "Which equipment does " + bar + " read from?",
-                    "Equipment to read from");
-            if (equipment == null) {
-                return;
-            }
-        }
-        List<String> reports = byClass
-                ? SetBarConditionUseCase.reportsToWaitOn(recipe, owner, bar, plant)
-                : SetBarConditionUseCase.reportsOf(plant, equipment);
-        if (reports.isEmpty()) {
-            JOptionPane.showMessageDialog(bar(), byClass
-                    ? "No class of equipment in this recipe publishes a report, so there is nothing to"
-                            + " wait on."
-                    : equipment + " publishes no report, so there is nothing to wait on.",
-                    "No reports", JOptionPane.INFORMATION_MESSAGE);
+        String current = model().chartBeingEdited().findTransition(bar)
+                .map(S88ProcedureTransition::getCondition).orElse(null);
+        Window window = view == null ? null : SwingUtilities.getWindowAncestor(view);
+        TransitionConditionDialog dialog =
+                new TransitionConditionDialog(window, recipe, owner, bar, plant, current);
+        dialog.setVisible(true);
+        if (!dialog.wasAccepted()) {
             return;
         }
-        String report = chooseOne(reports, "Which report does " + bar + " wait on?",
-                "Report to wait on");
-        if (report == null) {
-            return;
-        }
-        String operator = chooseOne(comparisonSymbols(), "How is " + report + " compared?",
-                "Comparison");
-        if (operator == null) {
-            return;
-        }
-        String value = askForValue(recipe, owner, bar, plant, equipment, report, operator);
-        if (value == null) {
-            return;
-        }
-        String reads = equipment;
-        try {
-            model().edit("Condition of " + bar,
-                    () -> SetBarConditionUseCase.waitUntil(model().getRecipe(), owner, bar,
-                            plant, reads, report, operator, value.trim()));
-        } catch (RecipeEditException refused) {
-            JOptionPane.showMessageDialog(bar(), reasonWithing(refused),
-                    "Not something to wait on", JOptionPane.WARNING_MESSAGE);
-        }
-    }
-
-    /**
-     * What the transition is told to wait for.
-     * <p>
-     * A report that is an enumeration has a fixed set of values, and they are offered rather than
-     * written. Anything else is written.
-     */
-    private String askForValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
-                               S88PlantSnapshot plant, String equipment, String report,
-                               String operator) {
-        List<String> offered = SetBarConditionUseCase.allowedValues(recipe, owner, barId, plant,
-                equipment, report);
-        if (!offered.isEmpty()) {
-            return chooseOne(offered,
-                    "Value of " + report + " has to compare " + operator + " against",
-                    "Value to wait for");
-        }
-        return ask("Value " + report + " has to compare " + operator + " against",
-                "Value to wait for");
-    }
-
-    /**
-     * The comparisons a transition can be given, as the operator reads them.
-     * <p>
-     * The catch-all is left out, because it is there for a condition written by hand and nothing this
-     * dialog offers is one.
-     */
-    private List<String> comparisonSymbols() {
-        List<String> symbols = new java.util.ArrayList<>();
-        for (S88ConditionOperator one : S88ConditionOperator.values()) {
-            if (one != S88ConditionOperator.OTHER) {
-                symbols.add(one.getSymbol());
-            }
-        }
-        return symbols;
-    }
-
-    /**
-     * Asks which one of a list of names, offering nothing but the list.
-     *
-     * @return the name chosen, or {@code null} when the operator backed out
-     */
-    private String chooseOne(List<String> names, String message, String title) {
-        return (String) JOptionPane.showInputDialog(bar(), message, title,
-                JOptionPane.QUESTION_MESSAGE, null, names.toArray(), names.getFirst());
+        String text = dialog.conditionText();
+        run("Condition of " + bar, () -> model().edit("Condition of " + bar,
+                () -> EditProcedureLogicUseCase.setCondition(model().getRecipe(), owner, bar, text)));
     }
 
     /**
