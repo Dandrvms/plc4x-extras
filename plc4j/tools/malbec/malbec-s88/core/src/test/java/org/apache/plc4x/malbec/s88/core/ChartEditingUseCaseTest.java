@@ -118,16 +118,43 @@ class ChartEditingUseCaseTest {
     }
 
     @Test
-    void aStepThatCannotBePutAfterABoxThatAlreadySplitsInTwo() {
+    void aStepPutAfterABoxThatAlreadySplitsGoesInFrontOfTheSplit() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         EditProcedureLogicUseCase.selectiveFork(recipe, operationOf(recipe), "BEGIN", "T_ONE", "T_TWO");
 
-        IllegalStateException failure = assertThrows(IllegalStateException.class,
-                () -> EditProcedureLogicUseCase.insertStepAfter(
-                        recipe, operationOf(recipe), "BEGIN", "MIX", "MIX", "T_A", "AGITATOR"));
+        EditProcedureLogicUseCase.insertStepAfter(
+                recipe, operationOf(recipe), "BEGIN", "MIX", "MIX", "T_A", "AGITATOR");
 
-        assertTrue(failure.getMessage().contains("places"),
-                "and it says why, because which side the step belongs on is the author's choice");
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
+        assertEquals(List.of("T_A"), targetsOf(chart, "BEGIN"),
+                "and the flow waits at the new bar");
+        assertEquals(List.of("MIX"), targetsOf(chart, "T_A"),
+                "and the new step is the one the flow reaches first");
+        assertTrue(targetsOf(chart, "MIX").containsAll(List.of("T_ONE", "T_TWO")),
+                "and both branches still leave from the split");
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart),
+                "and every line still joins a step and a bar");
+    }
+
+    @Test
+    void aStepCanBePutIntoTheChosenBranchOfAFork() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        S88RecipeElement operation = operationOf(recipe);
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, operation, "BEGIN");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, operation, "STEP");
+
+        EditProcedureLogicUseCase.insertStepAfter(recipe, operation, "BEGIN", "MIX", "MIX",
+                "T_MIX", "AGITATOR", InsertMode.IN_BRANCH, "T_STEP");
+
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
+        assertEquals(List.of("MIX"), targetsOf(chart, "T_STEP"),
+                "and the chosen branch reaches the new step first");
+        assertEquals(List.of("T_MIX"), targetsOf(chart, "MIX"));
+        assertEquals(List.of("STEP"), targetsOf(chart, "T_MIX"),
+                "and then carries on to the step that was there");
+        assertEquals(List.of("STEP_1"), targetsOf(chart, "T_BRANCH"),
+                "and the other branch is left as it was");
+        assertTrue(ChartSoundness.check(chart).isEmpty(), "and the chart still runs");
     }
 
     @Test

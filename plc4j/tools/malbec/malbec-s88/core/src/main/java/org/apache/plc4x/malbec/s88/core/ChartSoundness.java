@@ -68,7 +68,7 @@ public final class ChartSoundness {
             return new Report(errors, warnings);
         }
 
-        checkReachability(graph, errors);
+        checkReachability(graph, errors, warnings);
         if (errors.isEmpty()) {
             explore(graph, errors, warnings);
         }
@@ -132,7 +132,8 @@ public final class ChartSoundness {
         }
     }
 
-    private static void checkReachability(ChartGraph graph, List<String> errors) {
+    private static void checkReachability(ChartGraph graph, List<String> errors,
+                                          List<String> warnings) {
         if (!graph.hasNode(BEGIN)) {
             errors.add("The chart has no start step.");
         }
@@ -153,7 +154,9 @@ public final class ChartSoundness {
             Set<String> neighbours = new LinkedHashSet<>(graph.preds(transition));
             neighbours.addAll(graph.succs(transition));
             long steps = neighbours.stream().filter(graph::isStep).count();
-            if (steps < 2) {
+            if (steps < 2 && isSkip(graph, transition)) {
+                warnings.add("Transition '" + transition + "' skips a step.");
+            } else if (steps < 2) {
                 errors.add("Transition '" + transition + "' does not join two steps.");
             }
         }
@@ -270,6 +273,11 @@ public final class ChartSoundness {
         if (unreported > 5) {
             errors.add(unreported - 5 + " more markings cannot reach the stop.");
         }
+    }
+
+    private static boolean isSkip(ChartGraph graph, String transition) {
+        return graph.succs(transition).stream().anyMatch(graph::isTransition)
+                || graph.preds(transition).stream().anyMatch(graph::isTransition);
     }
 
     private static boolean isAtStop(Marking marking) {

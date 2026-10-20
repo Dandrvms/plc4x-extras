@@ -233,25 +233,31 @@ class ChartBranchingUseCaseTest {
     }
 
     @Test
-    void aStepAtTheStartOfABranchCannotBeMadeOptional() {
+    void aStepAtTheStartOfABranchCanBeMadeOptional() {
         S88MasterRecipe recipe = withOneStep();
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
 
-        assertFalse(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "STEP"),
-                "the line that feeds a branch is already split, so there is no plain one to widen");
+        assertTrue(ChartBranchingUseCase.canAddOptionalBranch(recipe, null, "STEP"),
+                "a branch may hold a way round its first step");
+
+        ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP");
+
+        assertEquals(List.of(), ChartSoundness.check(recipe.getProcedureLogic()),
+                "and the chart still runs");
     }
 
     @Test
-    void aStepAtTheStartOfABranchIsRefusedAndNothingIsChanged() {
+    void aStepAtTheStartOfABranchGetsASkipOfItsOwn() {
         S88MasterRecipe recipe = withOneStep();
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
         List<String> before = List.copyOf(departuresOf(recipe, "BEGIN"));
 
-        assertThrows(IllegalStateException.class,
-                () -> ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP"));
+        ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP");
 
-        assertEquals(before, departuresOf(recipe, "BEGIN"),
-                "and the chart is left the way it was");
+        assertEquals(before.size() + 1, departuresOf(recipe, "BEGIN").size(),
+                "and the branch point gains a way round the first step");
+        assertEquals(List.of(), ChartSoundness.check(recipe.getProcedureLogic()),
+                "and the chart still runs");
     }
 
     @Test
@@ -304,18 +310,19 @@ assertEquals(List.of("STEP", "STEP_2"), arrivalsOf(recipe, "T1"),
     }
 
     @Test
-    void aStepWhereTheFlowSplitsIsRefusedAndNothingIsTakenOffTheChart() {
+    void aStepGoesInFrontOfWhereTheFlowSplits() {
         S88MasterRecipe recipe = withOneStep();
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
-        List<String> before = List.copyOf(departuresOf(recipe, "BEGIN"));
+        int branches = departuresOf(recipe, "BEGIN").size();
 
-        assertThrows(IllegalStateException.class,
-                () -> BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN"),
-                "and a step cannot go where the flow splits, because there is no single flow to "
-                        + "put it in");
-        assertEquals(before, departuresOf(recipe, "BEGIN"),
-                "and the branch that was there is still there, so nothing was taken off behind the "
-                        + "author's back");
+        S88RecipeElement added = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
+
+        assertEquals(List.of(added.getId()), departuresOf(recipe, "T_" + added.getId()),
+                "and the new step is the one the flow reaches first");
+        assertEquals(branches, departuresOf(recipe, added.getId()).size(),
+                "and the branches still leave from the same number of bars");
+        assertEquals(List.of(), ChartSoundness.check(recipe.getProcedureLogic()),
+                "and the chart still runs");
     }
 
     /**

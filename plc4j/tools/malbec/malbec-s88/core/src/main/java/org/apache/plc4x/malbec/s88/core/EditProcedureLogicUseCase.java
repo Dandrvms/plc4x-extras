@@ -306,6 +306,96 @@ public class EditProcedureLogicUseCase {
     public static S88RecipeElement insertStepAfter(S88Recipe recipe, S88RecipeElement step,
                                                    String afterBoxId, String newStepId,
                                                    String newBoxId, String barId, String classId) {
+        return insertStepAfter(recipe, step, afterBoxId, newStepId, newBoxId, barId, classId,
+                InsertMode.BEFORE_FORK, null);
+    }
+
+    /**
+     * Puts a step after another one, saying what to do when the box is a branch point.
+     *
+     * @param recipe   recipe being edited, may be {@code null} when no change event is wanted
+     * @param step     step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param afterBoxId box of the chart the step goes after
+     * @param newStepId name for the step of the recipe being added
+     * @param newBoxId  name for its box on the chart
+     * @param barId     name for the bar the flow waits at before the new step
+     * @param classId   class of equipment the new step works on, {@code null} for a step that names
+     *                  none
+     * @param mode      where the step goes when the box is a branch point
+     * @param branchId  transition of the branch to use with {@link InsertMode#IN_BRANCH}
+     * @return the step that was added to the recipe
+     * @throws IllegalArgumentException when there is no recipe, a name is missing or already used,
+     *                                  or the box or branch is not on this chart
+     * @throws IllegalStateException    when the chosen place is not a branch point, or the edit
+     *                                  would stop the flow
+     */
+    public static S88RecipeElement insertStepAfter(S88Recipe recipe, S88RecipeElement step,
+                                                   String afterBoxId, String newStepId,
+                                                   String newBoxId, String barId, String classId,
+                                                   InsertMode mode, String branchId) {
+        InsertMode chosen = mode == null ? InsertMode.BEFORE_FORK : mode;
+        if (chosen == InsertMode.IN_BRANCH) {
+            return insertStepInBranch(recipe, step, afterBoxId, newStepId, newBoxId, barId,
+                    classId, branchId);
+        }
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to insert into.");
+        }
+        if (!chart.findStep(afterBoxId).isPresent()) {
+            throw new IllegalArgumentException("This chart has no step called '" + afterBoxId + "'.");
+        }
+        requireRoomAfter(recipe, chart, afterBoxId);
+        List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
+        boolean fork = onward.size() > 1
+                || (onward.size() == 1 && onward.get(0).getTo().size() > 1);
+        if (chosen == InsertMode.AFTER_JOIN && fork) {
+            throw new IllegalStateException("Step '" + afterBoxId + "' is a branch point, so a step"
+                    + " cannot go after the branches without choosing one of them.");
+        }
+        return insertStepAfterDefault(recipe, step, afterBoxId, newStepId, newBoxId, barId,
+                classId);
+    }
+
+    private static S88RecipeElement insertStepInBranch(S88Recipe recipe, S88RecipeElement step,
+                                                       String afterBoxId, String newStepId,
+                                                       String newBoxId, String barId,
+                                                       String classId, String branchId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to insert into.");
+        }
+        requireStep(chart, afterBoxId);
+        requireRoomAfter(recipe, chart, afterBoxId);
+        List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
+        if (onward.size() != 1 || onward.get(0).getTo().size() < 2) {
+            throw new IllegalStateException("Step '" + afterBoxId + "' is not a branch point, so"
+                    + " there is no branch to put a step in.");
+        }
+        if (branchId == null || onward.get(0).getTo().stream()
+                .noneMatch(end -> branchId.equals(end.getValue()))) {
+            throw new IllegalArgumentException("Branch '" + branchId + "' does not leave step '"
+                    + afterBoxId + "'.");
+        }
+        List<S88ProcedureLink> branch = leaving(chart, branchId);
+        if (branch.size() != 1 || branch.get(0).getTo().size() != 1
+                || chart.findStep(branch.get(0).getTo().getFirst().getValue()).isEmpty()) {
+            throw new IllegalStateException("Branch '" + branchId + "' does not lead to one step.");
+        }
+        String first = branch.get(0).getTo().getFirst().getValue();
+        return insertStepBefore(recipe, step, first, newStepId, newBoxId, barId, classId);
+    }
+
+    private static void requireStep(S88ProcedureLogic chart, String id) {
+        if (chart.findStep(id).isEmpty()) {
+            throw new IllegalArgumentException("This chart has no step called '" + id + "'.");
+        }
+    }
+
+    private static S88RecipeElement insertStepAfterDefault(S88Recipe recipe, S88RecipeElement step,
+                                                           String afterBoxId, String newStepId,
+                                                           String newBoxId, String barId,
+                                                           String classId) {
         S88ProcedureLogic chart = chartOf(recipe, step);
         if (chart == null || recipe == null) {
             throw new IllegalArgumentException("There is no chart to insert into.");
@@ -316,22 +406,13 @@ public class EditProcedureLogicUseCase {
         requireRoomAfter(recipe, chart, afterBoxId);
 
         List<S88ProcedureLink> onward = leaving(chart, afterBoxId);
-        if (onward.size() > 1) {
-
-            throw new IllegalStateException("Step '" + afterBoxId + "' already goes to "
-                    + onward.size() + " places, so there is no single flow to put a step in the"
-                    + " middle of.");
+        if (onward.size() > 1 || (onward.size() == 1 && onward.get(0).getTo().size() > 1)) {
+            return insertStepInFrontOfTheFork(recipe, step, afterBoxId, onward, newStepId,
+                    newBoxId, barId, classId);
         }
         List<String> whatFollowed = List.of();
-        if (onward.size() == 1 && onward.get(0).getTo().size() == 1) {
+        if (onward.size() == 1) {
             whatFollowed = List.of(onward.get(0).getTo().get(0).getValue());
-        }
-        if (onward.size() == 1 && onward.get(0).getTo().size() > 1) {
-
-            throw new IllegalStateException("Step '" + afterBoxId + "' goes to "
-                    + onward.get(0).getTo().size() + " transitions, so it is a branch point and there is no"
-                    + " single flow to put a step in. Pick a step inside one of the branches."
-                    + " The branches are " + namesOf(onward.get(0).getTo()) + ".");
         }
 
 
@@ -363,6 +444,137 @@ public class EditProcedureLogicUseCase {
         }
         announce(recipe);
         return added;
+    }
+
+    /**
+     * Puts a step between a step and the branches that leave it.
+     *
+     * <p>No branch has to be chosen. The new step carries on to the same branches from a bar of
+     * its own.
+     */
+    private static S88RecipeElement insertStepInFrontOfTheFork(
+            S88Recipe recipe, S88RecipeElement step, String afterBoxId,
+            List<S88ProcedureLink> onward, String newStepId, String newBoxId, String barId,
+            String classId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        for (S88ProcedureLink line : onward) {
+            if (line.getFrom().size() != 1) {
+                throw new IllegalStateException("Step '" + afterBoxId + "' shares a line with"
+                        + " another step, so there is no one branch point to put a step in"
+                        + " front of.");
+            }
+        }
+        requireFreeStepName(recipe, newStepId);
+        requireFreeName(chart, newBoxId, "step");
+        requireFreeName(chart, barId, "transition");
+
+        for (S88ProcedureLink line : onward) {
+            chart.removeLink(line);
+        }
+        S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
+                recipe, step, newStepId, RecipeLevels.levelOf(step), classId);
+        addStep(recipe, step, newBoxId, newStepId);
+        addTransition(recipe, step, barId);
+        addLink(recipe, step, freeLineName(chart, afterBoxId + "_TO_" + barId),
+                List.of(afterBoxId), List.of(barId), null);
+        addLink(recipe, step, freeLineName(chart, barId + "_TO_" + newBoxId),
+                List.of(barId), List.of(newBoxId), null);
+        for (S88ProcedureLink line : onward) {
+            chart.addLink(rebuilt(line, List.of(S88IdRef.step(newBoxId)), line.getTo(),
+                    line.getLinkType()));
+        }
+        announce(recipe);
+        return added;
+    }
+
+    /**
+     * Puts a step in front of another one, on the line that reaches it.
+     *
+     * <p>The picked step keeps its place in its branch. If the line that reaches it splits into
+     * several branches, the new step goes at the start of the branch that holds the picked step.
+     * The other branches are left as they were.
+     *
+     * @param recipe      recipe being edited, may be {@code null} when no change event is wanted
+     * @param step        step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param beforeBoxId box of the chart the step goes in front of
+     * @param newStepId   name for the step of the recipe being added
+     * @param newBoxId    name for its box on the chart
+     * @param barId       name for the bar the flow waits at after the new step
+     * @param classId     class of equipment the new step works on, {@code null} for a step that
+     *                    names none
+     * @return the step that was added to the recipe
+     * @throws IllegalArgumentException when there is no recipe, a name is missing or already used,
+     *                                  or the box is not on this chart
+     * @throws IllegalStateException    when the box is where the flow starts, or when more than one
+     *                                  line reaches it
+     */
+    public static S88RecipeElement insertStepBefore(S88Recipe recipe, S88RecipeElement step,
+                                                    String beforeBoxId, String newStepId,
+                                                    String newBoxId, String barId, String classId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to insert into.");
+        }
+        S88ProcedureStep box = chart.findStep(beforeBoxId).orElseThrow(
+                () -> new IllegalArgumentException("This chart has no step called '" + beforeBoxId
+                        + "'."));
+        if (CreateMasterRecipeUseCase.BEGIN_ID.equals(box.getId())) {
+            throw new IllegalStateException("Step '" + beforeBoxId + "' is where the flow starts,"
+                    + " so there is nothing to put in front of it.");
+        }
+        List<S88ProcedureLink> entering = new ArrayList<>();
+        for (S88ProcedureLink line : chart.getLinks()) {
+            if (line.getTo().stream().anyMatch(end -> beforeBoxId.equals(end.getValue()))) {
+                entering.add(line);
+            }
+        }
+        if (entering.size() != 1) {
+            throw new IllegalStateException("Step '" + beforeBoxId + "' has " + entering.size()
+                    + " lines arriving at it, so there is no one line to put a step on.");
+        }
+        S88ProcedureLink line = entering.getFirst();
+        if (line.getFrom().size() != 1) {
+            throw new IllegalStateException("Step '" + beforeBoxId + "' is reached from more than"
+                    + " one place at once, so there is no one line to put a step on.");
+        }
+
+        requireFreeStepName(recipe, newStepId);
+        requireFreeName(chart, newBoxId, "step");
+        requireFreeName(chart, barId, "transition");
+
+        List<S88IdRef> targets = new ArrayList<>();
+        for (S88IdRef end : line.getTo()) {
+            if (!beforeBoxId.equals(end.getValue())) {
+                targets.add(end);
+            }
+        }
+        targets.add(S88IdRef.step(newBoxId));
+        chart.removeLink(line);
+        chart.addLink(rebuilt(line, line.getFrom(), targets, line.getLinkType()));
+
+        S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
+                recipe, step, newStepId, RecipeLevels.levelOf(step), classId);
+        addStep(recipe, step, newBoxId, newStepId);
+        addTransition(recipe, step, barId);
+        addLink(recipe, step, freeLineName(chart, newBoxId + "_TO_" + barId),
+                List.of(newBoxId), List.of(barId), null);
+        addLink(recipe, step, freeLineName(chart, barId + "_TO_" + beforeBoxId),
+                List.of(barId), List.of(beforeBoxId), null);
+        announce(recipe);
+        return added;
+    }
+
+    /** A copy of a line with the same id and other details, and the ends given here. */
+    private static S88ProcedureLink rebuilt(S88ProcedureLink original, List<S88IdRef> from,
+                                            List<S88IdRef> to, S88LinkType type) {
+        S88ProcedureLink line = new S88ProcedureLink(original.getId());
+        from.forEach(line::addFrom);
+        to.forEach(line::addTo);
+        line.setLinkType(type);
+        line.setDepiction(original.getDepiction());
+        line.setEvaluationOrder(original.getEvaluationOrder());
+        original.getDescriptions().forEach(line::addDescription);
+        return line;
     }
 
     /** Puts one more departure on a line the other branches of a branch are already arriving on. */

@@ -32,7 +32,6 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -123,7 +122,6 @@ class SfcRegressionTest {
     }
 
     @Test
-    @Disabled("F4")
     void aStepCanBePutInFrontOfAStepThatSplits() {
         S88MasterRecipe recipe = divergenceAtAStep();
 
@@ -133,7 +131,6 @@ class SfcRegressionTest {
     }
 
     @Test
-    @Disabled("F4")
     void optionalBranchesCanBeNestedInAnAlternativeBranch() {
         S88MasterRecipe recipe = chain(3);
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_1");
@@ -240,6 +237,7 @@ class SfcRegressionTest {
         line(chart, "L_A", S88IdRef.transition("T_A"), S88IdRef.step("STEP_1"));
         line(chart, "L_B", S88IdRef.transition("T_B"), S88IdRef.step("STEP_2"));
         join(chart, "L_JOIN", List.of("STEP_1", "STEP_2"), "T_JOIN");
+        chart.findLink("L_JOIN").orElseThrow().setLinkType(S88LinkType.SERIAL_CONVERGENT);
         line(chart, "L_END", S88IdRef.transition("T_JOIN"), S88IdRef.step("END"));
         return recipe;
     }

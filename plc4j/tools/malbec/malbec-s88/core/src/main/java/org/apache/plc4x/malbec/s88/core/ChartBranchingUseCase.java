@@ -66,10 +66,6 @@ public final class ChartBranchingUseCase {
         requireTheSameKindOfBlock(chart, boxId, true);
         S88ProcedureLink entering = arrivingAt(chart, boxId);
         S88ProcedureLink leaving = leavingFrom(chart, boxId);
-        if (!takesAnotherArrival(entering) || !takesAnotherDeparture(leaving)) {
-            throw new IllegalStateException("Step '" + boxId + "' is on a branch of the other kind, so"
-                    + " there is no one line to widen into a parallel branch.");
-        }
         String box = newStep(recipe, step, chart);
 
         put(chart, entering, widenArrival(entering, S88IdRef.step(box), S88LinkType.PARALLEL_DIVERGENT));
@@ -177,11 +173,14 @@ public final class ChartBranchingUseCase {
     private static OptionalBranch optionalBranchPlan(S88ProcedureLogic chart, String boxId) {
         S88ProcedureLink entering = arrivingAt(chart, boxId);
         S88ProcedureLink leaving = leavingFrom(chart, boxId);
-        requireBarsOfItsOwn(boxId, entering, leaving);
-        if (entering.getFrom().size() != 1 || leaving.getTo().size() != 1) {
+        if (entering.getTo().size() != 1 || leaving.getTo().size() != 1) {
             throw new IllegalStateException("Step '" + boxId + "' is already fed by a branch point"
                     + " or already goes to more than one place, so there is no one transition to"
                     + " widen.");
+        }
+        if (entering.getFrom().size() != 1) {
+            throw new IllegalStateException("Step '" + boxId + "' is reached from more than one"
+                    + " transition at once, so there is no one transition to widen.");
         }
         String incomingBar = entering.getFrom().getFirst().getValue();
         String afterBar = leaving.getTo().getFirst().getValue();
@@ -190,10 +189,18 @@ public final class ChartBranchingUseCase {
                     + " after it, so an optional branch would go round in a loop.");
         }
         S88ProcedureLink feeding = arrivingAt(chart, incomingBar);
-        if (feeding.getFrom().size() != 1 || feeding.getTo().size() != 1
-                || feeding.isDivergent() || feeding.isConvergent()) {
-            throw new IllegalStateException("Step '" + boxId + "' is already at the start of a"
-                    + " branch, so there is no plain transition to widen into an optional branch.");
+        if (feeding.getFrom().size() != 1
+                || !chart.findStep(feeding.getFrom().getFirst().getValue()).isPresent()) {
+            throw new IllegalStateException("Step '" + boxId + "' has no single step before its"
+                    + " transition, so there is no branch point to put an optional branch on.");
+        }
+        for (S88IdRef sibling : feeding.getTo()) {
+            if (sibling.getValue().equals(incomingBar)) {
+                continue;
+            }
+            if (ChartGraph.of(chart).isSkip(sibling.getValue(), afterBar)) {
+                throw new IllegalStateException("Step '" + boxId + "' is already optional.");
+            }
         }
         return new OptionalBranch(feeding, afterBar);
     }
@@ -277,20 +284,6 @@ public final class ChartBranchingUseCase {
                     + " leaving it, so there is no one line to branch from.");
         }
         return found.getFirst();
-    }
-
-    /** Whether a line can take one more arrival without changing what kind of line it is. */
-    private static boolean takesAnotherArrival(S88ProcedureLink link) {
-        return link.getTo().size() == 1 || isParallel(link);
-    }
-
-    /** Whether a line can take one more departure without changing what kind of line it is. */
-    private static boolean takesAnotherDeparture(S88ProcedureLink link) {
-        return link.getFrom().size() == 1 || isParallel(link);
-    }
-
-    private static boolean isParallel(S88ProcedureLink link) {
-        return link.getLinkType() != null && link.getLinkType().isParallel();
     }
 
     private static S88ProcedureLink widenArrival(S88ProcedureLink link, S88IdRef extraEnd,
