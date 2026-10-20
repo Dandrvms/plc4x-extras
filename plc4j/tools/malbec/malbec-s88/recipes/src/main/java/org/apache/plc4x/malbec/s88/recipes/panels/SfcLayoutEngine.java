@@ -723,8 +723,16 @@ final class SfcLayoutEngine {
                     into));
         }
         if (syncBar == null) {
-            return new Link(linkId + ">" + from + ">" + to, linkId, false, false,
-                    List.of(leaving, arriving));
+            if (leaving.x == arriving.x) {
+                return new Link(linkId + ">" + from + ">" + to, linkId, false, false,
+                        List.of(leaving, arriving));
+            }
+            int corridor = corridorBetween(leaving, arriving, corners, from, to);
+            return new Link(linkId + ">" + from + ">" + to, linkId, false, false, List.of(
+                    leaving,
+                    new Point(leaving.x, corridor),
+                    new Point(arriving.x, corridor),
+                    arriving));
         }
         int barY = syncBar.y + SfcMetrics.SYNC_BAR_HEIGHT / 2;
         return new Link(linkId + ">" + from + ">" + to, linkId, false, false, List.of(
@@ -732,6 +740,45 @@ final class SfcLayoutEngine {
                 new Point(leaving.x, barY),
                 new Point(arriving.x, barY),
                 arriving));
+    }
+
+    /**
+     * A height between two nodes where a sideways stretch crosses no other node.
+     */
+    private int corridorBetween(Point leaving, Point arriving, Map<String, Rectangle> corners,
+                                String from, String to) {
+        int low = Math.min(leaving.y, arriving.y) + 1;
+        int high = Math.max(leaving.y, arriving.y) - 1;
+        if (low > high) {
+            return (leaving.y + arriving.y) / 2;
+        }
+        int middle = (low + high) / 2;
+        int left = Math.min(leaving.x, arriving.x);
+        int right = Math.max(leaving.x, arriving.x);
+        for (int step = 0; step <= high - low; step++) {
+            for (int y : new int[]{middle - step, middle + step}) {
+                if (y >= low && y <= high && corridorIsClear(y, left, right, corners, from, to)) {
+                    return y;
+                }
+            }
+        }
+        return middle;
+    }
+
+    private static boolean corridorIsClear(int y, int left, int right,
+                                           Map<String, Rectangle> corners,
+                                           String from, String to) {
+        for (Map.Entry<String, Rectangle> node : corners.entrySet()) {
+            if (node.getKey().equals(from) || node.getKey().equals(to)) {
+                continue;
+            }
+            Rectangle box = node.getValue();
+            if (y >= box.y && y <= box.y + box.height
+                    && Math.max(left, box.x) <= Math.min(right, box.x + box.width)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
