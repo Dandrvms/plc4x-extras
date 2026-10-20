@@ -99,21 +99,33 @@ public enum StructureQueries {
      */
     public static List<S88LinkType> enclosingBlocks(S88ProcedureLogic logic, String nodeId) {
         List<S88LinkType> found = new ArrayList<>();
-        S88ProcedureLink firstStep = leavingFrom(logic, nodeId);
-        if (firstStep != null && firstStep.isDivergent()) {
-            found.add(firstStep.getLinkType());
+        for (S88ProcedureLink out : linksMeeting(logic, nodeId, false)) {
+            if (out.isDivergent()) {
+                found.add(out.getLinkType());
+            }
         }
-        Set<String> been = new LinkedHashSet<>();
-        String at = nodeId;
-        while (at != null && been.add(at)) {
-            S88ProcedureLink back = arrivingAt(logic, at);
-            if (back == null || back.isConvergent()) {
-                return found;
+        Set<String> seenNodes = new LinkedHashSet<>();
+        Set<String> seenLinks = new LinkedHashSet<>();
+        Deque<String> pending = new ArrayDeque<>();
+        pending.add(nodeId);
+        while (!pending.isEmpty()) {
+            String at = pending.removeFirst();
+            if (!seenNodes.add(at)) {
+                continue;
             }
-            if (back.isDivergent()) {
-                found.add(back.getLinkType());
+            for (S88ProcedureLink back : linksMeeting(logic, at, true)) {
+                if (!seenLinks.add(back.getId()) || back.isConvergent()) {
+                    continue;
+                }
+                if (back.isDivergent()) {
+                    found.add(back.getLinkType());
+                }
+                for (S88IdRef from : back.getFrom()) {
+                    if (from.isInternal()) {
+                        pending.addLast(from.getValue());
+                    }
+                }
             }
-            at = firstFrom(back);
         }
         return found;
     }
@@ -404,16 +416,6 @@ public enum StructureQueries {
             }
         }
         return false;
-    }
-
-    /**
-     * Where the flow was when the line it is on now was left.
-     *
-     * @param link the line to read
-     * @return the first end the flow leaves by, or {@code null} when it has none
-     */
-    private static String firstFrom(S88ProcedureLink link) {
-        return link.getFrom().isEmpty() ? null : link.getFrom().getFirst().getValue();
     }
 
     private static boolean allAreBoxes(List<S88IdRef> ends) {

@@ -79,12 +79,16 @@ public final class ChartDeletionUseCase {
 
         S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
         takeStepOff(joined, boxId);
+        Set<String> drawnBefore = drawnElementIds(joined);
+        ChartNormalizer.normalize(joined);
         List<String> sweptUp = sweepUpWhatNothingReaches(joined);
+        drawnBefore.removeAll(drawnElementIds(joined));
         checkItCanStillBeDrawn(joined, boxId);
 
         copyOnto(joined, chart);
         recipe.findElement(elementId).ifPresent(recipe::removeRecipeElement);
         sweptUp.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
+        drawnBefore.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
@@ -349,6 +353,12 @@ public final class ChartDeletionUseCase {
                     + (element.getKind() == S88RecipeElementKind.BEGIN ? "starts" : "stops")
                     + ", and a recipe has to have both.");
         }
+    }
+
+    private static Set<String> drawnElementIds(S88ProcedureLogic chart) {
+        Set<String> ids = new LinkedHashSet<>();
+        chart.getSteps().forEach(box -> ids.add(box.getRecipeElementId()));
+        return ids;
     }
 
     /** Puts the chart that was worked out in place of the one the recipe is holding. */
