@@ -51,7 +51,6 @@ class SfcRegressionTest {
     // ========== The chart should keep working ==========
 
     @Test
-    @Disabled("F3")
     void aLoopDoesNotStopAStepBeingTakenOff() {
         S88MasterRecipe recipe = chain(3);
         EditProcedureLogicUseCase.joinStepsThroughATransition(recipe, null, "STEP_2", "STEP");
@@ -67,7 +66,6 @@ class SfcRegressionTest {
     }
 
     @Test
-    @Disabled("F3")
     void aLoopDoesNotStopAStepOfAParallelBranchBeingTakenOff() {
         S88MasterRecipe recipe = chain(3);
         EditProcedureLogicUseCase.joinStepsThroughATransition(recipe, null, "STEP_2", "STEP");
@@ -84,7 +82,6 @@ class SfcRegressionTest {
     }
 
     @Test
-    @Disabled("F3")
     void aSkipDoesNotStopTheStepAfterItBeingTakenOff() {
         S88MasterRecipe recipe = chain(3);
         ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP_1");
@@ -114,7 +111,6 @@ class SfcRegressionTest {
     }
 
     @Test
-    @Disabled("F3")
     void aStepFeedingADivergenceCanBeTakenOff() {
         S88MasterRecipe recipe = chain(3);
         ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP_2");

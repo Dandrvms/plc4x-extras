@@ -19,37 +19,34 @@
 package org.apache.plc4x.malbec.s88.core;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 
 /**
- * Takes a box off a chart and joins the flow across it.
+ * Takes a box or a bar off a chart and joins the flow across it.
  *
- * <p>Where the step sits in its branch decides what happens to the surrounding bars. A step in the
- * middle of a run takes its own bar with it and the step behind carries on through the bar that was
- * behind it. A step that opens a branch hands the bar that opened it to the step behind it, and a
- * step that ends one hands the bar that ended it to the step in front of it. A branch of one step
- * goes with that step.
- *
- * <p>The whole rearrangement is worked out on a copy and checked before the recipe is touched, so a
- * chart that cannot be joined again leaves the recipe as it was.
+ * <p>The chart is worked out on a copy and checked before the recipe is touched, so an edit that
+ * cannot be joined again leaves the recipe as it was. Only problems the edit introduces are
+ * refused; a chart that was already irregular can still be edited elsewhere.
  *
  * @see ChartBranchingUseCase
  * @see RecipeDeepCopy#copyChart(S88ProcedureLogic)
  */
 public final class ChartDeletionUseCase {
 
+    private static final int MAX_SMOOTHING_PASSES = 200;
 
     private ChartDeletionUseCase() {
         /* This utility class should not be instantiated */
@@ -74,30 +71,90 @@ public final class ChartDeletionUseCase {
                 () -> new IllegalArgumentException("This chart has no step called '" + boxId + "'."));
         refuseIfEnd(recipe, box);
         String elementId = box.getRecipeElementId();
-
         refuseIfNestedChartsNameIt(recipe, chart, boxId, elementId);
 
+        List<String> before = ChartSoundness.check(chart);
         S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
-        takeStepOff(joined, boxId);
         Set<String> drawnBefore = drawnElementIds(joined);
+        deleteStep(joined, boxId);
         ChartNormalizer.normalize(joined);
-        List<String> sweptUp = sweepUpWhatNothingReaches(joined);
         drawnBefore.removeAll(drawnElementIds(joined));
-        checkItCanStillBeDrawn(joined, boxId);
+        drawnBefore.addAll(sweepUpWhatNothingReaches(joined));
+        refuseNewProblems("Taking '" + boxId + "' off the chart", before, joined);
 
         copyOnto(joined, chart);
         recipe.findElement(elementId).ifPresent(recipe::removeRecipeElement);
-        sweptUp.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
         drawnBefore.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
     /**
-     * Refuses a deletion that would leave a box in another chart working on a step that is gone.
+     * Takes a bar off the chart.
      *
-     * <p>The chart being edited is left out, because the box being taken off is the one thing that
-     * chart no longer has afterwards, and a box of the same step on another chart is a line that
-     * would go to nothing.
+     * <p>A bar that skips a step or closes a loop goes on its own. The first bar of a selective
+     * branch takes the whole branch with it. A bar in the middle of a run is refused, because
+     * taking it off would leave a step with no bar to reach it.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param barId  bar to take off
+     * @throws IllegalArgumentException when there is no chart or no such bar
+     * @throws IllegalStateException    when removing the bar would leave a chart that cannot be
+     *                                  drawn, or when the bar belongs to a step
+     */
+    public static void deleteTransition(S88Recipe recipe, S88RecipeElement step, String barId) {
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to delete from.");
+        }
+        chart.findTransition(barId).orElseThrow(
+                () -> new IllegalArgumentException("This chart has no transition called '" + barId
+                        + "'."));
+
+        List<String> before = ChartSoundness.check(chart);
+        S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
+        Set<String> drawnBefore = drawnElementIds(joined);
+        deleteTransition(joined, barId);
+        ChartNormalizer.normalize(joined);
+        drawnBefore.removeAll(drawnElementIds(joined));
+        drawnBefore.addAll(sweepUpWhatNothingReaches(joined));
+        refuseNewProblems("Taking '" + barId + "' off the chart", before, joined);
+
+        copyOnto(joined, chart);
+        drawnBefore.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
+        recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
+    }
+
+    private static void deleteTransition(S88ProcedureLogic chart, String barId) {
+        ChartGraph graph = ChartGraph.of(chart);
+        boolean loop = graph.backEdges().stream()
+                .anyMatch(edge -> edge.from().equals(barId) || edge.to().equals(barId));
+        boolean skip = graph.succs(barId).stream().anyMatch(graph::isTransition);
+        if (loop || skip) {
+            detach(chart, barId);
+            chart.findTransition(barId).ifPresent(chart::removeTransition);
+            return;
+        }
+
+        S88ProcedureLink opening = branchOpening(chart, barId);
+        if (opening != null) {
+            removeBranch(chart, opening, barId);
+            return;
+        }
+
+        boolean afterAStep = graph.preds(barId).stream().anyMatch(graph::isStep);
+        boolean beforeAStep = graph.succs(barId).stream().anyMatch(graph::isStep);
+        if (afterAStep && beforeAStep) {
+            throw new IllegalStateException("Transition '" + barId + "' sits between two steps."
+                    + " Delete a step in its place. Nothing has been changed.");
+        }
+        throw new IllegalStateException("Transition '" + barId + "' is not a skip, a loop or the"
+                + " first bar of a branch, so there is nothing this edit can take off. Nothing has"
+                + " been changed.");
+    }
+
+    /**
+     * Refuses a deletion that would leave a box in another chart working on a step that is gone.
      */
     private static void refuseIfNestedChartsNameIt(S88Recipe recipe, S88ProcedureLogic editing,
                                                    String boxId, String elementId) {
@@ -124,225 +181,436 @@ public final class ChartDeletionUseCase {
     }
 
     /**
-     * Where the step sits, and what the bars on either side of it are, decides who takes its place.
+     * Where the step sits decides which bars stay and which are joined across it.
      */
-    private static void takeStepOff(S88ProcedureLogic chart, String boxId) {
-        S88ProcedureLink arriving = onlyTouching(chart, boxId, true);
-        S88ProcedureLink leaving = onlyTouching(chart, boxId, false);
-        if (arriving == null || leaving == null) {
-            return;
-        }
-        String before = arriving.getFrom().getFirst().getValue();
-        List<String> barsBehind = names(leaving.getTo());
-        if (barsBehind.size() > 1) {
-            throw new IllegalStateException("Step '" + boxId + "' leads to " + barsBehind.size()
-                    + " transitions at once, so the flow splits here and there is no one transition"
-                    + " to join across to.");
-        }
-        String after = barsBehind.getFirst();
-        List<String> nextSteps = branchEndsAt(chart, leaving, after) ? List.of()
-                : theOnlyStepAfter(chart, after);
-        List<String> beforeBox = theOnlyBoxBefore(chart, before);
+    private static void deleteStep(S88ProcedureLogic chart, String boxId) {
+        ChartGraph graph = ChartGraph.of(chart);
+        List<String> before = transitionsAmong(graph.preds(boxId), graph);
+        List<String> after = transitionsAmong(graph.succs(boxId), graph);
+        Set<String> earlierBars = branchBars(chart, before);
 
-        if (!beforeBox.isEmpty()) {
-            if (leaving.getFrom().size() > 1) {
-                joinIntoTheConvergence(chart, boxId, before, beforeBox.getFirst(), leaving);
-            } else {
-                joinAcross(chart, boxId, before, beforeBox.getFirst(), after);
-            }
+        if (isWholeBranch(chart, boxId, before, after)) {
+            detach(chart, boxId);
+            chart.findStep(boxId).ifPresent(chart::removeStep);
             return;
         }
-        if (nextSteps.isEmpty()) {
-            takeTheBranchOff(chart, boxId, before, after, waitsOnABranchOfItsOwn(chart, before));
-        } else {
-            handTheBranchToTheNextStep(chart, boxId, before, after, nextSteps.getFirst());
+
+        detach(chart, boxId);
+        chart.findStep(boxId).ifPresent(chart::removeStep);
+        Set<String> bridges = new LinkedHashSet<>();
+        for (String from : before) {
+            for (String to : after) {
+                if (!from.equals(to)) {
+                    bridges.add(addBridge(chart, from, to));
+                }
+            }
         }
+        smoothBridges(chart, bridges, earlierBars);
+        dropSkipBars(chart);
     }
 
     /**
-     * It depends on whether this branch extends to the bar behind the step.
-     * A parallel branch connects to the common return bar, while a branch of the alternative
-     * type connects to an outgoing bar. Neither of them has a step following this branch.
+     * Drops the bars that only skip over steps once the step they skipped is gone. They leave a
+     * bar pointing at a bar, which is a flow no later edit can branch from.
      */
-    private static boolean branchEndsAt(S88ProcedureLogic chart, S88ProcedureLink leaving,
-                                        String after) {
-        if (leaving.getFrom().size() > 1) {
+    private static void dropSkipBars(S88ProcedureLogic chart) {
+        boolean changed;
+        do {
+            changed = false;
+            ChartGraph graph = ChartGraph.of(chart);
+            for (String transition : graph.transitions()) {
+                if (graph.succs(transition).isEmpty()
+                        || !graph.succs(transition).stream().allMatch(graph::isTransition)
+                        || graph.preds(transition).stream().noneMatch(graph::isStep)) {
+                    continue;
+                }
+                detach(chart, transition);
+                chart.findTransition(transition).ifPresent(chart::removeTransition);
+                changed = true;
+                break;
+            }
+        } while (changed);
+        ChartNormalizer.relink(chart);
+    }
+
+    /**
+     * A step that is all its branch has: the bars on either side are shared with the other
+     * branches, so the step is taken out of them and nothing has to be joined across.
+     */
+    private static boolean isWholeBranch(S88ProcedureLogic chart, String boxId,
+                                         List<String> before, List<String> after) {
+        S88ProcedureLink arriving = onlyLink(chart, boxId, true);
+        S88ProcedureLink leaving = onlyLink(chart, boxId, false);
+        if (arriving != null && leaving != null
+                && isBranchOpening(arriving) && isBranchClosing(leaving)) {
             return true;
         }
-        S88ProcedureLink onward = onlyTouching(chart, after, false);
-        return onward != null && onward.getFrom().size() > 1;
+        if (before.size() != 1 || after.size() != 1) {
+            return false;
+        }
+        String first = before.getFirst();
+        String last = after.getFirst();
+        if (first.equals(last)) {
+            return false;
+        }
+        S88ProcedureLink opening = onlyLink(chart, first, true);
+        S88ProcedureLink closing = onlyLink(chart, last, false);
+        return opening != null && closing != null
+                && isBranchOpening(opening) && isBranchClosing(closing)
+                && onlyTransitionOut(chart, first).equals(boxId)
+                && onlyTransitionIn(chart, last).equals(boxId);
     }
 
-    /** The one step that follows this bar, when this bar is in the middle of the branch. */
-    private static List<String> theOnlyStepAfter(S88ProcedureLogic chart, String barId) {
-        S88ProcedureLink line = onlyTouching(chart, barId, false);
-        if (line == null || line.getFrom().size() > 1 || line.getTo().size() != 1) {
-            return List.of();
-        }
-        return names(line.getTo());
+    private static boolean isBranchOpening(S88ProcedureLink link) {
+        return link != null && link.isDivergent() && link.getFrom().size() == 1
+                && link.getTo().size() > 1;
     }
 
-    /**
-     * The one box that leads to this bar, or nothing when the bar is not this step's to take away.
-     * <p>
-     * A bar from which the flow branches off is one of several to which a line leads, and a bar to
-     * which the flow joins is the one reached by more than one cell. Neither of the two has the
-     * cell located immediately in front of it, which is necessary for the cross-connection.
-     */
-    private static List<String> theOnlyBoxBefore(S88ProcedureLogic chart, String barId) {
-        S88ProcedureLink line = onlyTouching(chart, barId, true);
-        if (line == null || line.getFrom().size() > 1 || line.getTo().size() > 1) {
-            return List.of();
-        }
-        for (S88ProcedureLink other : chart.getLinks()) {
-            if (other.getFrom().stream().anyMatch(end -> barId.equals(end.getValue()))
-                    && other.getTo().size() > 1) {
-                return List.of();
+    private static boolean isBranchClosing(S88ProcedureLink link) {
+        return link != null && link.isConvergent() && link.getFrom().size() > 1
+                && link.getTo().size() == 1;
+    }
+
+    private static String onlyTransitionOut(S88ProcedureLogic chart, String id) {
+        List<String> targets = new ArrayList<>();
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.getFrom().stream().anyMatch(end -> id.equals(end.getValue()))) {
+                for (S88IdRef end : link.getTo()) {
+                    if (chart.findTransition(end.getValue()).isPresent()) {
+                        targets.add(end.getValue());
+                    } else if (chart.findStep(end.getValue()).isPresent()) {
+                        targets.add(end.getValue());
+                    }
+                }
             }
         }
-        return names(line.getFrom());
+        return targets.size() == 1 ? targets.getFirst() : "";
     }
 
-    /** Whether the bar is one of several a line leads to, which is how a branch opens. */
-    private static boolean waitsOnABranchOfItsOwn(S88ProcedureLogic chart, String barId) {
-        S88ProcedureLink line = onlyTouching(chart, barId, true);
-        return line != null && line.getTo().size() > 1;
+    private static String onlyTransitionIn(S88ProcedureLogic chart, String id) {
+        List<String> sources = new ArrayList<>();
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.getTo().stream().anyMatch(end -> id.equals(end.getValue()))) {
+                for (S88IdRef end : link.getFrom()) {
+                    if (chart.findTransition(end.getValue()).isPresent()
+                            || chart.findStep(end.getValue()).isPresent()) {
+                        sources.add(end.getValue());
+                    }
+                }
+            }
+        }
+        return sources.size() == 1 ? sources.getFirst() : "";
+    }
+
+    /** A bar that stands for a branch rather than for the run inside one. */
+    private static Set<String> branchBars(S88ProcedureLogic chart, List<String> transitions) {
+        Set<String> found = new LinkedHashSet<>();
+        for (String title : transitions) {
+            List<S88ProcedureLink> arriving = new ArrayList<>();
+            for (S88ProcedureLink link : chart.getLinks()) {
+                if (link.getTo().stream().anyMatch(end -> title.equals(end.getValue()))) {
+                    arriving.add(link);
+                }
+            }
+            if (arriving.size() > 1) {
+                found.add(title);
+            } else if (arriving.size() == 1
+                    && (arriving.getFirst().getTo().size() > 1
+                    || arriving.getFirst().getFrom().size() > 1)) {
+                found.add(title);
+            }
+        }
+        return found;
+    }
+
+    private static String addBridge(S88ProcedureLogic chart, String from, String to) {
+        S88ProcedureLink line = new S88ProcedureLink(freeLineName(chart, from, to));
+        line.addFrom(S88IdRef.transition(from));
+        line.addTo(S88IdRef.transition(to));
+        chart.addLink(line);
+        return line.getId();
     }
 
     /**
-     * The bar in front was waiting on this step alone, so it goes with the step and the step in
-     * front of it carries on to the bar behind.
+     * Joins each pair of bars left facing each other by the step. Two bars in a row become one;
+     * a bar that only fed the step is dropped, and so is one that only took from it.
      */
-    private static void joinAcross(S88ProcedureLogic chart, String boxId, String before,
-                                   String previousBox, String after) {
-        detach(chart, boxId);
-        takeBarOff(chart, before);
-        putBack(chart, previousBox, after);
+    private static void smoothBridges(S88ProcedureLogic chart, Set<String> bridges,
+                                      Set<String> earlierBars) {
+        for (int pass = 0; pass < MAX_SMOOTHING_PASSES; pass++) {
+            ChartGraph graph = ChartGraph.of(chart);
+            boolean changed = false;
+            for (String bridgeId : List.copyOf(bridges)) {
+                S88ProcedureLink bridge = chart.findLink(bridgeId).orElse(null);
+                if (bridge == null || bridge.getFrom().size() != 1
+                        || bridge.getTo().size() != 1) {
+                    continue;
+                }
+                String from = bridge.getFrom().getFirst().getValue();
+                String to = bridge.getTo().getFirst().getValue();
+                if (!graph.isTransition(from) || !graph.isTransition(to) || from.equals(to)) {
+                    continue;
+                }
+                List<String> succs = graph.succs(from);
+                List<String> preds = graph.preds(to);
+                boolean onlySucc = succs.size() == 1 && succs.contains(to);
+                boolean onlyPred = preds.size() == 1 && preds.contains(from);
+                if (onlySucc && onlyPred) {
+                    if (earlierBars.contains(from)) {
+                        mergeLaterIntoEarlier(chart, from, to);
+                    } else {
+                        mergeEarlierIntoLater(chart, from, to);
+                    }
+                    changed = true;
+                    break;
+                }
+                if (onlySucc) {
+                    if (earlierBars.contains(from)) {
+                        mergeLaterIntoEarlier(chart, from, to);
+                    } else {
+                        mergeEarlierIntoLater(chart, from, to);
+                    }
+                    changed = true;
+                    break;
+                }
+                if (onlyPred) {
+                    mergeLaterIntoEarlier(chart, from, to);
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed) {
+                combineBranches(chart);
+                return;
+            }
+        }
+        combineBranches(chart);
     }
 
     /**
-     * The bar in front was this step's, but the bar behind is one other branches come back to, so
-     * the step in front takes this step's place on the line they all arrive on.
+     * Puts lines that leave one node for the same kind of node back into one line, which is what a
+     * split or a join is. Deleting a step can leave the sides of a block on separate lines, and
+     * read apart they would let a bar fire once for each side instead of once for the block.
      */
-    private static void joinIntoTheConvergence(S88ProcedureLogic chart, String boxId, String before,
-                                               String previousBox, S88ProcedureLink leaving) {
-        swapEndOf(chart, leaving, boxId, previousBox);
-        detach(chart, boxId);
-        takeBarOff(chart, before);
+    private static void combineBranches(S88ProcedureLogic chart) {
+        boolean changed;
+        do {
+            changed = combineByOneEnd(chart, true);
+            changed |= combineByOneEnd(chart, false);
+        } while (changed);
+        ChartNormalizer.relink(chart);
     }
 
-    /**
-     * This step opened its branch, so the step behind it takes its place. When the bar that opened
-     * the branch belongs to the branch alone it is kept and linked to the step behind. When it
-     * is a bar the flow splits out of, the step behind it goes on that line in this step's place.
-     */
-    private static void handTheBranchToTheNextStep(S88ProcedureLogic chart, String boxId,
-                                                   String before, String after, String nextStep) {
-        boolean barOfItsOwn = waitsOnABranchOfItsOwn(chart, before);
-        if (barOfItsOwn) {
-            detach(chart, boxId);
-            takeBarOff(chart, after);
-            putBack(chart, before, nextStep);
+    private static boolean combineByOneEnd(S88ProcedureLogic chart, boolean byFrom) {
+        Map<String, List<S88ProcedureLink>> buckets = new LinkedHashMap<>();
+        for (S88ProcedureLink link : chart.getLinks()) {
+            List<S88IdRef> fixed = byFrom ? link.getFrom() : link.getTo();
+            List<S88IdRef> moving = byFrom ? link.getTo() : link.getFrom();
+            if (fixed.size() != 1 || moving.isEmpty()) {
+                continue;
+            }
+            String kind = moving.stream()
+                    .map(end -> String.valueOf(end.getType()))
+                    .distinct()
+                    .count() == 1 ? moving.getFirst().getType().name() : null;
+            if (kind == null) {
+                continue;
+            }
+            String key = (byFrom ? "F:" : "T:") + fixed.getFirst().getValue() + ":" + kind;
+            buckets.computeIfAbsent(key, ignored -> new ArrayList<>()).add(link);
+        }
+        boolean changed = false;
+        for (Map.Entry<String, List<S88ProcedureLink>> bucket : buckets.entrySet()) {
+            List<S88ProcedureLink> links = bucket.getValue();
+            if (links.size() < 2) {
+                continue;
+            }
+            S88ProcedureLink kept = links.getFirst();
+            List<S88IdRef> from = new ArrayList<>(kept.getFrom());
+            List<S88IdRef> to = new ArrayList<>(kept.getTo());
+            for (S88ProcedureLink extra : links.subList(1, links.size())) {
+                for (S88IdRef end : extra.getFrom()) {
+                    if (!from.contains(end)) {
+                        from.add(end);
+                    }
+                }
+                for (S88IdRef end : extra.getTo()) {
+                    if (!to.contains(end)) {
+                        to.add(end);
+                    }
+                }
+                chart.removeLink(extra);
+                changed = true;
+            }
+            chart.removeLink(kept);
+            chart.addLink(rebuilt(kept.getId(), from, to, kept.getLinkType(), kept));
+        }
+        return changed;
+    }
+
+    private static void mergeLaterIntoEarlier(S88ProcedureLogic chart, String earlier, String later) {
+        if (!chart.findTransition(earlier).isPresent()
+                || !chart.findTransition(later).isPresent()) {
             return;
         }
-        swapEndOf(chart, onlyTouching(chart, before, false), boxId, nextStep);
-        detach(chart, boxId);
-        takeBarOff(chart, after);
+        for (S88ProcedureLink link : new ArrayList<>(chart.getLinks())) {
+            boolean fromEarlier = names(link.getFrom()).contains(earlier);
+            boolean toLater = names(link.getTo()).contains(later);
+            boolean fromLater = names(link.getFrom()).contains(later);
+            boolean toEarlier = names(link.getTo()).contains(earlier);
+            if (fromEarlier && toLater) {
+                chart.removeLink(link);
+                continue;
+            }
+            if (fromLater && toEarlier) {
+                chart.removeLink(link);
+                continue;
+            }
+            if (fromLater) {
+                replaceEnd(chart, link, later, earlier, true);
+            } else if (toLater) {
+                replaceEnd(chart, link, later, earlier, false);
+            }
+        }
+        chart.findTransition(later).ifPresent(chart::removeTransition);
+    }
+
+    private static void mergeEarlierIntoLater(S88ProcedureLogic chart, String earlier, String later) {
+        if (!chart.findTransition(earlier).isPresent()
+                || !chart.findTransition(later).isPresent()) {
+            return;
+        }
+        for (S88ProcedureLink link : new ArrayList<>(chart.getLinks())) {
+            boolean fromEarlier = names(link.getFrom()).contains(earlier);
+            boolean toLater = names(link.getTo()).contains(later);
+            boolean fromLater = names(link.getFrom()).contains(later);
+            boolean toEarlier = names(link.getTo()).contains(earlier);
+            if (fromEarlier && toLater) {
+                chart.removeLink(link);
+                continue;
+            }
+            if (fromLater && toEarlier) {
+                chart.removeLink(link);
+                continue;
+            }
+            if (fromEarlier) {
+                replaceEnd(chart, link, earlier, later, true);
+            } else if (toEarlier) {
+                replaceEnd(chart, link, earlier, later, false);
+            }
+        }
+        chart.findTransition(earlier).ifPresent(chart::removeTransition);
+    }
+
+    private static void replaceEnd(S88ProcedureLogic chart, S88ProcedureLink link, String was,
+                                   String now, boolean from) {
+        List<S88IdRef> newFrom = new ArrayList<>();
+        List<S88IdRef> newTo = new ArrayList<>();
+        for (S88IdRef end : link.getFrom()) {
+            newFrom.add(from && was.equals(end.getValue()) ? S88IdRef.transition(now) : end);
+        }
+        for (S88IdRef end : link.getTo()) {
+            newTo.add(!from && was.equals(end.getValue()) ? S88IdRef.transition(now) : end);
+        }
+        chart.removeLink(link);
+        chart.addLink(rebuilt(link.getId(), newFrom, newTo, link.getLinkType(), link));
     }
 
     /**
-     * This step was all its branch had, so the branch goes with it.
+     * Takes off a whole branch that starts at the given bar and ends where the flow comes back
+     * together.
      */
-    private static void takeTheBranchOff(S88ProcedureLogic chart, String boxId, String before,
-                                         String after, boolean ofItsOwn) {
-        detach(chart, boxId);
-        if (ofItsOwn) {
-            detach(chart, after);
-            takeBarOff(chart, after);
-            takeBarOff(chart, before);
+    private static void removeBranch(S88ProcedureLogic chart, S88ProcedureLink opening,
+                                     String firstBar) {
+        List<String> branch = new ArrayList<>();
+        String node = firstBar;
+        while (node != null) {
+            branch.add(node);
+            S88ProcedureLink leaving = onlyLink(chart, node, false);
+            if (leaving == null) {
+                throw new IllegalStateException("Branch '" + firstBar + "' does not lead back to the"
+                        + " rest of the chart, so there is nothing this edit can take off."
+                        + " Nothing has been changed.");
+            }
+            if (isBranchClosing(leaving)) {
+                break;
+            }
+            if (leaving.getTo().size() != 1) {
+                throw new IllegalStateException("Branch '" + firstBar + "' splits again before it"
+                        + " comes back together, so it cannot be taken off as one branch."
+                        + " Nothing has been changed.");
+            }
+            node = leaving.getTo().getFirst().getValue();
         }
+        if (opening.getTo().size() <= 1) {
+            throw new IllegalStateException("Branch '" + firstBar + "' is the only branch, so"
+                    + " taking it off would leave nothing to take. Nothing has been changed.");
+        }
+        for (String taken : branch) {
+            detach(chart, taken);
+            chart.findStep(taken).ifPresent(chart::removeStep);
+            chart.findTransition(taken).ifPresent(chart::removeTransition);
+        }
+        ChartNormalizer.relink(chart);
+    }
+
+    private static S88ProcedureLink branchOpening(S88ProcedureLogic chart, String barId) {
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.isDivergent() && link.getTo().size() > 1
+                    && link.getTo().stream().anyMatch(end -> barId.equals(end.getValue()))) {
+                return link;
+            }
+        }
+        return null;
     }
 
     /**
      * Takes away what is left with nothing to do, and names the steps it took so the recipe lets go
      * of them too.
- */
+     */
     private static List<String> sweepUpWhatNothingReaches(S88ProcedureLogic chart) {
         List<String> taken = new ArrayList<>();
-        int ceiling = chart.getSteps().size() + 1;
+        int ceiling = chart.getSteps().size() + chart.getTransitions().size() + 1;
         for (int pass = 0; pass < ceiling; pass++) {
-            List<S88ProcedureStep> unreached = new ArrayList<>();
-            for (S88ProcedureStep box : chart.getSteps()) {
-                if (arrivalsOf(chart, box.getId()).isEmpty() && !box.getId().equals("BEGIN")) {
-                    unreached.add(box);
+            ChartGraph graph = ChartGraph.of(chart);
+            if (!graph.hasNode(CreateMasterRecipeUseCase.BEGIN_ID)
+                    || !graph.hasNode(CreateMasterRecipeUseCase.END_ID)) {
+                return taken;
+            }
+            Set<String> reachable = graph.reachableFrom(CreateMasterRecipeUseCase.BEGIN_ID);
+            Set<String> reachingStop = graph.reaching(CreateMasterRecipeUseCase.END_ID);
+            List<String> unreached = new ArrayList<>();
+            for (String node : graph.nodes()) {
+                if (node.equals(CreateMasterRecipeUseCase.BEGIN_ID)
+                        || node.equals(CreateMasterRecipeUseCase.END_ID)) {
+                    continue;
+                }
+                if (!reachable.contains(node) || !reachingStop.contains(node)) {
+                    unreached.add(node);
                 }
             }
             if (unreached.isEmpty()) {
                 return taken;
             }
-            for (S88ProcedureStep box : unreached) {
-                detach(chart, box.getId());
-                chart.removeStep(box);
-                taken.add(box.getRecipeElementId());
+            for (String node : unreached) {
+                chart.findStep(node).ifPresent(box -> taken.add(box.getRecipeElementId()));
+                detach(chart, node);
+                chart.findStep(node).ifPresent(chart::removeStep);
+                chart.findTransition(node).ifPresent(chart::removeTransition);
             }
         }
         return taken;
     }
 
-    /**
-     * Refuses a rearrangement that cannot be drawn, before any of it reaches the recipe.
-     */
-    private static void checkItCanStillBeDrawn(S88ProcedureLogic chart, String boxId) {
-        List<String> complaints = new ArrayList<>();
-        if (!chart.getDanglingReferences().isEmpty()) {
-            complaints.add("nothing reaches '" + String.join("', '", chart.getDanglingReferences())
-                    + "'");
-        }
-        if (!EditProcedureLogicUseCase.isChartBipartite(chart)) {
-            complaints.add("a line runs from a step to a step or from a transition to a transition");
-        }
-        for (S88ProcedureStep box : chart.getSteps()) {
-            if (!box.getId().equals("BEGIN") && linesArrivingAt(chart, box.getId()) > 1) {
-                complaints.add("more than one line arrives at step '" + box.getId() + "'");
-            }
-            if (!box.getId().equals("END") && linesLeaving(chart, box.getId()) > 1) {
-                complaints.add("more than one line leaves step '" + box.getId() + "'");
-            }
-        }
-        for (S88ProcedureTransition bar : chart.getTransitions()) {
-            if (linesArrivingAt(chart, bar.getId()) > 1) {
-                complaints.add("more than one line arrives at transition '" + bar.getId() + "'");
-            }
-            if (linesLeaving(chart, bar.getId()) > 1) {
-                complaints.add("more than one line leaves transition '" + bar.getId() + "'");
-            }
-        }
-        if (!complaints.isEmpty()) {
-            throw new IllegalStateException("Taking '" + boxId + "' off the chart would leave it in a"
-                    + " state that cannot be drawn: " + String.join(", and ", complaints)
+    private static void refuseNewProblems(String action, List<String> before,
+                                          S88ProcedureLogic after) {
+        List<String> introduced = new ArrayList<>(ChartSoundness.check(after));
+        introduced.removeAll(before);
+        if (!introduced.isEmpty()) {
+            throw new IllegalStateException(action + " would leave it in a state that cannot be"
+                    + " drawn: " + String.join(", and ", introduced)
                     + ". Nothing has been changed.");
         }
-    }
-
-    /** Lines are counted, not the names on them: a split is one line reaching two boxes at once. */
-    private static int linesArrivingAt(S88ProcedureLogic chart, String id) {
-        int count = 0;
-        for (S88ProcedureLink line : chart.getLinks()) {
-            if (line.getTo().stream().anyMatch(end -> id.equals(end.getValue()))) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static int linesLeaving(S88ProcedureLogic chart, String id) {
-        int count = 0;
-        for (S88ProcedureLink line : chart.getLinks()) {
-            if (line.getFrom().stream().anyMatch(end -> id.equals(end.getValue()))) {
-                count++;
-            }
-        }
-        return count;
     }
 
     private static void refuseIfEnd(S88Recipe recipe, S88ProcedureStep box) {
@@ -371,13 +639,7 @@ public final class ChartDeletionUseCase {
         from.getLinks().forEach(to::addLink);
     }
 
-    /** Takes a bar off the chart along with the lines that met at it. */
-    private static void takeBarOff(S88ProcedureLogic chart, String barId) {
-        detach(chart, barId);
-        chart.findTransition(barId).ifPresent(chart::removeTransition);
-    }
-
-    /** Takes one box off the chart, and takes away the lines that are left with nothing on one side. */
+    /** Takes one node off the chart, and takes away the lines that are left with nothing on one side. */
     private static void detach(S88ProcedureLogic chart, String id) {
         for (S88ProcedureLink line : new ArrayList<>(chart.getLinks())) {
             if (!names(line.getFrom()).contains(id) && !names(line.getTo()).contains(id)) {
@@ -389,41 +651,9 @@ public final class ChartDeletionUseCase {
             line.getFrom().stream().filter(end -> !id.equals(end.getValue())).forEach(from::add);
             line.getTo().stream().filter(end -> !id.equals(end.getValue())).forEach(to::add);
             if (!from.isEmpty() && !to.isEmpty()) {
-
-                S88LinkType type = from.size() < 2 && to.size() < 2 ? null : line.getLinkType();
-                chart.addLink(rebuilt(line.getId(), from, to, type));
+                chart.addLink(rebuilt(line.getId(), from, to, line.getLinkType(), line));
             }
         }
-    }
-
-    /**
-     * Puts one box in another's place on a line, leaving the line the kind of line it is. A branch
-     * keeps its bar and its type because the box behind it took the box's place on that very line.
-     */
-    private static void swapEndOf(S88ProcedureLogic chart, S88ProcedureLink line, String was,
-                                  String now) {
-        List<S88IdRef> from = new ArrayList<>();
-        List<S88IdRef> to = new ArrayList<>();
-        for (S88IdRef end : line.getFrom()) {
-            from.add(was.equals(end.getValue()) ? S88IdRef.step(now) : end);
-        }
-        for (S88IdRef end : line.getTo()) {
-            to.add(was.equals(end.getValue()) ? S88IdRef.step(now) : end);
-        }
-        chart.removeLink(line);
-        chart.addLink(rebuilt(line.getId(), from, to, line.getLinkType()));
-    }
-
-    /** Joins whatever sits on each side of a hole the step left, box to bar or bar to box. */
-    private static void putBack(S88ProcedureLogic chart, String from, String to) {
-        if (!leaves(chart, from).isEmpty()) {
-            return;
-        }
-        boolean fromIsBar = chart.findTransition(from).isPresent();
-        S88ProcedureLink line = new S88ProcedureLink(freeLineName(chart, from, to));
-        line.addFrom(fromIsBar ? S88IdRef.transition(from) : S88IdRef.step(from));
-        line.addTo(fromIsBar ? S88IdRef.step(to) : S88IdRef.transition(to));
-        chart.addLink(line);
     }
 
     private static String freeLineName(S88ProcedureLogic chart, String from, String to) {
@@ -436,15 +666,18 @@ public final class ChartDeletionUseCase {
     }
 
     private static S88ProcedureLink rebuilt(String id, List<S88IdRef> from, List<S88IdRef> to,
-                                            S88LinkType type) {
+                                            S88LinkType type, S88ProcedureLink original) {
         S88ProcedureLink line = new S88ProcedureLink(id);
         from.forEach(line::addFrom);
         to.forEach(line::addTo);
         line.setLinkType(type);
+        line.setDepiction(original.getDepiction());
+        line.setEvaluationOrder(original.getEvaluationOrder());
+        original.getDescriptions().forEach(line::addDescription);
         return line;
     }
 
-    private static S88ProcedureLink onlyTouching(S88ProcedureLogic chart, String id, boolean arriving) {
+    private static S88ProcedureLink onlyLink(S88ProcedureLogic chart, String id, boolean arriving) {
         S88ProcedureLink found = null;
         for (S88ProcedureLink line : chart.getLinks()) {
             boolean touches = arriving
@@ -461,31 +694,21 @@ public final class ChartDeletionUseCase {
         return found;
     }
 
-    private static List<String> arrivalsOf(S88ProcedureLogic chart, String id) {
-        Set<String> found = new LinkedHashSet<>();
-        for (S88ProcedureLink line : chart.getLinks()) {
-            if (line.getTo().stream().anyMatch(end -> id.equals(end.getValue()))) {
-                line.getFrom().forEach(end -> found.add(end.getValue()));
+    private static List<String> transitionsAmong(List<String> nodes, ChartGraph graph) {
+        List<String> found = new ArrayList<>();
+        for (String node : nodes) {
+            if (graph.isTransition(node) && !found.contains(node)) {
+                found.add(node);
             }
         }
-        found.remove(id);
-        return new ArrayList<>(found);
-    }
-
-    private static List<String> leaves(S88ProcedureLogic chart, String id) {
-        Set<String> found = new LinkedHashSet<>();
-        for (S88ProcedureLink line : chart.getLinks()) {
-            if (line.getFrom().stream().anyMatch(end -> id.equals(end.getValue()))) {
-                line.getTo().forEach(end -> found.add(end.getValue()));
-            }
-        }
-        found.remove(id);
-        return new ArrayList<>(found);
+        return found;
     }
 
     private static List<String> names(List<S88IdRef> ends) {
-        Set<String> found = new LinkedHashSet<>();
-        ends.forEach(end -> found.add(end.getValue()));
-        return new ArrayList<>(found);
+        List<String> found = new ArrayList<>();
+        for (S88IdRef end : ends) {
+            found.add(end.getValue());
+        }
+        return found;
     }
 }

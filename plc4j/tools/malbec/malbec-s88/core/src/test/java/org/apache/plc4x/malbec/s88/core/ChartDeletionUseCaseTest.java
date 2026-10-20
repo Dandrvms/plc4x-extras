@@ -425,6 +425,67 @@ assertEquals(List.of("T_STEP_4"), departuresOf(recipe, "STEP_2"),
     }
 
     @Test
+    void takingTheSkipBarOffLeavesTheStepItSkipped() {
+        S88MasterRecipe recipe = runOfThreeSteps();
+        ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP_1");
+
+        ChartDeletionUseCase.deleteTransition(recipe, null, "T_SKIP");
+
+        assertFalse(chartOf(recipe).findTransition("T_SKIP").isPresent(),
+                "and the bar that skipped the step is gone");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T_STEP_2", "STEP_2",
+                        "T1", "END"), flowOf(recipe),
+                "and the flow is the run it was before the step was made optional");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingTheBarOfALoopOffLeavesTheRestOfTheRun() {
+        S88MasterRecipe recipe = runOfThreeSteps();
+        EditProcedureLogicUseCase.joinStepsThroughATransition(recipe, null, "STEP_2", "STEP");
+
+        ChartDeletionUseCase.deleteTransition(recipe, null, "T_STEP_2_STEP");
+
+        assertFalse(chartOf(recipe).findTransition("T_STEP_2_STEP").isPresent(),
+                "and the bar that closed the loop is gone");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T_STEP_2", "STEP_2",
+                        "T1", "END"), flowOf(recipe),
+                "and the run the loop was added to is exactly as it was");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void takingTheFirstBarOfAnAlternativeBranchTakesTheWholeBranch() {
+        S88MasterRecipe recipe = runOfTwoSteps();
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+
+        ChartDeletionUseCase.deleteTransition(recipe, null, "T_BRANCH");
+
+        assertFalse(recipe.findElement("STEP_2").isPresent(),
+                "and the step of the branch is gone from the recipe");
+        assertFalse(chartOf(recipe).findTransition("T_BRANCH").isPresent(),
+                "and the bar that opened the branch is gone");
+        assertFalse(chartOf(recipe).findTransition("T_BRANCH_1").isPresent(),
+                "and so is the bar that closed it");
+        assertEquals(List.of("BEGIN", "T_STEP", "STEP", "T_STEP_1", "STEP_1", "T1", "END"),
+                flowOf(recipe), "and the chart is the run it was before the branch was put in");
+        assertHoldsTogether(recipe);
+    }
+
+    @Test
+    void aBarBetweenTwoStepsCannotBeTakenOffOnItsOwn() {
+        S88MasterRecipe recipe = runOfThreeSteps();
+        List<String> before = flowOf(recipe);
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> ChartDeletionUseCase.deleteTransition(recipe, null, "T_STEP_1"),
+                "and the bar is refused, because taking it off would leave a step unreachable");
+        assertTrue(refused.getMessage().contains("Delete a step"),
+                "and the message says what to do instead");
+        assertEquals(before, flowOf(recipe), "and the chart is exactly as it was");
+    }
+
+    @Test
     void whereTheFlowStartsOrStopsNothingIsDeleted() {
         S88MasterRecipe recipe = runOfTwoSteps();
 
