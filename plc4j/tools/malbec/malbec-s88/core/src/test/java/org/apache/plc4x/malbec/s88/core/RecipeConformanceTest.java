@@ -211,6 +211,17 @@ class RecipeConformanceTest {
     }
 
     @Test
+    void aStepTheFlowCannotGetPastIsReported() {
+        S88MasterRecipe recipe = completeChartRecipe();
+        recipe.getProcedureLogic().removeLink(
+                recipe.getProcedureLogic().findLink("L4").orElseThrow());
+
+        assertTrue(excessMentions(recipe, "T_OUT"),
+                "a bar with no line out is where the flow can get stuck, and it is not left to be"
+                        + " found by walking the drawing");
+    }
+
+    @Test
     void aSplitWithOneSideIsReportedAndNotRepaired() {
         S88MasterRecipe recipe = completeChartRecipe();
         S88ProcedureLink split = S88ProcedureLink.betweenSteps("LS", "BEGIN", "HEAT");
@@ -318,9 +329,9 @@ class RecipeConformanceTest {
         addLine(logic, "L_RIGHT_ON", S88IdRef.transition("T_RIGHT"), S88IdRef.step("END"));
         recipe.setProcedureLogic(logic);
 
-        assertTrue(excessMentions(recipe, "L_OPEN"),
-                "two sides close on one bar and the third closes on none, so they no longer come"
-                        + " back together where the split opened");
+        assertTrue(excessMentions(recipe, "T_JOIN"),
+                "two sides close on one bar and the third closes on none, so the bar waits for a"
+                        + " token that its split never gives it and the flow can stop there");
     }
 
     @Test
@@ -398,7 +409,92 @@ class RecipeConformanceTest {
                         + report.excess() + " / " + report.deficit());
     }
 
+    @Test
+    void aPartialSynchronizationIsNotRefused() {
+        S88MasterRecipe recipe = withSteps(List.of("A", "B", "C", "D", "E"));
+        S88ProcedureLogic logic = recipe.getProcedureLogic();
+        logic.addTransition(new S88ProcedureTransition("T_OPEN", null));
+        logic.addTransition(new S88ProcedureTransition("T_MID", null));
+        logic.addTransition(new S88ProcedureTransition("T_CLOSE", null));
+        addLine(logic, "L_BEGIN", S88IdRef.step("BEGIN"), S88IdRef.transition("T_OPEN"));
+        addSplit(logic, "L_OPEN", S88IdRef.transition("T_OPEN"), List.of("A", "B", "C"),
+                S88LinkType.PARALLEL_DIVERGENT);
+        addJoin(logic, "L_MID", List.of("A", "B", "C"), "T_MID");
+        addSplit(logic, "L_SPLIT", S88IdRef.transition("T_MID"), List.of("D", "E"),
+                S88LinkType.PARALLEL_DIVERGENT);
+        addJoin(logic, "L_CLOSE", List.of("D", "E"), "T_CLOSE");
+        addLine(logic, "L_END", S88IdRef.transition("T_CLOSE"), S88IdRef.step("END"));
+
+        RecipeConformance report = RecipeConformance.of(recipe);
+
+        assertTrue(report.isConforming(),
+                "a transition with many branches in and many out is a valid synchronization, not a"
+                        + " badly nested block: " + report.excess() + " / " + report.deficit());
+    }
+
+    @Test
+    void aSkipAcrossATransitionIsWarnedAboutRatherThanRefused() {
+        S88MasterRecipe recipe = withSteps(List.of("HEAT"));
+        S88ProcedureLogic logic = recipe.getProcedureLogic();
+        logic.addTransition(new S88ProcedureTransition("T_IN", null));
+        logic.addTransition(new S88ProcedureTransition("T_SKIP", null));
+        logic.addTransition(new S88ProcedureTransition("T_OUT", null));
+        addLine(logic, "L_BEGIN", S88IdRef.step("BEGIN"), S88IdRef.transition("T_IN"));
+        addLine(logic, "L_STEP", S88IdRef.transition("T_IN"), S88IdRef.step("HEAT"));
+        addLine(logic, "L_SKIP_OUT", S88IdRef.step("HEAT"), S88IdRef.transition("T_SKIP"));
+        addLine(logic, "L_SKIP", S88IdRef.transition("T_SKIP"), S88IdRef.transition("T_OUT"));
+        addLine(logic, "L_END", S88IdRef.transition("T_OUT"), S88IdRef.step("END"));
+
+        RecipeConformance report = RecipeConformance.of(recipe);
+
+        assertTrue(report.isConforming(),
+                "a skipped step is unusual, not a reason to refuse the chart: "
+                        + report.excess() + " / " + report.deficit());
+        assertTrue(report.warnings().stream().anyMatch(said -> said.contains("skips a step")),
+                "but the author is told which transition skips it: " + report.warnings());
+    }
+
     // ========== Fixtures ==========
+
+    /** A recipe whose chart is a straight line through the given step ids. */
+    private static S88MasterRecipe withSteps(List<String> stepIds) {
+        S88MasterRecipe recipe = master();
+        addElement(recipe, "BEGIN", S88RecipeElementKind.BEGIN);
+        for (String id : stepIds) {
+            addElement(recipe, id, S88RecipeElementKind.OPERATION);
+        }
+        addElement(recipe, "END", S88RecipeElementKind.END);
+
+        S88ProcedureLogic logic = new S88ProcedureLogic();
+        logic.addStep(new S88ProcedureStep("BEGIN", "BEGIN"));
+        for (String id : stepIds) {
+            logic.addStep(new S88ProcedureStep(id, id));
+        }
+        logic.addStep(new S88ProcedureStep("END", "END"));
+        recipe.setProcedureLogic(logic);
+        return recipe;
+    }
+
+    private static void addSplit(S88ProcedureLogic logic, String id, S88IdRef from,
+                                 List<String> to, S88LinkType type) {
+        S88ProcedureLink split = new S88ProcedureLink(id);
+        split.addFrom(from);
+        for (String step : to) {
+            split.addTo(S88IdRef.step(step));
+        }
+        split.setLinkType(type);
+        logic.addLink(split);
+    }
+
+    private static void addJoin(S88ProcedureLogic logic, String id, List<String> from, String to) {
+        S88ProcedureLink join = new S88ProcedureLink(id);
+        for (String step : from) {
+            join.addFrom(S88IdRef.step(step));
+        }
+        join.addTo(S88IdRef.transition(to));
+        join.setLinkType(S88LinkType.PARALLEL_CONVERGENT);
+        logic.addLink(join);
+    }
 
     /** A master recipe written by class, which is the shape most recipes start out in. */
     private static S88MasterRecipe master() {

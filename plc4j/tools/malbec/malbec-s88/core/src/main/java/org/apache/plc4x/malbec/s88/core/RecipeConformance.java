@@ -20,7 +20,6 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
-import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
@@ -31,10 +30,8 @@ import org.apache.plc4x.malbec.s88.api.S88Recipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -52,6 +49,9 @@ import java.util.Set;
  * frame on that node when the finding is picked.
  */
 public final class RecipeConformance {
+
+    private static final String BEGIN = CreateMasterRecipeUseCase.BEGIN_ID;
+    private static final String END = CreateMasterRecipeUseCase.END_ID;
 
     private final List<Finding> excess;
     private final List<Finding> deficit;
@@ -289,10 +289,6 @@ public final class RecipeConformance {
             return;
         }
 
-        for (String dangling : logic.getDanglingReferences()) {
-            excess.add(new Finding("The chart has a line pointing at '" + dangling + "', which this"
-                    + " recipe does not carry."));
-        }
         for (S88ProcedureStep step : logic.getSteps()) {
             if (step.getRecipeElementId() != null && !step.getRecipeElementId().isBlank()
                     && recipe.findElement(step.getRecipeElementId()).isEmpty()) {
@@ -302,12 +298,97 @@ public final class RecipeConformance {
             }
         }
         checkBranches(logic, excess);
-        checkReachability(recipe, logic, excess, deficit);
+        checkReachability(recipe, logic, deficit);
         checkEnds(recipe, logic, excess);
-        checkAlternation(logic, excess);
-        checkNesting(logic, excess);
+        checkOrphans(logic, excess);
+        checkDeadEnds(logic, excess);
+        checkSoundness(logic, excess, warnings);
         checkLoops(logic, excess);
         checkExclusivity(logic, warnings);
+    }
+
+    /**
+     * A box the flow never reaches is one the process would never perform.
+     */
+    private static void checkOrphans(S88ProcedureLogic logic, List<Finding> excess) {
+        ChartGraph graph = ChartGraph.of(logic);
+        if (!graph.hasNode(BEGIN) || graph.hasExternalFlow()) {
+            return;
+        }
+        Set<String> reached = graph.reachableFrom(BEGIN);
+        for (String step : graph.steps()) {
+            if (!reached.contains(step)) {
+                excess.add(new Finding("Step '" + step + "' of the chart is not reachable from the"
+                        + " start, so the process would never perform it.", step));
+            }
+        }
+    }
+
+    /**
+     * A box the flow cannot get out of towards the stop is one the flow can get stuck at.
+     */
+    private static void checkDeadEnds(S88ProcedureLogic logic, List<Finding> excess) {
+        ChartGraph graph = ChartGraph.of(logic);
+        if (!graph.hasNode(END) || graph.hasExternalFlow()) {
+            return;
+        }
+        Set<String> reachesStop = graph.reaching(END);
+        for (String node : graph.nodes()) {
+            if (!reachesStop.contains(node)) {
+                String kind = graph.isStep(node) ? "Step" : "Transition";
+                excess.add(new Finding(kind + " '" + node + "' of the chart cannot reach the stop,"
+                        + " so the flow can get stuck there.", node));
+            }
+        }
+    }
+
+    /**
+     * Whether the chart can run as drawn: every node is connected, no step holds two tokens, and
+     * no transition waits forever.
+     * <p>
+     * This is the same soundness check the editor uses, so a chart the editor accepts is a chart a
+     * recipe report accepts, and neither one imposes an older rule about how blocks have to nest.
+     * A missing start or stop and a box that cannot reach the flow are already said in the words
+     * above, so the walk's own wording for them is left out.
+     */
+    private static void checkSoundness(S88ProcedureLogic logic, List<Finding> excess,
+                                       List<Finding> warnings) {
+        ChartSoundness.Report report = ChartSoundness.inspect(logic);
+        for (String error : report.errors()) {
+            if (!isSaidAbove(error)) {
+                excess.add(new Finding(error, nodeMentionedIn(error, logic)));
+            }
+        }
+        for (String warning : report.warnings()) {
+            warnings.add(new Finding(warning, nodeMentionedIn(warning, logic)));
+        }
+    }
+
+    private static boolean isSaidAbove(String error) {
+        return "The chart has no start step.".equals(error)
+                || "The chart has no stop step.".equals(error)
+                || error.endsWith("' is not reachable from the start.")
+                || error.endsWith("' does not reach the stop.");
+    }
+
+    /**
+     * The box, bar or line an error names, so the panel can put its frame on it.
+     */
+    private static String nodeMentionedIn(String message, S88ProcedureLogic logic) {
+        int start = message.indexOf('\'');
+        if (start < 0) {
+            return null;
+        }
+        int end = message.indexOf('\'', start + 1);
+        if (end < 0) {
+            return null;
+        }
+        String id = message.substring(start + 1, end);
+        return logic.findStep(id).isPresent()
+                || logic.findTransition(id).isPresent()
+                || logic.findLink(id).isPresent()
+                ? id
+                : null;
     }
 
     /**
@@ -329,142 +410,6 @@ public final class RecipeConformance {
                         + " join waits for something that never arrives.", link.getId()));
             }
         }
-    }
-
-    /**
-     * Every line has to cross a bar: the flow leaves a box, waits at a bar and arrives at a box
-     * again. A line from a box to a box, or from a bar to a bar, is one the flow has nothing to
-     * follow on.
-     * <p>
-     * Only lines with both ends inside the chart are held to this. A line that leaves the chart to
-     * name a step outside it says nothing about what has to alternate here.
-     */
-    private static void checkAlternation(S88ProcedureLogic logic, List<Finding> excess) {
-        for (S88ProcedureLink link : StructureQueries.linesThatDoNotCross(logic)) {
-            if (!hasOnlyInternalEnds(link)) {
-                continue;
-            }
-            excess.add(new Finding("Line '" + link.getId() + "' joins "
-                    + (isAllSteps(link.getFrom()) ? "two steps" : "two transitions")
-                    + ", so the flow has nothing to wait at between them. A line runs from a step to a"
-                    + " transition or from a transition to a step.", link.getId()));
-        }
-    }
-
-    private static boolean hasOnlyInternalEnds(S88ProcedureLink link) {
-        return link.getFrom().stream().allMatch(S88IdRef::isInternal)
-                && link.getTo().stream().allMatch(S88IdRef::isInternal);
-    }
-
-    private static boolean isAllSteps(List<S88IdRef> ends) {
-        return ends.stream().allMatch(end -> end.getType() == S88IdRefType.STEP);
-    }
-
-    /**
-     * The sides a split opened are the ones that come back together.
-     * <p>
-     * A split is only looked at when at least one of its sides reaches a bar that brings sides back
-     * together. A split whose sides reach none at all is one still being drawn, and nothing is said
-     * about it. When some sides close and others do not, the ones that do and the ones that do not no
-     * longer share a bar, so the block has been left without closing where it opened.
-     */
-    private static void checkNesting(S88ProcedureLogic logic, List<Finding> excess) {
-        for (S88ProcedureLink open : logic.getLinks()) {
-            if (!open.isDivergent() || open.getTo().size() < 2) {
-                continue;
-            }
-            if (reachesAnyFrom(logic, open)) {
-                continue;
-            }
-            List<Set<String>> closings = new ArrayList<>();
-            boolean anySideCloses = false;
-            for (S88IdRef side : open.getTo()) {
-                Set<String> reached = convergentLinksReachableFrom(logic, side.getValue());
-                anySideCloses |= !reached.isEmpty();
-                closings.add(reached);
-            }
-            if (!anySideCloses) {
-                continue;
-            }
-            Set<String> common = new LinkedHashSet<>(closings.getFirst());
-            for (Set<String> reached : closings) {
-                common.retainAll(reached);
-            }
-            if (common.isEmpty()) {
-                excess.add(new Finding("The block opened at '" + open.getId() + "' does not come back"
-                        + " together, so its sides leave it without closing where they opened.",
-                        open.getId()));
-            }
-        }
-    }
-
-    /**
-     * Whether a side of the split leads back to where the split opened, which makes it a retry
-     * rather than a block. A retry is looked at by {@link #checkLoops} instead.
-     */
-    private static boolean reachesAnyFrom(S88ProcedureLogic logic, S88ProcedureLink open) {
-        Set<String> targets = new LinkedHashSet<>();
-        for (S88IdRef from : open.getFrom()) {
-            targets.add(from.getValue());
-        }
-        Set<String> seen = new LinkedHashSet<>();
-        Deque<String> pending = new ArrayDeque<>();
-        for (S88IdRef side : open.getTo()) {
-            if (side.isInternal()) {
-                pending.push(side.getValue());
-            }
-        }
-        while (!pending.isEmpty()) {
-            String at = pending.pop();
-            if (at == null || !seen.add(at)) {
-                continue;
-            }
-            if (targets.contains(at)) {
-                return true;
-            }
-            for (S88ProcedureLink link : logic.getLinks()) {
-                if (link.getFrom().stream().noneMatch(end -> at.equals(end.getValue()))) {
-                    continue;
-                }
-                for (S88IdRef next : link.getTo()) {
-                    if (next.isInternal()) {
-                        pending.push(next.getValue());
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Every bar that brings sides back together and can be reached from one side of the chart,
-     * following the lines forward.
-     */
-    private static Set<String> convergentLinksReachableFrom(S88ProcedureLogic logic, String start) {
-        Set<String> found = new LinkedHashSet<>();
-        Set<String> seen = new LinkedHashSet<>();
-        Deque<String> pending = new ArrayDeque<>();
-        pending.push(start);
-        while (!pending.isEmpty()) {
-            String at = pending.pop();
-            if (at == null || !seen.add(at)) {
-                continue;
-            }
-            for (S88ProcedureLink link : logic.getLinks()) {
-                if (link.getFrom().stream().noneMatch(end -> at.equals(end.getValue()))) {
-                    continue;
-                }
-                if (link.isConvergent()) {
-                    found.add(link.getId());
-                }
-                for (S88IdRef next : link.getTo()) {
-                    if (next.isInternal()) {
-                        pending.push(next.getValue());
-                    }
-                }
-            }
-        }
-        return found;
     }
 
     /**
@@ -574,20 +519,14 @@ public final class RecipeConformance {
     }
 
     /**
-     * The chart has to start somewhere, and every box has to be reachable from where it starts.
+     * The chart has to say where it starts and where it stops.
      * <p>
-     * The walk alternates between boxes and bars. The flow leaves a box, crosses a bar, and arrives
-     * at a box. A line drawn straight from one box to another has nothing to follow, which is
-     * why {@link #checkAlternation} reports one.
-     * <p>
-     * A bar that waits on nothing is crossed as soon as the box before it has finished, so it is
-     * walked through like any other. A chart may loop back to an earlier box retrying. Entering
-     * a box twice ends the walk avoiding a forever loop.
+     * Whether every box can be reached from the start and can reach the stop is decided by
+     * {@link #checkSoundness}, which walks the whole chart rather than one box after another.
      */
     private static void checkReachability(S88Recipe recipe, S88ProcedureLogic logic,
-                                          List<Finding> excess, List<Finding> deficit) {
-        List<S88ProcedureStep> steps = logic.getSteps();
-        if (steps.isEmpty()) {
+                                          List<Finding> deficit) {
+        if (logic.getSteps().isEmpty()) {
             return;
         }
 
@@ -601,49 +540,8 @@ public final class RecipeConformance {
             deficit.add(new Finding("The chart has no step whose element is of kind End, so the flow"
                     + " has nowhere to stop."));
         }
-
-        Set<String> reachable = new LinkedHashSet<>();
-        if (begin != null) {
-            walkFrom(begin.getId(), logic, reachable);
-        }
-        for (S88ProcedureStep step : steps) {
-            if (step.getId() != null && !reachable.contains(step.getId())) {
-                excess.add(new Finding("Step '" + step.getId() + "' of the chart is not reachable from"
-                        + " the start, so the process would never perform it.", step.getId()));
-            }
-        }
     }
 
-    /**
-     * Walks the chart from one box, following the lines out of whatever it reaches and back
-     * again where it reaches a bar.
-     * <p>
-     * Only the end a node is at is followed, so walking from a box leaves along the lines that
-     * leave from it and walking from a bar leaves along the lines that leave from it. A box is only
-     * ever entered once, so a cycle ends the walk instead of going round forever.
-     */
-    private static void walkFrom(String startStepId, S88ProcedureLogic logic, Set<String> reached) {
-        Deque<S88IdRef> pending = new ArrayDeque<>();
-        pending.push(S88IdRef.step(startStepId));
-        while (!pending.isEmpty()) {
-            S88IdRef here = pending.pop();
-            if (here == null || here.getValue() == null) {
-                continue;
-            }
-            boolean isBox = here.getType() == S88IdRefType.STEP;
-            if (isBox && !reached.add(here.getValue())) {
-                continue;
-            }
-            for (S88ProcedureLink link : logic.linksTouching(here)) {
-                if (!link.getFrom().contains(here)) {
-                    continue;
-                }
-                for (S88IdRef next : link.getTo()) {
-                    pending.push(next);
-                }
-            }
-        }
-    }
      /**
      * The first step of the chart whose element is of the given kind, which is how the start and the
      * end of the flow are found.
