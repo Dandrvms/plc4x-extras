@@ -245,9 +245,9 @@ public final class S88TransitionCondition {
     public String toDisplay() {
         return switch (kind) {
             case COMPARISON -> comparison.toDisplay();
-            case WAIT -> "after " + seconds + " s";
-            case AND -> joinedDisplay(" and ");
-            case OR -> joinedDisplay(" or ");
+            case WAIT -> "WAIT " + seconds + " s";
+            case AND -> joinedDisplay(" AND ");
+            case OR -> joinedDisplay(" OR ");
         };
     }
 

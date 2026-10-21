@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -62,6 +63,19 @@ class SfcCapabilitiesTest {
         }
         assertTrue(RecipeConformance.of(trial).excess().isEmpty(),
                 "the chart still holds together: " + RecipeConformance.of(trial).excess());
+    }
+
+    /** A multi-delete that cannot finish leaves the whole chart as it was. */
+    @Test
+    void refusedMultiDeleteChangesNothing() {
+        S88MasterRecipe recipe = fixture("BOTONES_LINEAL");
+        Set<String> picked = Set.of("STEP_1", "T_STEP");
+        String before = GraphSnapshot.of(recipe.getProcedureLogic());
+
+        assertFalse(ChartCapabilities.can(recipe, null, ChartOp.DELETE, picked).enabled());
+        assertThrows(IllegalStateException.class,
+                () -> ChartCapabilities.perform(recipe, null, ChartOp.DELETE, picked));
+        assertEquals(before, GraphSnapshot.of(recipe.getProcedureLogic()));
     }
 
     /** Taking the skip off leaves the step it skipped on the chart. */

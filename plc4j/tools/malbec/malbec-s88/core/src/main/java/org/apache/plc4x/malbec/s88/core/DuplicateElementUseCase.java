@@ -468,9 +468,7 @@ public final class DuplicateElementUseCase {
                 }
                 copy.setProperty(name, copiedContainer);
             } else {
-                // The attributes the unit publishes at its top level are named after the unit just
-                // like the variables of a type, so the copies re-suffix them with the copy's id
-                // instead of inheriting the source's instance name.
+
                 String renamed = NameValidator.isReservedProperty(name)
                         ? name
                         : BaseNameSupport.rePrefixed(name, rootOldId, rootNewId);
@@ -481,8 +479,7 @@ public final class DuplicateElementUseCase {
                             + "one of them first.");
                 }
                 copy.setProperty(renamed, PropertyValues.deepCopy(property.getValue()));
-                // The copy is addressed by the very same schema entry as the source, so the pointer
-                // travels with the attribute: the recipe keeps reaching it by its base name.
+
                 String pointer = source.getBaseName(null, name);
                 if (pointer == null && !NameValidator.isReservedProperty(name)) {
                     pointer = BaseNameSupport.attributePointer(source, name);

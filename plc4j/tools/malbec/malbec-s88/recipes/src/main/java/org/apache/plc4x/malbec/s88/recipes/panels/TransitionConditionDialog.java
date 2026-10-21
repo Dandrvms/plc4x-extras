@@ -56,8 +56,8 @@ final class TransitionConditionDialog extends JDialog {
 
     private static final long serialVersionUID = 1L;
 
-    private static final String AND = "and";
-    private static final String OR = "or";
+    private static final String AND = "AND";
+    private static final String OR = "OR";
 
     private final transient S88MasterRecipe recipe;
     private final transient S88RecipeElement owner;

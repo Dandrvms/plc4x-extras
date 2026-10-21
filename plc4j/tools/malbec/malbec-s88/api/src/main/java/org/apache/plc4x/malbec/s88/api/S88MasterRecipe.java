@@ -59,9 +59,6 @@ public class S88MasterRecipe extends S88Recipe {
 
     public void setKind(S88RecipeKind kind) {
         this.kind = kind != null ? kind : S88RecipeKind.CLASS;
-        // Every entry that says it, not the first: a recipe already carrying two of them has to
-        // end up with one, and removing one leaves the other to be written as a second answer to a
-        // question the file only asks once.
         for (S88OtherInformation info : new ArrayList<>(getOtherInformation())) {
             if (S88OtherInformation.RECIPE_KIND.equalsIgnoreCase(info.getId())) {
                 removeOtherInformation(info);

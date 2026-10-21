@@ -425,9 +425,7 @@ public final class BindRecipeStepUseCase {
             DataType dataType = dataTypeOf(text(definition, "Type"));
             String unitsOrEnum = text(definition, UNITS_OR_ENUM);
 
-            // An enumeration has no engineering units. The plant keeps the name of the one in the same place it
-            // keeps a unit. Writing it as an engineering unit would export a parameter saying its value is
-            // measured in "COMMAND", which is a name and not a measure.
+
             S88RecipeParameter added = S88RecipeParameter.of(
                     declaredParameter.getKey(),
                     text(definition, "Default"),

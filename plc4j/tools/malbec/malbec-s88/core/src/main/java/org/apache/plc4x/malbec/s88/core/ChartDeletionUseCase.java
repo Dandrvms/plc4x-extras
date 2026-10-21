@@ -661,7 +661,7 @@ public final class ChartDeletionUseCase {
     }
 
     /** Puts the chart that was worked out in place of the one the recipe is holding. */
-    private static void copyOnto(S88ProcedureLogic from, S88ProcedureLogic to) {
+    static void copyOnto(S88ProcedureLogic from, S88ProcedureLogic to) {
         new ArrayList<>(to.getLinks()).forEach(to::removeLink);
         new ArrayList<>(to.getSteps()).forEach(to::removeStep);
         new ArrayList<>(to.getTransitions()).forEach(to::removeTransition);

@@ -379,8 +379,7 @@ public void renameRecipeElement(S88RecipeElement element, String newId) {
     }
     unindex(element);
     element.setId(newId);
-    // A nested step is indexed once for the whole recipe, not once per step above it, so going
-    // back in through the tree would put it in the index as many times as it is deep.
+
     indexFrom(element);
 }
 

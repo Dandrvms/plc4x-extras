@@ -28,6 +28,7 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88Recipe;
+import org.apache.plc4x.malbec.s88.api.S88RecipeChangeEvent;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 
 /**
@@ -313,7 +314,45 @@ public final class ChartCapabilities {
                 EditProcedureLogicUseCase.removeLoopLink(recipe, step, only);
                 return;
             }
+            deleteOn(recipe, step, chart, picked);
+            return;
         }
+        if (recipe == null) {
+            throw new IllegalArgumentException("There is no chart to delete from.");
+        }
+
+        S88Recipe trial = RecipeDeepCopy.copyRecipe(recipe);
+        S88RecipeElement trialStep = step == null
+                ? null : trial.findElement(step.getId()).orElse(null);
+        if (step != null && trialStep == null) {
+            throw new IllegalArgumentException("The step being edited is not in this recipe.");
+        }
+        S88ProcedureLogic trialChart = EditProcedureLogicUseCase.existingChart(trial, trialStep);
+        deleteOn(trial, trialStep, trialChart, picked);
+
+        Set<String> kept = new LinkedHashSet<>();
+        for (S88RecipeElement element : trial.getAllElements()) {
+            kept.add(element.getId());
+        }
+        List<S88RecipeElement> removed = new ArrayList<>();
+        for (S88RecipeElement element : recipe.getAllElements()) {
+            if (!kept.contains(element.getId())) {
+                removed.add(element);
+            }
+        }
+        ChartDeletionUseCase.copyOnto(trialChart, chart);
+        for (S88RecipeElement element : removed) {
+            if (element.isTopLevel()) {
+                recipe.removeRecipeElement(element);
+            } else {
+                recipe.detachFrom(element.getParent(), element);
+            }
+        }
+        recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
+    }
+
+    private static void deleteOn(S88Recipe recipe, S88RecipeElement step,
+                                 S88ProcedureLogic chart, Set<String> picked) {
         int taken = 0;
         for (S88ProcedureStep box : new ArrayList<>(chart.getSteps())) {
             if (picked.contains(box.getId()) && chart.findStep(box.getId()).isPresent()) {
