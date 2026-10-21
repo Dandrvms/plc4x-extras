@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import javax.swing.undo.AbstractUndoableEdit;
@@ -55,9 +56,16 @@ public final class RecipeEditorModel {
     private final S88RecipeRepository repository;
     private final S88PlantSnapshot plant;
     private final List<Consumer<RecipeEditorModel>> listeners = new CopyOnWriteArrayList<>();
+    private final List<Consumer<String>> chartSelectionListeners = new CopyOnWriteArrayList<>();
     private final RecipeUndoRedo undoRedo = new RecipeUndoRedo();
     private S88MasterRecipe recipe;
     private int savedPosition;
+
+    /** A node the chart should pick as soon as it is drawn again. */
+    private String pendingChartNode;
+
+    /** The node the chart has picked now, {@code null} when it picked nothing. */
+    private String chartSelection;
 
     /**
      * The name of the step whose chart is being edited, {@code null} for the chart of the recipe.
@@ -242,6 +250,79 @@ public final class RecipeEditorModel {
     public void editChartOf(S88RecipeElement step) {
         this.currentStepId = step == null ? null : step.getId();
         fireChanged();
+    }
+
+    /**
+     * Draws the chart of a step and picks a node in it.
+     *
+     * @param step   step whose chart to draw, {@code null} for the chart of the recipe
+     * @param nodeId node to pick once the chart and its subchart are drawn
+     */
+    void showChartNode(S88RecipeElement step, String nodeId) {
+        this.currentStepId = step == null ? null : step.getId();
+        this.pendingChartNode = nodeId;
+        fireChanged();
+    }
+
+    /**
+     * Takes the node the chart was asked to pick, if there is one.
+     *
+     * @return the node to pick, or {@code null} when the chart was not asked for one
+     */
+    String takePendingChartNode() {
+        String node = pendingChartNode;
+        pendingChartNode = null;
+        return node;
+    }
+
+    /** The node the chart has picked now, {@code null} when it picked nothing. */
+    String chartSelection() {
+        return chartSelection;
+    }
+
+    /**
+     * The path the route gives the chart on show, so that two charts with a node of the same name
+     * can be told apart.
+     *
+     * @return the recipe id followed by the id of each step whose chart holds the one on show
+     */
+    String currentChartPath() {
+        String root = recipe.getId() == null || recipe.getId().isBlank()
+                ? "recipe" : recipe.getId();
+        StringBuilder path = new StringBuilder(root);
+        appendOwners(path, currentStep());
+        return path.toString();
+    }
+
+    private static void appendOwners(StringBuilder path, S88RecipeElement step) {
+        if (step == null) {
+            return;
+        }
+        appendOwners(path, step.getParent());
+        path.append('/').append(step.getId());
+    }
+
+    /**
+     * Says the chart picked another node, so a view can follow it.
+     *
+     * @param nodeId the picked node, {@code null} when nothing is picked
+     */
+    void chartSelectionChanged(String nodeId) {
+        if (Objects.equals(chartSelection, nodeId)) {
+            return;
+        }
+        chartSelection = nodeId;
+        for (Consumer<String> listener : chartSelectionListeners) {
+            listener.accept(nodeId);
+        }
+    }
+
+    void addChartSelectionListener(Consumer<String> listener) {
+        chartSelectionListeners.add(listener);
+    }
+
+    void removeChartSelectionListener(Consumer<String> listener) {
+        chartSelectionListeners.remove(listener);
     }
 
     /**

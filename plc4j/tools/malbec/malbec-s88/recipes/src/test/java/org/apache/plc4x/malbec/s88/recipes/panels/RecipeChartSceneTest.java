@@ -22,6 +22,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
@@ -315,6 +316,25 @@ class RecipeChartSceneTest {
 
             assertNull(scene.selected(),
                     "the box is gone, so nothing is picked, rather than the last one that was");
+        });
+    }
+
+    /** Holding Ctrl adds and takes away one node without losing the others. */
+    @Test
+    void ctrlPickingKeepsTheNodesAlreadyPicked() {
+        onSwingThread(() -> {
+            RecipeChartScene scene = sceneOf(SfcFixtures.lineal());
+            scene.select("MIX");
+
+            scene.toggleSelection("PACK");
+
+            assertEquals(Set.of("MIX", "PACK"), scene.selection());
+            assertEquals("PACK", scene.selected(), "the last one picked is the one acted on first");
+
+            scene.toggleSelection("MIX");
+
+            assertEquals(Set.of("PACK"), scene.selection());
+            assertEquals("PACK", scene.selected());
         });
     }
 

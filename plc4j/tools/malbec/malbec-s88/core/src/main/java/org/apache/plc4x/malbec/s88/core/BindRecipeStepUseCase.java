@@ -239,6 +239,50 @@ public final class BindRecipeStepUseCase {
                 elementId, "T_" + elementId, null);
     }
 
+    /**
+     * Puts an empty step in front of another one.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param beforeBoxId box of the chart the empty step goes before
+     * @return the empty step that was added
+     * @throws IllegalArgumentException when there is no recipe, no chart, or no such box
+     * @throws IllegalStateException    when the box is where the flow starts, or more than one
+     *                                  line reaches it
+     */
+    public static S88RecipeElement addEmptyStepBefore(S88Recipe recipe, S88RecipeElement step,
+                                                      String beforeBoxId) {
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to add a step to.");
+        }
+        String elementId = reserveNames(recipe, chart, "STEP");
+        return EditProcedureLogicUseCase.insertStepBefore(recipe, step, beforeBoxId, elementId,
+                elementId, "T_" + elementId, null);
+    }
+
+    /**
+     * Puts an empty step at the start of one branch of a block.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param afterBoxId box of the step that splits the block
+     * @param branchId transition that opens the branch
+     * @return the empty step that was added
+     * @throws IllegalArgumentException when there is no recipe, no chart, or no such box or branch
+     * @throws IllegalStateException    when the chosen place is not a branch point
+     */
+    public static S88RecipeElement addEmptyStepInBranch(S88Recipe recipe, S88RecipeElement step,
+                                                        String afterBoxId, String branchId) {
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to add a step to.");
+        }
+        String elementId = reserveNames(recipe, chart, "STEP");
+        return EditProcedureLogicUseCase.insertStepAfter(recipe, step, afterBoxId, elementId,
+                elementId, "T_" + elementId, null, InsertMode.IN_BRANCH, branchId);
+    }
+
     private static String reserveNames(S88Recipe recipe, S88ProcedureLogic chart, String stem) {
         String candidate = stem;
         int more = 1;

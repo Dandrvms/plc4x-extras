@@ -443,8 +443,8 @@ public final class RecipeConformance {
     /**
      * Every line the flow goes back on, which is one that leads to a node the walk is still inside.
      * <p>
-     * The walk colours a node grey while its lines are being followed and black once they all have
-     * been, so a line to a grey node is one that closes a loop.
+     * The walk colors a node gray while its lines are being followed and black once they all have
+     * been, so a line to a gray node is one that closes a loop.
      */
     private static List<S88ProcedureLink> backLinks(S88ProcedureLogic logic) {
         Map<String, List<S88ProcedureLink>> leaving = new LinkedHashMap<>();

@@ -37,21 +37,16 @@ import org.openide.util.lookup.Lookups;
 import org.openide.windows.TopComponent;
 
 /**
- * What the two views of a recipe have in common.
+ * What the views of a recipe have in common.
  * <p>
- * Both are a picture of the same recipe and both can change it, so both listen to the same editor
- * state and both redraw when it says something changed. Everything that is not about being a
+ * All are a picture of the same recipe and some can change it, so all listen to the same editor
+ * state and all redraw when it says something changed. Everything that is not about being a
  * particular view is here: the bar of buttons, and the way a view hands the window its undo history
  * so that the window's own buttons work.
  */
 public abstract class AbstractRecipeView extends JPanel implements MultiViewElement {
 
     private static final Logger LOG = Logger.getLogger(AbstractRecipeView.class.getName());
-
-    /**
-     * How long several changes in a row are gathered before the view is drawn again.
-     */
-    private static final int REDRAW_DELAY_MILLIS = 120;
 
     protected final RecipeEditorModel model;
     private final JToolBar toolBar = new JToolBar();
@@ -62,18 +57,28 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     /**
      * The drawing that is waiting to happen, restarted by every change that asks for one.
      */
-    private final Timer pendingRedraw = new Timer(REDRAW_DELAY_MILLIS,
-        event -> SwingUtilities.invokeLater(this::redrawSafely));
+    private final Timer pendingRedraw;
 
     protected AbstractRecipeView(RecipeEditorModel model) {
         this.model = model;
         this.onRecipeChanged = changed -> refreshSaveAndRedraw();
         this.save = new RecipeSaveAction().createContextAwareInstance(getLookup());
+        pendingRedraw = new Timer(redrawDelayMillis(),
+                event -> SwingUtilities.invokeLater(this::redrawSafely));
         pendingRedraw.setRepeats(false);
         setLayout(new BorderLayout());
         toolBar.setFloatable(false);
         toolBar.add(save);
         add(toolBar, BorderLayout.NORTH);
+    }
+
+    /**
+     * How long several changes in a row are gathered before the view is drawn again.
+     *
+     * @return the delay in milliseconds
+     */
+    protected int redrawDelayMillis() {
+        return 120;
     }
 
     /** Keeps the Save button in step with whether there is anything to save, then redraws. */
@@ -216,7 +221,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     /**
      * Names the one thing that can be wrong when the window closes, which is what lets the window ask
-     * once for a recipe with two views rather than twice.
+     * once for a recipe with more than one view rather than once per view.
      */
     static final String UNSAVED_WARNING = "malbec.recipe.unsaved";
 

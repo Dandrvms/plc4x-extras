@@ -57,7 +57,10 @@ public final class RecipeChartView extends AbstractRecipeView {
         super(model);
         toolbar = new RecipeChartToolbar(this, scene);
         scene.setOnConnected(toolbar::join);
-        scene.setOnSelectionChanged(toolbar::refresh);
+        scene.setOnSelectionChanged(() -> {
+            toolbar.refresh();
+            model.chartSelectionChanged(scene.selected());
+        });
         view = scene.createView();
         pickWithThePointer();
         bindKeys();
@@ -92,7 +95,8 @@ public final class RecipeChartView extends AbstractRecipeView {
         view.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent event) {
-                scene.pickAtInView(view, event.getPoint());
+                scene.pickAtInView(view, event.getPoint(),
+                        event.isControlDown() || event.isMetaDown());
                 if (event.isPopupTrigger()) {
                     showMenuFor(event);
                 }
@@ -195,6 +199,10 @@ public final class RecipeChartView extends AbstractRecipeView {
 
     @Override
     protected void redraw() {
+        String pending = model.takePendingChartNode();
+        if (pending != null) {
+            scene.selectWhenDrawn(pending);
+        }
         scene.draw(model.getRecipe(), model.currentStep());
         Graphics2D onScreen = (Graphics2D) view.getGraphics();
         if (onScreen != null) {

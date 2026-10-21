@@ -19,7 +19,9 @@
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
@@ -433,6 +435,46 @@ class RecipeEditorModelTest {
                 "which is where every chart of the recipe starts");
         assertEquals(S88RecipeElementKind.UNIT_PROCEDURE, model.levelBeingEdited(),
                 "so the steps put in it are the ones the recipe holds directly");
+    }
+
+    @Test
+    void showingAChartNodeOpensItsChartAndIsTakenOnce() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        S88RecipeElement tramo = model.getRecipe().findElement("TRAMO").orElseThrow();
+        String node = tramo.getProcedureLogic().getSteps().getFirst().getId();
+
+        model.showChartNode(tramo, node);
+
+        assertSame(tramo, model.currentStep(), "and the chart on show is the one that holds it");
+        assertEquals(node, model.takePendingChartNode(), "and the chart is told to pick it");
+        assertNull(model.takePendingChartNode(), "and it is only told once");
+    }
+
+    @Test
+    void theChartPathNamesTheRecipeAndTheChartsOnShow() throws IOException {
+        RecipeEditorModel model = openOverATree();
+
+        assertEquals("REC", model.currentChartPath(), "and the root chart is named by the recipe");
+        model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
+        assertEquals("REC/TRAMO", model.currentChartPath(),
+                "and a subchart adds the step that holds it");
+        model.editChartOf(model.getRecipe().findElement("PASO").orElseThrow());
+        assertEquals("REC/TRAMO/PASO", model.currentChartPath(),
+                "and a chart inside a chart adds each step on the way down");
+    }
+
+    @Test
+    void aChartSelectionReachesTheViewsOnlyWhenItChanges() throws IOException {
+        RecipeEditorModel model = openOverATree();
+        List<String> heard = new ArrayList<>();
+        model.addChartSelectionListener(heard::add);
+
+        model.chartSelectionChanged("BOX");
+        model.chartSelectionChanged("BOX");
+        model.chartSelectionChanged("BAR");
+
+        assertEquals(List.of("BOX", "BAR"), heard,
+                "and a view that follows the chart is not asked to move for a node it already has");
     }
 
     @Test

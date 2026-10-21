@@ -44,9 +44,9 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  Transición T1",
-                "3  Paso STEP",
-                "4  Transición T2",
+                "2  Transition T1",
+                "3  Step STEP",
+                "4  Transition T2",
                 "5  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -57,10 +57,10 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  en paralelo (P1)  [2 ramas]",
-                "3    [P1.a] Paso A",
-                "4    [P1.b] Paso B",
-                "5  unión",
+                "2  in parallel (P1)  [2 branches]",
+                "3    [P1.a] Step A",
+                "4    [P1.b] Step B",
+                "5  join",
                 "6  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -71,16 +71,16 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  Transición T0",
-                "3  Paso STEP",
-                "4  alternativa (A1)  [2 caminos]",
-                "5    [A1.1] Transición T_A",
-                "6    [A1.1] Paso A",
-                "7    [A1.1] Transición T_END_A",
-                "8    [A1.2] Transición T_B",
-                "9    [A1.2] Paso B",
-                "10    [A1.2] Transición T_END_B",
-                "11  unión",
+                "2  Transition T0",
+                "3  Step STEP",
+                "4  choice (A1)  [2 paths]",
+                "5    [A1.1] Transition T_A",
+                "6    [A1.1] Step A",
+                "7    [A1.1] Transition T_END_A",
+                "8    [A1.2] Transition T_B",
+                "9    [A1.2] Step B",
+                "10    [A1.2] Transition T_END_B",
+                "11  join",
                 "12  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -91,14 +91,14 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  Transición T_OPEN",
-                "3  Paso A  (inicio de bucle)",
-                "4  Transición T_NEXT",
-                "5  Paso B",
-                "6  alternativa (A1)  [2 caminos]",
-                "7    [A1.1] Transición T_BACK",
-                "8    [A1.1] vuelve a A",
-                "9    [A1.2] Transición T_EXIT",
+                "2  Transition T_OPEN",
+                "3  Step A  (loop start)",
+                "4  Transition T_NEXT",
+                "5  Step B",
+                "6  choice (A1)  [2 paths]",
+                "7    [A1.1] Transition T_BACK",
+                "8    [A1.1] back to A",
+                "9    [A1.2] Transition T_EXIT",
                 "10    [A1.2] END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -109,10 +109,10 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  alternativa (A1)  [2 caminos]",
-                "3    [A1.1] Paso A",
-                "4    [A1.2] sin pasos  [salta a T_CLOSE]",
-                "5  unión",
+                "2  choice (A1)  [2 paths]",
+                "3    [A1.1] Step A",
+                "4    [A1.2] no steps  [skips to T_CLOSE]",
+                "5  join",
                 "6  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -123,15 +123,15 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  en paralelo (P1)  [3 ramas]",
-                "3    [P1.a] Paso A",
-                "4    [P1.b] Paso B",
-                "5    [P1.c] Paso C",
-                "6  unión",
-                "7  en paralelo (P2)  [2 ramas]",
-                "8    [P2.a] Paso D",
-                "9    [P2.b] Paso E",
-                "10  unión",
+                "2  in parallel (P1)  [3 branches]",
+                "3    [P1.a] Step A",
+                "4    [P1.b] Step B",
+                "5    [P1.c] Step C",
+                "6  join",
+                "7  in parallel (P2)  [2 branches]",
+                "8    [P2.a] Step D",
+                "9    [P2.b] Step E",
+                "10  join",
                 "11  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -142,16 +142,16 @@ class RecipeFlowAnalyzerTest {
 
         assertEquals(String.join("\n",
                 "1  BEGIN",
-                "2  Transición T1",
-                "3  Paso U",
-                "4  subgráfico U",
+                "2  Transition T1",
+                "3  Step U",
+                "4  subchart U",
                 "5    BEGIN",
-                "6    Transición T_C1",
-                "7    Paso CHILD",
-                "8    Transición T_C2",
+                "6    Transition T_C1",
+                "7    Step CHILD",
+                "8    Transition T_C2",
                 "9    END",
-                "10  fin del subgráfico U",
-                "11  Transición T2",
+                "10  end of subchart U",
+                "11  Transition T2",
                 "12  END"),
                 RecipeFlowFormatter.toText(route));
     }
@@ -160,7 +160,7 @@ class RecipeFlowAnalyzerTest {
     void aRecursiveSubchartIsNotExpanded() {
         RecipeFlowAnalyzer.Route route = RecipeFlowAnalyzer.analyze(subchart(true));
 
-        assertTrue(route.warnings().stream().anyMatch(warning -> warning.contains("recursivo")),
+        assertTrue(route.warnings().stream().anyMatch(warning -> warning.contains("recursive")),
                 () -> "expected a recursion warning in " + route.warnings());
         assertEquals(1, route.rows().stream()
                 .filter(row -> row.kind() == RecipeFlowAnalyzer.RowKind.SUBCHART_ENTER)

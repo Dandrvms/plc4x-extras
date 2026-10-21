@@ -322,6 +322,53 @@ class ChartEditingUseCaseTest {
                         + " carried on for them");
     }
 
+    /** A join that leads nowhere yet still takes a step after it. */
+    @Test
+    void aStepGoesAfterAJoinThatLeadsNowhere() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        addOperation(recipe, "HEAT");
+        addOperation(recipe, "COOL");
+        EditProcedureLogicUseCase.joinOnto(
+                recipe, operationOf(recipe), "HEAT", "COOL", "T_BOTH",
+                S88LinkType.PARALLEL_CONVERGENT);
+
+        EditProcedureLogicUseCase.insertStepAfterTransition(
+                recipe, operationOf(recipe), "T_BOTH", "MIX", "MIX", "T_MIX", "AGITATOR");
+
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
+        assertEquals(List.of("MIX"), targetsOf(chart, "T_BOTH"),
+                "the step is reached straight after the join");
+        assertEquals(List.of("T_MIX"), targetsOf(chart, "MIX"),
+                "and it waits at a bar of its own for its condition");
+        assertTrue(targetsOf(chart, "T_MIX").isEmpty(),
+                "and the flow goes on from there when the operator is ready");
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart));
+    }
+
+    /** A join that already leads to a step gets the new one between the two. */
+    @Test
+    void aStepGoesAfterAJoinBeforeTheStepItAlreadyLedTo() {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
+        addOperation(recipe, "HEAT");
+        addOperation(recipe, "COOL");
+        EditProcedureLogicUseCase.joinOnto(
+                recipe, operationOf(recipe), "HEAT", "COOL", "T_BOTH",
+                S88LinkType.PARALLEL_CONVERGENT);
+        EditProcedureLogicUseCase.insertStepAfterTransition(
+                recipe, operationOf(recipe), "T_BOTH", "MIX", "MIX", "T_MIX", "AGITATOR");
+
+        EditProcedureLogicUseCase.insertStepAfterTransition(
+                recipe, operationOf(recipe), "T_BOTH", "DRY", "DRY", "T_DRY", "DRYER");
+
+        S88ProcedureLogic chart = Levels.chartOf(recipe, "PASO");
+        assertEquals(List.of("DRY"), targetsOf(chart, "T_BOTH"),
+                "the first step after the join is the one just added");
+        assertEquals(List.of("T_DRY"), targetsOf(chart, "DRY"));
+        assertEquals(List.of("MIX"), targetsOf(chart, "T_DRY"),
+                "and the step that was there follows it");
+        assertTrue(EditProcedureLogicUseCase.isChartBipartite(chart));
+    }
+
     @Test
     void aJoinOfOneBoxWithItselfIsRefused() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);

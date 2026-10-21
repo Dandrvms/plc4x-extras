@@ -69,10 +69,12 @@ public final class RecipeEditorTopComponent {
     private static TopComponent build(String key, RecipeEditorModel model) {
         RecipeMultiViewDescription chart = RecipeMultiViewDescription.chart(key);
         RecipeMultiViewDescription steps = RecipeMultiViewDescription.steps(key);
+        RecipeMultiViewDescription flow = RecipeMultiViewDescription.flow(key);
 
         chart.setModel(model);
         steps.setModel(model);
-        RecipeMultiViewDescription[] tabs = {chart, steps};
+        flow.setModel(model);
+        RecipeMultiViewDescription[] tabs = {chart, steps, flow};
 
         TopComponent window = MultiViewFactory.createMultiView(tabs, chart,
                 new RecipeCloseHandler(model));

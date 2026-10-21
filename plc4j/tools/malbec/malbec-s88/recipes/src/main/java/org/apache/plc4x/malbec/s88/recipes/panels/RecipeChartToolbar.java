@@ -20,10 +20,12 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.Window;
 import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.*;
@@ -31,12 +33,15 @@ import javax.swing.*;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
-import org.apache.plc4x.malbec.s88.core.ChartDeletionUseCase;
+import org.apache.plc4x.malbec.s88.core.ChartCapabilities;
+import org.apache.plc4x.malbec.s88.core.ChartCapabilities.ChartOp;
+import org.apache.plc4x.malbec.s88.core.ChartGraph;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
@@ -80,6 +85,16 @@ final class RecipeChartToolbar {
     private static final String CONDITION = "condition";
     private static final String RENAME = "rename";
     private static final String DELETE = "delete";
+    private static final String INSERT_BEFORE = "insertBefore";
+    private static final String INSERT_AFTER = "insertAfter";
+    private static final String INSERT_IN_BRANCH = "insertInBranch";
+    private static final String INSERT_BEFORE_FORK = "insertBeforeFork";
+    private static final String INSERT_AFTER_JOIN = "insertAfterJoin";
+    private static final String REMOVE_BRANCH = "removeBranch";
+    private static final String REMOVE_SKIP = "removeSkip";
+    private static final String MOVE_LEFT = "moveLeft";
+    private static final String MOVE_RIGHT = "moveRight";
+    private static final String JOIN_BRANCHES = "joinBranches";
     private static final String LINK = "link";
 
     private final RecipeChartView view;
@@ -93,6 +108,12 @@ final class RecipeChartToolbar {
 
     /** What says whether each order can run, asked again whenever the pick changes. */
     private final Map<Action, BooleanSupplier> whenItRuns = new LinkedHashMap<>();
+
+    /** The orders that ask {@link ChartCapabilities} before they run, by the order they ask about. */
+    private final Map<Action, ChartOp> capabilityOf = new LinkedHashMap<>();
+
+    /** What each order does, so a refusal can put it back under the name. */
+    private final Map<Action, String> hints = new LinkedHashMap<>();
 
     RecipeChartToolbar(RecipeChartView view, RecipeChartScene scene) {
         this.view = view;
@@ -153,9 +174,50 @@ final class RecipeChartToolbar {
         act(CONDITION, "Condition", "Say what the transition that is picked waits on",
                 this::canCondition, this::editCondition);
         act(RENAME, "Rename", "Give the picked step another name", this::canAddStep, this::rename);
-        act(DELETE, "Delete", "Take the picked step off the chart; a loop link comes off on its own too",
-                () -> pickedBox() != null || pickedLoop() != null, this::delete);
+        actCapability(DELETE, "Delete",
+                "Take what is picked off the chart. Hold Ctrl to pick more than one; one undo puts"
+                        + " every one of them back.",
+                ChartOp.DELETE, this::delete);
+        actCapability(INSERT_BEFORE, "Insert step before",
+                "Put an empty step in front of the picked step.", ChartOp.INSERT_BEFORE,
+                () -> change(ChartOp.INSERT_BEFORE, "Insert step before"));
+        actCapability(INSERT_AFTER, "Insert step after",
+                "Put an empty step after the picked step.", ChartOp.INSERT_AFTER,
+                () -> change(ChartOp.INSERT_AFTER, "Insert step after"));
+        actCapability(INSERT_IN_BRANCH, "Insert step in branch",
+                "Put an empty step at the start of the picked branch.", ChartOp.INSERT_IN_BRANCH,
+                () -> change(ChartOp.INSERT_IN_BRANCH, "Insert step in branch"));
+        actCapability(INSERT_BEFORE_FORK, "Insert step before fork",
+                "Put an empty step on the one flow that leads into the picked fork.",
+                ChartOp.INSERT_BEFORE_FORK,
+                () -> change(ChartOp.INSERT_BEFORE_FORK, "Insert step before fork"));
+        actCapability(INSERT_AFTER_JOIN, "Insert step after join",
+                "Put an empty step on the one flow that leaves the picked join.",
+                ChartOp.INSERT_AFTER_JOIN,
+                () -> change(ChartOp.INSERT_AFTER_JOIN, "Insert step after join"));
+        actCapability(REMOVE_BRANCH, "Remove branch",
+                "Take the chosen branch off, and put the block back together without it.",
+                ChartOp.REMOVE_BRANCH, () -> change(ChartOp.REMOVE_BRANCH, "Remove branch"));
+        actCapability(REMOVE_SKIP, "Remove skip",
+                "Take the skip off, so the flow only goes through the step it skipped.",
+                ChartOp.REMOVE_SKIP, () -> change(ChartOp.REMOVE_SKIP, "Remove skip"));
+        actCapability(MOVE_LEFT, "Move branch left",
+                "Put the picked branch one place to the left.", ChartOp.MOVE_BRANCH_LEFT,
+                () -> change(ChartOp.MOVE_BRANCH_LEFT, "Move branch left"));
+        actCapability(MOVE_RIGHT, "Move branch right",
+                "Put the picked branch one place to the right.", ChartOp.MOVE_BRANCH_RIGHT,
+                () -> change(ChartOp.MOVE_BRANCH_RIGHT, "Move branch right"));
+        actCapability(JOIN_BRANCHES, "Join branches",
+                "Pick two or more steps that come back together and put one bar after all of them.",
+                ChartOp.JOIN_BRANCHES, () -> change(ChartOp.JOIN_BRANCHES, "Join branches"));
         buildLinkAction();
+    }
+
+    /** Makes an order whose answer comes from {@link ChartCapabilities}. */
+    private Action actCapability(String key, String name, String hint, ChartOp op, Runnable what) {
+        Action action = act(key, name, hint, () -> ask(op).enabled(), what);
+        capabilityOf.put(action, op);
+        return action;
     }
 
     /**
@@ -177,6 +239,7 @@ final class RecipeChartToolbar {
         action.putValue(Action.SHORT_DESCRIPTION, hint);
         action.setEnabled(when.getAsBoolean());
         whenItRuns.put(action, when);
+        hints.put(action, hint);
         actions.put(key, action);
         return action;
     }
@@ -209,6 +272,18 @@ final class RecipeChartToolbar {
      * is greyed out rather than opening a dialog that says nothing is picked.
      */
     void refresh() {
+        for (Map.Entry<Action, BooleanSupplier> order : whenItRuns.entrySet()) {
+            Action action = order.getKey();
+            ChartOp op = capabilityOf.get(action);
+            if (op == null) {
+                action.setEnabled(order.getValue().getAsBoolean());
+                continue;
+            }
+            ChartCapabilities.Capability answer = ask(op);
+            action.setEnabled(answer.enabled());
+            action.putValue(Action.SHORT_DESCRIPTION,
+                    answer.enabled() ? hints.get(action) : answer.reason());
+        }
         Action up = actions.get(UP);
         if (up != null) {
             String label = upLabel();
@@ -216,9 +291,6 @@ final class RecipeChartToolbar {
             up.putValue(Action.SHORT_DESCRIPTION, canGoUp()
                     ? "Draw the chart of " + label.substring("Up to ".length())
                     : "The chart of the recipe is already on show");
-        }
-        for (Map.Entry<Action, BooleanSupplier> order : whenItRuns.entrySet()) {
-            order.getKey().setEnabled(order.getValue().getAsBoolean());
         }
     }
 
@@ -231,6 +303,13 @@ final class RecipeChartToolbar {
         bar.add(actions.get(ADD_PARALLEL));
         bar.add(actions.get(ADD_BRANCH));
         bar.add(actions.get(ADD_OPTIONAL));
+        bar.addSeparator();
+        bar.add(actions.get(INSERT_BEFORE));
+        bar.add(actions.get(INSERT_AFTER));
+        bar.add(actions.get(INSERT_BEFORE_FORK));
+        bar.add(actions.get(INSERT_AFTER_JOIN));
+        bar.add(actions.get(REMOVE_BRANCH));
+        bar.add(actions.get(JOIN_BRANCHES));
         bar.add(actions.get(EQUIPMENT));
         bar.add(actions.get(VALUES));
         bar.add(actions.get(CONDITION));
@@ -253,6 +332,17 @@ final class RecipeChartToolbar {
         menu.add(actions.get(ADD_PARALLEL));
         menu.add(actions.get(ADD_BRANCH));
         menu.add(actions.get(ADD_OPTIONAL));
+        menu.addSeparator();
+        menu.add(actions.get(INSERT_BEFORE));
+        menu.add(actions.get(INSERT_AFTER));
+        menu.add(actions.get(INSERT_IN_BRANCH));
+        menu.add(actions.get(INSERT_BEFORE_FORK));
+        menu.add(actions.get(INSERT_AFTER_JOIN));
+        menu.add(actions.get(REMOVE_BRANCH));
+        menu.add(actions.get(REMOVE_SKIP));
+        menu.add(actions.get(MOVE_LEFT));
+        menu.add(actions.get(MOVE_RIGHT));
+        menu.add(actions.get(JOIN_BRANCHES));
         if (canHaveABlockUnderIt(pickedBox())) {
             menu.add(actions.get(PARALLEL_HERE));
             menu.add(actions.get(SELECTIVE_HERE));
@@ -382,14 +472,6 @@ final class RecipeChartToolbar {
     private String pickedBar() {
         String node = picked();
         return node != null && !scene.isBox(node) && !scene.isLine(node) ? node : null;
-    }
-
-    /** The bar of the loop connection the picked thing belongs to, {@code null} when it is none. */
-    private String pickedLoop() {
-        S88ProcedureLogic chart = model().chartBeingEdited();
-        String node = picked();
-        return chart == null || node == null
-                ? null : StructureQueries.loopTransitionOf(chart, node);
     }
 
     private boolean canGoUp() {
@@ -646,43 +728,98 @@ final class RecipeChartToolbar {
     }
 
     /**
-     * Takes the picked step off the chart, or the loop link it is part of.
+     * Takes what is picked off the chart.
      * <p>
-     * The lines and transitions that run into or out of a step go with it. A loop link comes off on
-     * its own: its two lines and its bar go, and the steps it joins stay. Other lines and
-     * transitions are not taken off here, because a chart is kept whole by moving the steps it joins.
+     * Steps, transitions, and lines can all go. Holding Ctrl picks more than one, and they all go
+     * inside one edit, so one undo puts every one of them back. The pick moves to the closest thing
+     * that stays, so the operator does not have to find the chart again.
      */
     private void delete() {
-        String node = picked();
-        if (node == null) {
+        Set<String> going = scene.selection();
+        if (going.isEmpty()) {
             return;
         }
-        String loop = pickedLoop();
-        if (loop != null) {
-            int answer = JOptionPane.showConfirmDialog(bar(),
-                    "Take the loop link " + loop + " off the chart?", "Delete",
-                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (answer != JOptionPane.OK_OPTION) {
-                return;
-            }
-            model().edit("Delete loop link " + loop,
-                    () -> EditProcedureLogicUseCase.removeLoopLink(
-                            model().getRecipe(), actionStep(), node));
-            scene.select(null);
-            return;
-        }
-        String step = pickedBox();
-        if (step == null) {
-            return;
-        }
-        int answer = JOptionPane.showConfirmDialog(bar(), "Take " + step + " off the chart?", "Delete",
+        String what = going.size() == 1 ? going.iterator().next() : going.size() + " things";
+        int answer = JOptionPane.showConfirmDialog(bar(),
+                "Take " + what + " off the chart? One undo puts everything back.", "Delete",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
         if (answer != JOptionPane.OK_OPTION) {
             return;
         }
-        model().edit("Delete " + step,
-                () -> ChartDeletionUseCase.deleteBox(model().getRecipe(), actionStep(), step));
-        scene.select(null);
+        String anchor = anchorFor(going);
+        model().edit("Delete " + what,
+                () -> ChartCapabilities.perform(
+                        model().getRecipe(), actionStep(), ChartOp.DELETE, going));
+        reselect(anchor);
+    }
+
+    /** Asks {@link ChartCapabilities} whether an order would go through. */
+    private ChartCapabilities.Capability ask(ChartOp op) {
+        return ChartCapabilities.can(model().getRecipe(), actionStep(), op, scene.selection());
+    }
+
+    /**
+     * Runs an order through {@link ChartCapabilities} and picks what it made or the closest thing
+     * that stayed.
+     */
+    private void change(ChartOp op, String label) {
+        String anchor = anchorFor(scene.selection());
+        String[] made = new String[1];
+        model().edit(label, () -> made[0] = ChartCapabilities.perform(
+                model().getRecipe(), actionStep(), op, scene.selection()));
+        reselect(made[0] != null ? made[0] : anchor);
+    }
+
+    /** Picks what an edit made or the nearest thing that stayed, never a node that is now gone. */
+    private void reselect(String wanted) {
+        S88ProcedureLogic chart = model().chartBeingEdited();
+        String pick = wanted;
+        if (pick == null || chart == null || (chart.findStep(pick).isEmpty()
+                && chart.findTransition(pick).isEmpty() && chart.findLink(pick).isEmpty())) {
+            pick = chart == null ? null : chart.getSteps().stream()
+                    .map(S88ProcedureStep::getId)
+                    .findFirst()
+                    .orElse(null);
+        }
+        scene.selectWhenDrawn(pick);
+    }
+
+    /**
+     * Finds the closest thing that an edit is not taking away, so the pick can move there.
+     *
+     * @param going the nodes and lines about to be taken off
+     * @return a node or line that stays, {@code null} when there is none
+     */
+    private String anchorFor(Set<String> going) {
+        S88ProcedureLogic chart = model().chartBeingEdited();
+        if (chart == null || going.isEmpty()) {
+            return null;
+        }
+        ChartGraph graph = ChartGraph.of(chart);
+        for (String node : going) {
+            List<String> around = new ArrayList<>(graph.preds(node));
+            around.addAll(graph.succs(node));
+            for (String neighbour : around) {
+                if (!going.contains(neighbour)
+                        && (graph.isStep(neighbour) || graph.isTransition(neighbour))) {
+                    return neighbour;
+                }
+            }
+            S88ProcedureLink line = chart.findLink(node).orElse(null);
+            if (line != null) {
+                for (var from : line.getFrom()) {
+                    if (!going.contains(from.getValue())) {
+                        return from.getValue();
+                    }
+                }
+                for (var to : line.getTo()) {
+                    if (!going.contains(to.getValue())) {
+                        return to.getValue();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** Asks for something that has to be given. */

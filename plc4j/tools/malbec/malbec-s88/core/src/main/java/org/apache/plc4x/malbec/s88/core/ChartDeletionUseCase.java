@@ -125,6 +125,37 @@ public final class ChartDeletionUseCase {
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
+    /**
+     * Takes a whole line off the chart.
+     *
+     * <p>The chart is worked out on a copy and checked before the recipe is touched. A line that
+     * would leave a step without a way in or out is refused.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param lineId line to take off
+     * @throws IllegalArgumentException when there is no chart or no such line
+     * @throws IllegalStateException    when the chart would no longer run
+     */
+    public static void deleteLink(S88Recipe recipe, S88RecipeElement step, String lineId) {
+        S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to delete from.");
+        }
+        if (chart.findLink(lineId).isEmpty()) {
+            throw new IllegalArgumentException("This chart has no line called '" + lineId + "'.");
+        }
+
+        List<String> before = ChartSoundness.check(chart);
+        S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
+        joined.findLink(lineId).ifPresent(joined::removeLink);
+        ChartNormalizer.normalize(joined);
+        refuseNewProblems("Taking line '" + lineId + "' off the chart", before, joined);
+
+        copyOnto(joined, chart);
+        recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
+    }
+
     private static void deleteTransition(S88ProcedureLogic chart, String barId) {
         ChartGraph graph = ChartGraph.of(chart);
         boolean loop = graph.backEdges().stream()

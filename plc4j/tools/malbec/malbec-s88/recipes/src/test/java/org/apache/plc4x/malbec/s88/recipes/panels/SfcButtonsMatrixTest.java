@@ -18,17 +18,27 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.panels;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.core.ChartCapabilities;
+import org.apache.plc4x.malbec.s88.core.ChartCapabilities.ChartOp;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
+import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.core.StructureQueries;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -132,6 +142,73 @@ class SfcButtonsMatrixTest {
         for (S88ProcedureLink split : splits) {
             assertEquals(2, split.getTo().size(), id + ": every block of the matrix has two branches");
         }
+    }
+
+    /**
+     * For every fixture and every order, the answer and the real order agree.
+     *
+     * <p>The candidate picks cover each step, each bar, each line, each pair of steps, and the
+     * whole chart. When the answer is enabled, a fresh copy runs it without throwing. When the
+     * answer is refused, a fresh copy throws rather than running, and the reason says why. A
+     * {@link NullPointerException} is never an answer.
+     */
+    @Test
+    void everyOrderThatIsOfferedRunsAndEveryRefusalHolds() {
+        for (S88MasterRecipe recipe : SfcFixtures.all()) {
+            String id = recipe.getId();
+            List<Set<String>> picks = picksOf(recipe.getProcedureLogic());
+            boolean anyOffered = false;
+            for (ChartOp op : ChartOp.values()) {
+                for (Set<String> pick : picks) {
+                    ChartCapabilities.Capability answer =
+                            ChartCapabilities.can(recipe, null, op, pick);
+                    S88MasterRecipe trial = RecipeDeepCopy.copyMasterRecipe(recipe);
+                    if (answer.enabled()) {
+                        anyOffered = true;
+                        assertDoesNotThrow(
+                                () -> ChartCapabilities.perform(trial, null, op, pick),
+                                id + ": " + op + " was offered for " + pick + " but did not run");
+                        continue;
+                    }
+                    assertTrue(answer.reason() != null && !answer.reason().isBlank(),
+                            id + ": " + op + " is refused without a reason");
+                    RuntimeException refused = assertThrows(RuntimeException.class,
+                            () -> ChartCapabilities.perform(trial, null, op, pick),
+                            id + ": " + op + " was refused for " + pick + " but ran");
+                    assertFalse(refused instanceof NullPointerException,
+                            id + ": " + op + " was refused for " + pick + " with a null pointer");
+                }
+            }
+            assertTrue(anyOffered, id + " has no order that can run on any pick");
+        }
+    }
+
+    /** Picks to try each order against: none, each node, each line, each pair of steps, all. */
+    private static List<Set<String>> picksOf(S88ProcedureLogic chart) {
+        List<Set<String>> picks = new ArrayList<>();
+        picks.add(Set.of());
+        List<String> boxes = chart.getSteps().stream().map(S88ProcedureStep::getId).toList();
+        List<String> bars = chart.getTransitions().stream()
+                .map(S88ProcedureTransition::getId).toList();
+        for (String box : boxes) {
+            picks.add(Set.of(box));
+        }
+        for (String bar : bars) {
+            picks.add(Set.of(bar));
+        }
+        for (S88ProcedureLink line : chart.getLinks()) {
+            picks.add(Set.of(line.getId()));
+        }
+        for (int left = 0; left < boxes.size(); left++) {
+            for (int right = left + 1; right < boxes.size(); right++) {
+                picks.add(Set.of(boxes.get(left), boxes.get(right)));
+            }
+        }
+        Set<String> every = new LinkedHashSet<>(boxes);
+        every.addAll(bars);
+        chart.getLinks().forEach(line -> every.add(line.getId()));
+        picks.add(every);
+        return picks;
     }
 
     private static S88ProcedureLogic chartOf(String id) {

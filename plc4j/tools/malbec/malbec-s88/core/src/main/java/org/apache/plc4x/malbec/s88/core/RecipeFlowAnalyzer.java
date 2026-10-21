@@ -223,8 +223,8 @@ public final class RecipeFlowAnalyzer {
         int group = ++analysis.parallelGroups;
         String name = "P" + group;
         emit(analysis, chart, RowKind.FORK_PARALLEL, node, null,
-                "en paralelo (" + name + ")", branches.size() + " ramas" + detailSuffix(chart, node),
-                flow, null);
+                "in parallel (" + name + ")", branches.size() + " branches"
+                        + detailSuffix(chart, node), flow, null);
         char letter = 'a';
         for (String branch : branches) {
             walk(analysis, chart, branch, join, branchFlow(flow, name + "." + letter));
@@ -236,14 +236,14 @@ public final class RecipeFlowAnalyzer {
         if (join == null) {
             analysis.warnings.add(chart.chartPath + ": the branches at '" + node
                     + "' do not come back together.");
-            emit(analysis, chart, RowKind.JOIN_PARALLEL, node, null, "unión", null, flow,
-                    "las ramas no se vuelven a unir");
+            emit(analysis, chart, RowKind.JOIN_PARALLEL, node, null, "join", null, flow,
+                    "the branches do not come back together");
             return;
         }
         if (join.equals(stopAt)) {
             return;
         }
-        emit(analysis, chart, RowKind.JOIN_PARALLEL, join, null, "unión",
+        emit(analysis, chart, RowKind.JOIN_PARALLEL, join, null, "join",
                 detail(chart, join), flow, null);
         continueAfter(analysis, chart, join, stopAt, flow);
     }
@@ -256,15 +256,15 @@ public final class RecipeFlowAnalyzer {
         }
         int group = ++analysis.choiceGroups;
         String name = "A" + group;
-        emit(analysis, chart, RowKind.CHOICE, node, null, "alternativa (" + name + ")",
-                choices.size() + " caminos" + detailSuffix(chart, node), flow, null);
+        emit(analysis, chart, RowKind.CHOICE, node, null, "choice (" + name + ")",
+                choices.size() + " paths" + detailSuffix(chart, node), flow, null);
         int number = 0;
         for (String choice : choices) {
             number++;
             String choiceFlow = branchFlow(flow, name + "." + number);
             if (chart.graph.isTransition(choice) && chart.graph.isSkip(node, choice)) {
-                emit(analysis, chart, RowKind.SKIP, choice, null, "sin pasos",
-                        "salta a " + choice, choiceFlow, null);
+                emit(analysis, chart, RowKind.SKIP, choice, null, "no steps",
+                        "skips to " + choice, choiceFlow, null);
             } else if (!choice.equals(merge)) {
                 walk(analysis, chart, choice, merge, choiceFlow);
             }
@@ -272,7 +272,7 @@ public final class RecipeFlowAnalyzer {
         if (analysis.truncated || merge == null || merge.equals(stopAt)) {
             return;
         }
-        emit(analysis, chart, RowKind.MERGE, merge, null, "unión", detail(chart, merge), flow, null);
+        emit(analysis, chart, RowKind.MERGE, merge, null, "join", detail(chart, merge), flow, null);
         continueAfter(analysis, chart, merge, stopAt, flow);
     }
 
@@ -309,11 +309,11 @@ public final class RecipeFlowAnalyzer {
 
     private static void emitLoopBack(Analysis analysis, ChartWalk chart, String node, String target,
                                      String flow) {
-        emit(analysis, chart, RowKind.LOOP_BACK, target, null, "vuelve a " + target,
+        emit(analysis, chart, RowKind.LOOP_BACK, target, null, "back to " + target,
                 detail(chart, node), flow, null);
         Integer row = chart.rowOfNode.get(target);
         if (row != null && row >= 0 && row < analysis.rows.size()) {
-            analysis.rows.set(row, analysis.rows.get(row).withNote("inicio de bucle"));
+            analysis.rows.set(row, analysis.rows.get(row).withNote("loop start"));
         }
     }
 
@@ -326,10 +326,10 @@ public final class RecipeFlowAnalyzer {
         }
         if (chart.graph.isStep(node)) {
             String elementId = elementId(chart, node);
-            return emit(analysis, chart, RowKind.STEP, node, elementId, "Paso " + node,
+            return emit(analysis, chart, RowKind.STEP, node, elementId, "Step " + node,
                     stepDetail(analysis, elementId), flow, null);
         }
-        return emit(analysis, chart, RowKind.TRANSITION, node, null, "Transición " + node,
+        return emit(analysis, chart, RowKind.TRANSITION, node, null, "Transition " + node,
                 detail(chart, node), flow, null);
     }
 
@@ -366,23 +366,23 @@ public final class RecipeFlowAnalyzer {
             return;
         }
         if (analysis.elementStack.contains(elementId)) {
-            analysis.warnings.add(chart.chartPath + ": subgráfico recursivo '" + elementId
-                    + "' no expandido.");
+            analysis.warnings.add(chart.chartPath + ": recursive subchart '" + elementId
+                    + "' not expanded.");
             return;
         }
         if (chart.depth + 1 > analysis.options.maxDepth()) {
-            analysis.warnings.add(chart.chartPath + ": profundidad máxima alcanzada en '"
+            analysis.warnings.add(chart.chartPath + ": maximum depth reached at '"
                     + elementId + "'.");
             return;
         }
         String childPath = chart.chartPath + "/" + elementId;
         emit(analysis, chart, RowKind.SUBCHART_ENTER, elementId, elementId,
-                "subgráfico " + elementId, null, flow, null);
+                "subchart " + elementId, null, flow, null);
         analysis.elementStack.add(elementId);
         walkChart(analysis, child, childPath, chart.depth + 1, flow);
         analysis.elementStack.remove(elementId);
         emit(analysis, chart, RowKind.SUBCHART_EXIT, elementId, elementId,
-                "fin del subgráfico " + elementId, null, flow, null);
+                "end of subchart " + elementId, null, flow, null);
     }
 
     private static List<String> parallelBranches(ChartGraph graph, String node) {
@@ -506,15 +506,15 @@ public final class RecipeFlowAnalyzer {
     private static String stepDetail(S88RecipeElement element) {
         StringBuilder detail = new StringBuilder();
         if (!element.getActualEquipmentIds().isEmpty()) {
-            detail.append("equipo ").append(String.join(", ", element.getActualEquipmentIds()));
+            detail.append("equipment ").append(String.join(", ", element.getActualEquipmentIds()));
         } else if (element.getEquipmentClassId() != null && !element.getEquipmentClassId().isBlank()) {
-            detail.append("clase ").append(element.getEquipmentClassId());
+            detail.append("class ").append(element.getEquipmentClassId());
         }
         if (!element.getParameters().isEmpty()) {
             if (detail.length() > 0) {
                 detail.append("; ");
             }
-            detail.append(element.getParameters().size()).append(" parámetros");
+            detail.append(element.getParameters().size()).append(" parameters");
         }
         return detail.length() == 0 ? null : detail.toString();
     }

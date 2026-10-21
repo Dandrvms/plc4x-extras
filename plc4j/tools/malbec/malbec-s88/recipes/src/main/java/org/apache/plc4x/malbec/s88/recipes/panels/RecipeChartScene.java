@@ -62,6 +62,7 @@ final class RecipeChartScene extends GraphScene<String, String> {
     private final LayerWidget nodeLayer = new LayerWidget(this);
 
     private Map<String, NodeSpec> nodes = new LinkedHashMap<>();
+    private final Set<String> selection = new LinkedHashSet<>();
     private String selected;
     private boolean joining;
 
@@ -581,7 +582,35 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @param node name of the node now picked, {@code null} for nothing picked
      */
     void select(String node) {
-        pickNow(node == null || nodes.containsKey(node) || pieces.containsKey(node) ? node : null);
+        pickNow(node == null ? Set.of() : Set.of(node));
+    }
+
+    /**
+     * Says which nodes the buttons on the toolbar will act on.
+     *
+     * @param nodes names of the nodes now picked, empty for nothing picked
+     */
+    void selectMany(Collection<String> nodes) {
+        pickNow(nodes == null ? Set.of() : new LinkedHashSet<>(nodes));
+    }
+
+    /**
+     * Adds or takes one node from the pick without losing the others.
+     *
+     * @param node name of the node to add or take away, {@code null} clears the pick
+     */
+    void toggleSelection(String node) {
+        if (node == null) {
+            pickNow(Set.of());
+            return;
+        }
+        Set<String> next = new LinkedHashSet<>(selection);
+        if (!next.remove(node)) {
+            if (nodes.containsKey(node) || pieces.containsKey(node)) {
+                next.add(node);
+            }
+        }
+        pickNow(next);
     }
 
     /**
@@ -602,27 +631,34 @@ final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     /**
-     * Puts the frame on one node and takes it off another.
+     * Puts the frame on the wanted nodes and takes it off the others.
      *
-     * @param wanted name of the node now picked, {@code null} for nothing picked
+     * @param wanted names of the nodes now picked, empty for nothing picked
      */
-    private void pickNow(String wanted) {
-        if (Objects.equals(wanted, this.selected)) {
+    private void pickNow(Collection<String> wanted) {
+        Set<String> clean = new LinkedHashSet<>();
+        for (String node : wanted) {
+            if (node != null && (nodes.containsKey(node) || pieces.containsKey(node))) {
+                clean.add(node);
+            }
+        }
+        if (clean.equals(selection)) {
             return;
         }
-        String wasId = this.selected;
-        this.selected = wanted;
+        Set<String> was = new LinkedHashSet<>(selection);
+        selection.clear();
+        selection.addAll(clean);
+        selected = clean.isEmpty() ? null : new ArrayList<>(clean).getLast();
 
-        Widget was = findWidget(wasId);
-        if (was != null) {
-            was.repaint();
+        Set<String> touched = new LinkedHashSet<>(was);
+        touched.addAll(clean);
+        for (String node : touched) {
+            Widget widget = findWidget(node);
+            if (widget != null) {
+                widget.repaint();
+            }
+            restyle(node);
         }
-        restyle(wasId);
-        Widget now = findWidget(wanted);
-        if (now != null) {
-            now.repaint();
-        }
-        restyle(wanted);
         onSelectionChanged.run();
     }
 
@@ -639,14 +675,20 @@ final class RecipeChartScene extends GraphScene<String, String> {
         }
         pendingSelection = null;
         if (nodes.containsKey(asked) || pieces.containsKey(asked)) {
-            pickNow(asked);
+            pickNow(Set.of(asked));
         }
     }
 
-    /** Forgets a pick that is no longer on the chart. */
+    /** Forgets picks that are no longer on the chart. */
     private void forgetSelectionIfItIsGone() {
-        if (selected != null && !nodes.containsKey(selected) && !pieces.containsKey(selected)) {
-            select(null);
+        Set<String> stillHere = new LinkedHashSet<>();
+        for (String node : selection) {
+            if (nodes.containsKey(node) || pieces.containsKey(node)) {
+                stillHere.add(node);
+            }
+        }
+        if (stillHere.size() != selection.size()) {
+            pickNow(stillHere);
         }
     }
 
@@ -699,9 +741,14 @@ final class RecipeChartScene extends GraphScene<String, String> {
         }
     }
 
-    /** Which node the buttons on the toolbar will act on, {@code null} when nothing is picked. */
+    /** Which node the buttons on the toolbar will act on first, {@code null} when nothing is picked. */
     String selected() {
         return selected;
+    }
+
+    /** The nodes the buttons on the toolbar will act on, in the order they were picked. */
+    Set<String> selection() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(selection));
     }
 
     /** The picked node when it is a box on the chart, {@code null} when it is a bar or a line. */
@@ -717,9 +764,9 @@ final class RecipeChartScene extends GraphScene<String, String> {
     /** The boxes whose step works on nothing yet, which the drawing marks. */
     private Set<String> empty = Set.of();
 
-    /** Whether a box or a bar is the picked one, which is how the drawing knows to mark it. */
+    /** Whether a box, bar, or line is picked, which is how the drawing knows to mark it. */
     boolean isSelected(String node) {
-        return selected != null && selected.equals(node);
+        return node != null && selection.contains(node);
     }
 
     /** Whether a name is a line of the recipe rather than a box or a bar. */
@@ -765,8 +812,23 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @param point where the pointer went down, in the coordinates of the scene
      */
     void pickAt(Point point) {
+        pickAt(point, false);
+    }
+
+    /**
+     * Picks whatever the user pointed at, adding it to the pick when asked.
+     *
+     * @param point where the pointer went down, in the coordinates of the scene
+     * @param add   whether to keep the nodes already picked
+     */
+    void pickAt(Point point, boolean add) {
         String node = nodeAt(point);
-        select(node != null ? node : lineAt(point));
+        String wanted = node != null ? node : lineAt(point);
+        if (add && wanted != null) {
+            toggleSelection(wanted);
+        } else {
+            select(wanted);
+        }
     }
 
     /**
@@ -892,7 +954,18 @@ final class RecipeChartScene extends GraphScene<String, String> {
      * @param point where the pointer went down, in the coordinates of that component
      */
     void pickAtInView(JComponent view, Point point) {
-        pickAt(convertViewToScene(point));
+        pickAtInView(view, point, false);
+    }
+
+    /**
+     * Picks whatever a click went on, adding it to the pick when asked.
+     *
+     * @param view  the component the library draws in, which is what the point is measured against
+     * @param point where the pointer went down, in the coordinates of that component
+     * @param add   whether to keep the nodes already picked
+     */
+    void pickAtInView(JComponent view, Point point, boolean add) {
+        pickAt(convertViewToScene(point), add);
     }
 
     @Override

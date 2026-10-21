@@ -564,6 +564,91 @@ public class EditProcedureLogicUseCase {
         return added;
     }
 
+    /**
+     * Puts a step after a transition, before whatever leaves it.
+     *
+     * @param recipe      recipe being edited, may be {@code null} when no change event is wanted
+     * @param step        step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param afterBarId  transition the step goes after
+     * @param newStepId   name for the step of the recipe being added
+     * @param newBoxId    name for its box on the chart
+     * @param barId       name for the bar after the new step
+     * @param classId     class of equipment the new step works on, {@code null} for a step that
+     *                    names none
+     * @throws IllegalArgumentException when the transition is not on this chart or a name is taken
+     * @throws IllegalStateException    when the transition leaves through more than one line
+     */
+    public static S88RecipeElement insertStepAfterTransition(S88Recipe recipe, S88RecipeElement step,
+                                                             String afterBarId, String newStepId,
+                                                             String newBoxId, String barId,
+                                                             String classId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart == null || recipe == null) {
+            throw new IllegalArgumentException("There is no chart to insert into.");
+        }
+        if (chart.findTransition(afterBarId).isEmpty()) {
+            throw new IllegalArgumentException("This chart has no transition called '" + afterBarId
+                    + "'.");
+        }
+        List<S88ProcedureLink> onward = leaving(chart, afterBarId);
+        if (onward.size() > 1) {
+            throw new IllegalStateException("Transition '" + afterBarId + "' leaves through "
+                    + onward.size() + " lines, so there is no one place to put a step after it.");
+        }
+        if (onward.size() == 1) {
+            S88ProcedureLink line = onward.getFirst();
+            if (line.getFrom().size() != 1) {
+                throw new IllegalStateException("Transition '" + afterBarId + "' shares a line with"
+                        + " another node, so there is no one place to put a step after it.");
+            }
+            if (line.getTo().size() == 1) {
+                String target = line.getTo().getFirst().getValue();
+                if (chart.findStep(target).isPresent()) {
+                    return insertStepBefore(recipe, step, target, newStepId, newBoxId, barId,
+                            classId);
+                }
+            }
+            if (line.getTo().isEmpty()) {
+                throw new IllegalStateException("Transition '" + afterBarId + "' leaves through a"
+                        + " line that leads nowhere.");
+            }
+            requireFreeNamesForNewStep(recipe, step, newStepId, newBoxId, barId);
+            chart.removeLink(line);
+            S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
+                    recipe, step, newStepId, RecipeLevels.levelOf(step), classId);
+            addStep(recipe, step, newBoxId, newStepId);
+            addTransition(recipe, step, barId);
+            addLink(recipe, step, freeLineName(chart, afterBarId + "_TO_" + newBoxId),
+                    List.of(afterBarId), List.of(newBoxId), null);
+            addLink(recipe, step, freeLineName(chart, newBoxId + "_TO_" + barId),
+                    List.of(newBoxId), List.of(barId), null);
+            chart.addLink(rebuilt(line, List.of(S88IdRef.transition(barId)), line.getTo(),
+                    line.getLinkType()));
+            announce(recipe);
+            return added;
+        }
+
+        requireFreeNamesForNewStep(recipe, step, newStepId, newBoxId, barId);
+        S88RecipeElement added = CreateRecipeElementUseCase.forEquipmentClass(
+                recipe, step, newStepId, RecipeLevels.levelOf(step), classId);
+        addStep(recipe, step, newBoxId, newStepId);
+        addTransition(recipe, step, barId);
+        addLink(recipe, step, freeLineName(chart, afterBarId + "_TO_" + newBoxId),
+                List.of(afterBarId), List.of(newBoxId), null);
+        addLink(recipe, step, freeLineName(chart, newBoxId + "_TO_" + barId),
+                List.of(newBoxId), List.of(barId), null);
+        announce(recipe);
+        return added;
+    }
+
+    private static void requireFreeNamesForNewStep(S88Recipe recipe, S88RecipeElement step,
+                                                   String newStepId, String newBoxId, String barId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        requireFreeStepName(recipe, newStepId);
+        requireFreeName(chart, newBoxId, "step");
+        requireFreeName(chart, barId, "transition");
+    }
+
     /** A copy of a line with the same id and other details, and the ends given here. */
     private static S88ProcedureLink rebuilt(S88ProcedureLink original, List<S88IdRef> from,
                                             List<S88IdRef> to, S88LinkType type) {

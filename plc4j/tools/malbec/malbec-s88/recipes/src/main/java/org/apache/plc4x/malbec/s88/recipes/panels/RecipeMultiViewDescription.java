@@ -31,6 +31,8 @@ import org.openide.windows.TopComponent;
  */
 final class RecipeMultiViewDescription implements MultiViewDescription {
 
+    static final String CHART_ID_PREFIX = "RecipeChart/";
+
     private final String name;
     private final String preferredId;
     private final Function<RecipeEditorModel, MultiViewElement> factory;
@@ -60,7 +62,17 @@ final class RecipeMultiViewDescription implements MultiViewDescription {
      * @return the description
      */
     static RecipeMultiViewDescription chart(String key) {
-        return new RecipeMultiViewDescription("Chart", "RecipeChart/" + key, RecipeChartView::new);
+        return new RecipeMultiViewDescription("Chart", CHART_ID_PREFIX + key, RecipeChartView::new);
+    }
+
+    /**
+     * Describes the route through a recipe.
+     *
+     * @param key whatever tells this window apart from another, such as the recipe file path
+     * @return the description
+     */
+    static RecipeMultiViewDescription flow(String key) {
+        return new RecipeMultiViewDescription("Flow", "RecipeFlow/" + key, RecipeFlowView::new);
     }
 
     /**
