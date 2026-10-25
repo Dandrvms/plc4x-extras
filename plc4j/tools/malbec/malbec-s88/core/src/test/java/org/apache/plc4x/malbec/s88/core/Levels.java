@@ -27,7 +27,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  * Steps of the level the hierarchy calls for, for a test that needs a tree and not just a step.
  *
  * <p>The chart of the recipe is a procedure and holds unit procedures. A unit procedure holds
- * operations. An operation holds phases.
+ * phases. An operation is the older level that used to sit between the two and is still read.
  */
 final class Levels {
 
@@ -54,7 +54,7 @@ final class Levels {
     }
 
     /**
-     * Adds an operation under the given step, with its own empty chart.
+     * Adds an operation of the older kind under the given step, with its own empty chart.
      *
      * @param recipe  recipe to add it to
      * @param parent  name of the step that owns the chart it goes in
@@ -62,8 +62,9 @@ final class Levels {
      * @return the step that was added
      */
     static S88RecipeElement operation(S88Recipe recipe, String parent, String name) {
-        return CreateRecipeElementUseCase.execute(recipe, owner(recipe, parent), name,
-                S88RecipeElementKind.OPERATION);
+        S88RecipeElement step = operationBare(recipe, parent, name);
+        CreateChartUseCase.forStep(recipe, step);
+        return step;
     }
 
     /**

@@ -36,6 +36,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
+import org.apache.plc4x.malbec.s88.core.ChartEditOps;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
@@ -134,6 +135,7 @@ final class SfcFixtures {
         return List.of(
                 "lineal",
                 "con-bucle-hacia-atras",
+                "bucle-sobre-un-paso",
                 "divergencia-selectiva",
                 "divergencia-paralela",
                 "paralela-dentro-de-selectiva",
@@ -173,6 +175,7 @@ final class SfcFixtures {
         return List.of(
                 lineal(),
                 withBackwardsLoop(),
+                withSelfLoop(),
                 selectiveDivergence(),
                 parallelDivergence(),
                 nestedParallelInsideSelective(),
@@ -192,6 +195,23 @@ final class SfcFixtures {
         List<S88MasterRecipe> all = new java.util.ArrayList<>(structures());
         all.addAll(buttons());
         return all;
+    }
+
+    /**
+     * Adds an operation of the older kind under a unit procedure, with its own empty chart.
+     * <p>
+     * A recipe read from an older file still carries this level. The editor no longer puts it
+     * there, but the drawing still has to read one when it finds it.
+     */
+    static S88RecipeElement legacyOperation(S88MasterRecipe recipe, S88RecipeElement parent,
+                                            String name, String equipmentClass) {
+        S88RecipeElement operation = new S88RecipeElement(name, S88RecipeElementKind.OPERATION);
+        if (equipmentClass != null) {
+            operation.setEquipmentClassId(equipmentClass);
+        }
+        recipe.attachUnder(parent, operation);
+        CreateChartUseCase.forStep(recipe, operation);
+        return operation;
     }
 
     /**
@@ -322,17 +342,15 @@ final class SfcFixtures {
         }
 
         /**
-         * A recipe with two charts under the one it starts with, made the way the Chart button makes
-         * them.
+         * A recipe with two charts under the one it starts with, one of them the older operation
+         * level.
          */
         static S88MasterRecipe subchartTwoLevels(String id) {
             S88MasterRecipe recipe = newRecipe(id);
             S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
                     "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", "TRAMO_CLASS");
             CreateChartUseCase.forStep(recipe, tramo);
-            S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
-                    "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
-            CreateChartUseCase.forStep(recipe, paso);
+            S88RecipeElement paso = legacyOperation(recipe, tramo, "PASO", "PASO_CLASS");
             EditProcedureLogicUseCase.insertStepAfter(recipe, paso, "BEGIN", "PULSO",
                     "PULSO", "T_PULSO", "PULSO_CLASS");
             return recipe;
@@ -354,6 +372,13 @@ final class SfcFixtures {
         chart.up("T_PACK", "PACK");
         chart.down("PACK", "T_END");
         return chart.finishFrom("T_END");
+    }
+
+    /** One step with a bar that goes straight back into it, which is what the Loop step makes. */
+    static S88MasterRecipe withSelfLoop() {
+        S88MasterRecipe recipe = lineal();
+        ChartEditOps.loopStep(recipe, null, "MIX", "T_MIX_LOOP");
+        return recipe;
     }
 
     /** PACK waits for the mixer a second time, so one edge points back up the chart. */
@@ -893,9 +918,9 @@ final class SfcFixtures {
     /**
      * A recipe with two charts under the one it starts with.
      * <p>
-     * The top chart holds a unit procedure, the chart of that one holds an operation, and the
-     * chart of the operation is the last one there is. Nothing else here draws a subchart, so this
-     * one is built through the same use cases a press of the Chart button uses.
+     * The top chart holds a unit procedure, the chart of that one holds an operation of the older
+     * kind, and the chart of the operation is the last one there is. Nothing else here draws a
+     * subchart, so this one is built through the same use cases a press of the Chart button uses.
      */
     static S88MasterRecipe twoLevelsOfSubchart() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("SUB_GRAFICOS",
@@ -903,9 +928,7 @@ final class SfcFixtures {
         S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
                 "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", "TRAMO_CLASS");
         CreateChartUseCase.forStep(recipe, tramo);
-        S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
-                "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
-        CreateChartUseCase.forStep(recipe, paso);
+        S88RecipeElement paso = legacyOperation(recipe, tramo, "PASO", "PASO_CLASS");
         EditProcedureLogicUseCase.insertStepAfter(recipe, paso, "BEGIN", "PULSO",
                 "PULSO", "T_PULSO", "PULSO_CLASS");
         return recipe;

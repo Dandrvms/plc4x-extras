@@ -337,7 +337,7 @@ class StructureQueriesTest {
             }
             if (recipe.findElement(elementId).isEmpty()) {
                 CreateRecipeElementUseCase.execute(recipe, ownerOf(), elementId,
-                        S88RecipeElementKind.OPERATION);
+                        S88RecipeElementKind.PHASE);
             }
             logic.addStep(new S88ProcedureStep(elementId, elementId));
         }

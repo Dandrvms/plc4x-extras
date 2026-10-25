@@ -122,16 +122,15 @@ class RecipeEditorModelTest {
     }
 
     /**
-     * A recipe with a unit procedure holding an operation, which is the shape the editor goes into.
+     * A recipe with a unit procedure holding an operation of the older kind, which is the shape the
+     * editor still reads.
      */
     private static S88MasterRecipe tree() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         S88RecipeElement tramo = EditProcedureLogicUseCase.insertStepAfter(recipe, null,
                 "BEGIN", "TRAMO", "TRAMO", "T_TRAMO", null);
         CreateChartUseCase.forStep(recipe, tramo);
-        S88RecipeElement paso = EditProcedureLogicUseCase.insertStepAfter(recipe, tramo,
-                "BEGIN", "PASO", "PASO", "T_PASO", "PASO_CLASS");
-        CreateChartUseCase.forStep(recipe, paso);
+        SfcFixtures.legacyOperation(recipe, tramo, "PASO", "PASO_CLASS");
         return recipe;
     }
 
@@ -404,7 +403,7 @@ class RecipeEditorModelTest {
         assertSame(tramo, model.currentStep(), "and the model says which chart is on show");
         assertEquals(tramo.getProcedureLogic(), model.chartBeingEdited(),
                 "and that is the chart the drawing puts on the screen");
-        assertEquals(S88RecipeElementKind.OPERATION, model.levelBeingEdited(),
+        assertEquals(S88RecipeElementKind.PHASE, model.levelBeingEdited(),
                 "and the steps in it are the kind that level holds");
     }
 
@@ -418,7 +417,7 @@ class RecipeEditorModelTest {
 
         assertSame(model.getRecipe().findElement("TRAMO").orElseThrow(), model.currentStep(),
                 "and the chart on show is the one that held it, one level up");
-        assertEquals(S88RecipeElementKind.OPERATION, model.levelBeingEdited(),
+        assertEquals(S88RecipeElementKind.PHASE, model.levelBeingEdited(),
                 "so the buttons act on the steps of that chart");
     }
 

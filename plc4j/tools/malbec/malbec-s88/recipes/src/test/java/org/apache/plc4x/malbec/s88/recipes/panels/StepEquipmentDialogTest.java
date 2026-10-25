@@ -144,8 +144,8 @@ class StepEquipmentDialogTest {
      * A recipe whose one phase sits where the hierarchy puts it, bound to the named class or to the
      * named equipment.
      * <p>
-     * A phase is the level a module is bound to, so it is an operation's chart that holds it and a
-     * module's chart that does not exist.
+     * A phase is the level a module is bound to, so a unit procedure's chart holds it and a
+     * module's chart does not exist.
      */
     private static S88MasterRecipe recipeWithAPhaseBoundTo(S88PlantSnapshot plant, S88RecipeKind kind,
                                                            String target) {
@@ -153,13 +153,11 @@ class StepEquipmentDialogTest {
                 .execute("REC", kind);
         S88RecipeElement unitProcedure = CreateRecipeElementUseCase.execute(recipe, null, "TRAMO",
                 S88RecipeElementKind.UNIT_PROCEDURE);
-        S88RecipeElement operation = CreateRecipeElementUseCase.execute(recipe, unitProcedure, "PASO",
-                S88RecipeElementKind.OPERATION);
-        S88RecipeElement phase = BindRecipeStepUseCase.addEmptyStepAfter(recipe, operation, "BEGIN");
+        S88RecipeElement phase = BindRecipeStepUseCase.addEmptyStepAfter(recipe, unitProcedure, "BEGIN");
         if (kind == S88RecipeKind.CLASS) {
-            BindRecipeStepUseCase.bindToClass(recipe, operation, phase.getId(), target, plant);
+            BindRecipeStepUseCase.bindToClass(recipe, unitProcedure, phase.getId(), target, plant);
         } else {
-            BindRecipeStepUseCase.bindToEquipment(recipe, operation, phase.getId(), target, plant);
+            BindRecipeStepUseCase.bindToEquipment(recipe, unitProcedure, phase.getId(), target, plant);
         }
         return recipe;
     }

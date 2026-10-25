@@ -51,7 +51,7 @@ class S88TransitionConditionTest {
                 S88TransitionCondition.comparison(comparison("Reports/TEMP#>#80"))));
 
         assertEquals("AND([Reports/STATE#=#COMPLETE];[Reports/TEMP#>#80])", condition.toText());
-        assertEquals("STATE = COMPLETE and TEMP > 80", condition.toDisplay());
+        assertEquals("STATE = COMPLETE AND TEMP > 80", condition.toDisplay());
     }
 
     @Test
@@ -64,14 +64,14 @@ class S88TransitionConditionTest {
 
         assertEquals("OR([Reports/STATE#=#COMPLETE];AND([Reports/TEMP#>#80];WAIT(5)))",
                 condition.toText());
-        assertEquals("STATE = COMPLETE or (TEMP > 80 and after 5 s)", condition.toDisplay(),
+        assertEquals("STATE = COMPLETE OR (TEMP > 80 AND WAIT 5 s)", condition.toDisplay(),
                 "because without the brackets the sentence would say something else");
     }
 
     @Test
     void aWaitIsWrittenAsSecondsAndReadAsASentence() {
         assertEquals("WAIT(30)", S88TransitionCondition.wait(30).toText());
-        assertEquals("after 30 s", S88TransitionCondition.wait(30).toDisplay());
+        assertEquals("WAIT 30 s", S88TransitionCondition.wait(30).toDisplay());
     }
 
     @Test

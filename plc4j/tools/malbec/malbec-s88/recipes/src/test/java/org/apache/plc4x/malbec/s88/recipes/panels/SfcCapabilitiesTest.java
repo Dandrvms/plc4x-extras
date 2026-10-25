@@ -220,6 +220,45 @@ class SfcCapabilitiesTest {
         assertFalse(trial.getProcedureLogic().getLinks().isEmpty());
     }
 
+    /** A loop puts one bar between a step and itself, and only once. */
+    @Test
+    void loopStepPutsOneBarBetweenTheStepAndItself() {
+        S88MasterRecipe recipe = fixture("BOTONES_LINEAL");
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        String step = chart.getSteps().stream()
+                .map(S88ProcedureStep::getId)
+                .filter(id -> ChartCapabilities.can(recipe, null, ChartOp.LOOP_STEP, Set.of(id))
+                        .enabled())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no step takes a loop"));
+        int bars = chart.getTransitions().size();
+
+        S88MasterRecipe trial = RecipeDeepCopy.copyMasterRecipe(recipe);
+        String bar = ChartCapabilities.perform(trial, null, ChartOp.LOOP_STEP, Set.of(step));
+        S88ProcedureLogic edited = trial.getProcedureLogic();
+        assertNotNull(bar);
+        assertEquals(bars + 1, edited.getTransitions().size());
+        assertTrue(edited.findTransition(bar).isPresent(), bar + " is on the chart");
+        ChartGraph graph = ChartGraph.of(edited);
+        assertEquals(List.of(step), graph.preds(bar), "the loop bar is entered only from " + step);
+        assertEquals(List.of(step), graph.succs(bar), "and it goes back only into " + step);
+        assertFalse(ChartCapabilities.can(trial, null, ChartOp.LOOP_STEP, Set.of(step)).enabled(),
+                "the step already has a loop");
+        assertTrue(RecipeConformance.of(trial).excess().isEmpty(),
+                "the chart still holds together: " + RecipeConformance.of(trial).excess());
+    }
+
+    /** The stop cannot be looped, and a step inside a parallel block cannot either. */
+    @Test
+    void loopStepRefusesTheStopAndTheInsideOfAParallelBlock() {
+        S88MasterRecipe recipe = fixture("BOTONES_PARALELA");
+        assertFalse(ChartCapabilities.can(recipe, null, ChartOp.LOOP_STEP, Set.of("END")).enabled());
+        assertFalse(ChartCapabilities.can(recipe, null, ChartOp.LOOP_STEP, Set.of("STEP")).enabled(),
+                "STEP runs at the same time as its sibling, so it has no loop");
+        assertFalse(ChartCapabilities.can(recipe, null, ChartOp.LOOP_STEP, Set.of("STEP_1")).enabled(),
+                "STEP_1 runs at the same time as its sibling, so it has no loop");
+    }
+
     private static S88MasterRecipe fixture(String id) {
         return SfcFixtures.all().stream()
                 .filter(recipe -> id.equals(recipe.getId()))

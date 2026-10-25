@@ -652,11 +652,25 @@ final class SfcLayoutEngine {
             if (link.getLinkType() == null || !(link.isDivergent() || link.isConvergent())) {
                 continue;
             }
+            if (hasBackwardEnd(link)) {
+                continue;
+            }
             if (syncBarBetween(link, corners) != null) {
                 which.put(link.getId(), link.getLinkType().isParallel());
             }
         }
         return which;
+    }
+
+    private boolean hasBackwardEnd(S88ProcedureLink link) {
+        for (String from : internalNames(link.getFrom())) {
+            for (String to : internalNames(link.getTo())) {
+                if (goingBackwards.contains(edge(from, to))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

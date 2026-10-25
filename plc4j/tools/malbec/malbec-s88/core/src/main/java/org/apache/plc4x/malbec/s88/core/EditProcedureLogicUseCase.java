@@ -80,6 +80,7 @@ public class EditProcedureLogicUseCase {
      * @param recipe recipe the chart would belong to, may be {@code null}
      * @param step   step whose chart is wanted, {@code null} for the chart of the recipe itself
      * @return the chart, or {@code null} when neither a recipe nor a step was given
+     * @throws IllegalArgumentException when the step is the last level and has no chart yet
      */
     public static S88ProcedureLogic chartOf(S88Recipe recipe, S88RecipeElement step) {
         if (step == null) {
@@ -92,6 +93,10 @@ public class EditProcedureLogicUseCase {
             return recipe.getProcedureLogic();
         }
         if (!step.hasProcedureLogic()) {
+            if (!RecipeLevels.allowsSubChart(step.getKind())) {
+                throw new IllegalArgumentException("Step '" + step.getId() + "' is a "
+                        + step.getKind() + " and holds no chart.");
+            }
             step.setProcedureLogic(new S88ProcedureLogic());
         }
         return step.getProcedureLogic();

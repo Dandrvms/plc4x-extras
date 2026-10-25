@@ -137,7 +137,7 @@ class TransitionConditionDialogTest {
             dialog.addCondition();
             dialog.useValue("IDLE");
             dialog.addCondition();
-            dialog.joinWith("or");
+            dialog.joinWith("OR");
 
             dialog.accept();
             assertEquals("OR([Reports/ESTADO#=#COMPLETE];[Reports/ESTADO#=#IDLE])",

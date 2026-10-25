@@ -154,12 +154,22 @@ public final class ChartSoundness {
             Set<String> neighbours = new LinkedHashSet<>(graph.preds(transition));
             neighbours.addAll(graph.succs(transition));
             long steps = neighbours.stream().filter(graph::isStep).count();
+            if (isSelfLoop(graph, transition)) {
+                continue;
+            }
             if (steps < 2 && isSkip(graph, transition)) {
                 warnings.add("Transition '" + transition + "' skips a step.");
             } else if (steps < 2) {
                 errors.add("Transition '" + transition + "' does not join two steps.");
             }
         }
+    }
+
+    private static boolean isSelfLoop(ChartGraph graph, String transition) {
+        List<String> before = graph.preds(transition);
+        List<String> after = graph.succs(transition);
+        return before.size() == 1 && after.size() == 1 && before.equals(after)
+                && graph.isStep(before.getFirst());
     }
 
     private static void explore(ChartGraph graph, List<String> errors, List<String> warnings) {

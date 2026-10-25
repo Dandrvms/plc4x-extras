@@ -94,7 +94,7 @@ final class RecipeChartToolbar {
     private static final String REMOVE_SKIP = "removeSkip";
     private static final String MOVE_LEFT = "moveLeft";
     private static final String MOVE_RIGHT = "moveRight";
-    private static final String JOIN_BRANCHES = "joinBranches";
+    private static final String LOOP_STEP = "loopStep";
     private static final String LINK = "link";
 
     private final RecipeChartView view;
@@ -207,9 +207,9 @@ final class RecipeChartToolbar {
         actCapability(MOVE_RIGHT, "Move branch right",
                 "Put the picked branch one place to the right.", ChartOp.MOVE_BRANCH_RIGHT,
                 () -> change(ChartOp.MOVE_BRANCH_RIGHT, "Move branch right"));
-        actCapability(JOIN_BRANCHES, "Join branches",
-                "Pick two or more steps that come back together and put one bar after all of them.",
-                ChartOp.JOIN_BRANCHES, () -> change(ChartOp.JOIN_BRANCHES, "Join branches"));
+        actCapability(LOOP_STEP, "Loop step",
+                "Put a bar after the picked step that waits and goes back into the same step.",
+                ChartOp.LOOP_STEP, () -> change(ChartOp.LOOP_STEP, "Loop step"));
         buildLinkAction();
     }
 
@@ -308,8 +308,8 @@ final class RecipeChartToolbar {
         bar.add(actions.get(INSERT_AFTER));
         bar.add(actions.get(INSERT_BEFORE_FORK));
         bar.add(actions.get(INSERT_AFTER_JOIN));
+        bar.add(actions.get(LOOP_STEP));
         bar.add(actions.get(REMOVE_BRANCH));
-        bar.add(actions.get(JOIN_BRANCHES));
         bar.add(actions.get(EQUIPMENT));
         bar.add(actions.get(VALUES));
         bar.add(actions.get(CONDITION));
@@ -338,11 +338,11 @@ final class RecipeChartToolbar {
         menu.add(actions.get(INSERT_IN_BRANCH));
         menu.add(actions.get(INSERT_BEFORE_FORK));
         menu.add(actions.get(INSERT_AFTER_JOIN));
+        menu.add(actions.get(LOOP_STEP));
         menu.add(actions.get(REMOVE_BRANCH));
         menu.add(actions.get(REMOVE_SKIP));
         menu.add(actions.get(MOVE_LEFT));
         menu.add(actions.get(MOVE_RIGHT));
-        menu.add(actions.get(JOIN_BRANCHES));
         if (canHaveABlockUnderIt(pickedBox())) {
             menu.add(actions.get(PARALLEL_HERE));
             menu.add(actions.get(SELECTIVE_HERE));

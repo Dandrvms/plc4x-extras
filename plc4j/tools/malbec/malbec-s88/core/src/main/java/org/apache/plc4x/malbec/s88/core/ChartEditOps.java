@@ -201,6 +201,73 @@ public final class ChartEditOps {
     }
 
     /**
+     * Sends the flow from a step through a new transition and back into the same step.
+     *
+     * @param recipe recipe being edited, may be {@code null} when no change event is wanted
+     * @param step   step whose chart is being edited, {@code null} for the chart of the recipe
+     * @param stepId step the loop leaves and rejoins
+     * @param barId  name for the transition that waits in the loop
+     * @return the transition of the loop
+     * @throws IllegalArgumentException when the chart, the step, or the name is missing, the step is
+     *                                  the stop or already has a loop, or the name is taken
+     * @throws IllegalStateException    when the step is inside a parallel block or the result would
+     *                                  not run
+     */
+    public static S88ProcedureTransition loopStep(S88Recipe recipe, S88RecipeElement step,
+                                                  String stepId, String barId) {
+        S88ProcedureLogic chart = chartOf(recipe, step);
+        if (chart.findStep(stepId).isEmpty()) {
+            throw new IllegalArgumentException("This chart has no step called '" + stepId + "'.");
+        }
+        if (CreateMasterRecipeUseCase.END_ID.equals(stepId)) {
+            throw new IllegalArgumentException("The stop step cannot be looped.");
+        }
+        if (StructureQueries.isInsideParallel(chart, stepId)) {
+            throw new IllegalStateException("Step '" + stepId + "' is inside a parallel block,"
+                    + " where a loop is not allowed.");
+        }
+        if (selfLoopAt(chart, stepId) != null) {
+            throw new IllegalArgumentException("Step '" + stepId + "' already has a loop.");
+        }
+        requireFreeName(chart, barId, "transition");
+
+        S88ProcedureLogic edited = RecipeDeepCopy.copyChart(chart);
+        edited.addTransition(new S88ProcedureTransition(barId, null));
+        S88ProcedureLink out = new S88ProcedureLink(freeLineName(edited, stepId, barId));
+        out.addFrom(S88IdRef.step(stepId));
+        out.addTo(S88IdRef.transition(barId));
+        out.setLinkType(S88LinkType.CONTROL_LINK);
+        edited.addLink(out);
+        S88ProcedureLink back = new S88ProcedureLink(freeLineName(edited, barId, stepId));
+        back.addFrom(S88IdRef.transition(barId));
+        back.addTo(S88IdRef.step(stepId));
+        back.setLinkType(S88LinkType.CONTROL_LINK);
+        edited.addLink(back);
+        ChartNormalizer.normalize(edited);
+        refuseNewProblems(chart, edited, "Looping '" + stepId + "'");
+        copyOnto(edited, chart);
+        announce(recipe);
+        return chart.findTransition(barId).orElseThrow();
+    }
+
+    /**
+     * The transition of the loop that leaves and rejoins a step, or {@code null} when there is none.
+     */
+    static S88ProcedureTransition selfLoopAt(S88ProcedureLogic chart, String stepId) {
+        ChartGraph graph = ChartGraph.of(chart);
+        for (S88ProcedureTransition transition : chart.getTransitions()) {
+            List<String> before = graph.preds(transition.getId());
+            List<String> after = graph.succs(transition.getId());
+            if (before.size() == 1 && after.size() == 1
+                    && before.getFirst().equals(stepId)
+                    && after.getFirst().equals(stepId)) {
+                return transition;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Sends the flow from one transition into several steps at once.
      *
      * @param recipe recipe being edited, may be {@code null} when no change event is wanted

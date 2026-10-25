@@ -30,8 +30,10 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  * Which kind of step goes in which chart.
  *
  * <p>The chart of the recipe is a procedure and holds unit procedures. The chart of a unit
- * procedure holds operations. The chart of an operation holds phases. A phase is the last level
- * and has no chart of its own.
+ * procedure holds phases. A phase is the last level and has no chart of its own.
+ *
+ * <p>An operation is still read where an older recipe carries one, and its chart still holds
+ * phases, but it is no longer the level a unit procedure holds.
  */
 public final class RecipeLevels {
 
@@ -48,7 +50,7 @@ public final class RecipeLevels {
 
     static {
         HOLDS.put(S88RecipeElementKind.PROCEDURE, S88RecipeElementKind.UNIT_PROCEDURE);
-        HOLDS.put(S88RecipeElementKind.UNIT_PROCEDURE, S88RecipeElementKind.OPERATION);
+        HOLDS.put(S88RecipeElementKind.UNIT_PROCEDURE, S88RecipeElementKind.PHASE);
         HOLDS.put(S88RecipeElementKind.OPERATION, S88RecipeElementKind.PHASE);
         BOUND_TO.put(S88RecipeElementKind.UNIT_PROCEDURE, S88Level.UNIT);
         BOUND_TO.put(S88RecipeElementKind.PHASE, S88Level.EQUIPMENTMODULE);

@@ -52,6 +52,7 @@ public final class ChartCapabilities {
         MOVE_BRANCH_LEFT,
         MOVE_BRANCH_RIGHT,
         JOIN_BRANCHES,
+        LOOP_STEP,
         INSERT_BEFORE,
         INSERT_AFTER,
         INSERT_IN_BRANCH,
@@ -156,6 +157,13 @@ public final class ChartCapabilities {
                 String bar = EditProcedureLogicUseCase.freeName(chart, "T_JOIN", "transition");
                 String target = commonStepAfter(chart, boxes);
                 ChartEditOps.joinBranches(recipe, step, boxes, bar, target);
+                yield bar;
+            }
+            case LOOP_STEP -> {
+                String box = oneBox(chart, picked);
+                String bar = EditProcedureLogicUseCase.freeName(chart, "T_" + box + "_LOOP",
+                        "transition");
+                ChartEditOps.loopStep(recipe, step, box, bar);
                 yield bar;
             }
             case INSERT_BEFORE -> {

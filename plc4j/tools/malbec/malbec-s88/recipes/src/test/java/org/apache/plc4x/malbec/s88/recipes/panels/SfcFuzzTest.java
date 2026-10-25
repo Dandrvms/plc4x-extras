@@ -117,7 +117,7 @@ class SfcFuzzTest {
         return switch (op) {
             case DELETE -> allIds(chart);
             case REMOVE_BRANCH, MOVE_BRANCH_LEFT, MOVE_BRANCH_RIGHT, JOIN_BRANCHES,
-                 INSERT_BEFORE, INSERT_AFTER -> steps(chart);
+                 LOOP_STEP, INSERT_BEFORE, INSERT_AFTER -> steps(chart);
             case REMOVE_SKIP -> transitionsAndLinks(chart);
             case INSERT_IN_BRANCH -> transitions(chart);
             case INSERT_BEFORE_FORK, INSERT_AFTER_JOIN -> transitionsAndLinks(chart);

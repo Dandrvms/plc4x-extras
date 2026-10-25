@@ -18,7 +18,9 @@
 package org.apache.plc4x.malbec.s88.core;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
@@ -363,8 +365,8 @@ public final class ChartBranchingUseCase {
         S88ProcedureLogic chart = chartToBranch(recipe, step, boxId);
         String first = firstOfItsBranch(chart, boxId);
         String last = lastOfItsBranch(chart, boxId);
-        S88ProcedureLink splitting = StructureQueries.arrivingAt(chart, first);
-        S88ProcedureLink closing = StructureQueries.leavingFrom(chart, last);
+        S88ProcedureLink splitting = arrivingAlongFlow(chart, first);
+        S88ProcedureLink closing = leavingAlongFlow(chart, last);
         requireAWholeBranchOfABlock(splitting, closing, boxId);
 
         int here = laneOf(splitting, first);
@@ -393,14 +395,17 @@ public final class ChartBranchingUseCase {
      * up.
      */
     private static String firstOfItsBranch(S88ProcedureLogic chart, String boxId) {
+        Set<String> seen = new LinkedHashSet<>();
         String step = boxId;
-        while (true) {
-            S88ProcedureLink arriving = StructureQueries.arrivingAt(chart, step);
+        while (seen.add(step)) {
+            S88ProcedureLink arriving = arrivingAlongFlow(chart, step);
             if (arriving == null || splitsInto(arriving)) {
                 return step;
             }
             step = arriving.getFrom().getFirst().getValue();
         }
+        throw new IllegalStateException("Step '" + boxId + "' is on a loop, so the branch it is"
+                + " on cannot be moved sideways.");
     }
 
     /**
@@ -410,14 +415,65 @@ public final class ChartBranchingUseCase {
      * that comes back together shows up.
      */
     private static String lastOfItsBranch(S88ProcedureLogic chart, String boxId) {
+        Set<String> seen = new LinkedHashSet<>();
         String step = boxId;
-        while (true) {
-            S88ProcedureLink leaving = StructureQueries.leavingFrom(chart, step);
+        while (seen.add(step)) {
+            S88ProcedureLink leaving = leavingAlongFlow(chart, step);
             if (leaving == null || comesBackTogetherIn(leaving)) {
                 return step;
             }
             step = leaving.getTo().getFirst().getValue();
         }
+        throw new IllegalStateException("Step '" + boxId + "' is on a loop, so the branch it is"
+                + " on cannot be moved sideways.");
+    }
+
+    private static S88ProcedureLink arrivingAlongFlow(S88ProcedureLogic chart, String step) {
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.getTo().stream().noneMatch(end -> step.equals(end.getValue()))) {
+                continue;
+            }
+            if (!loopsBackTo(chart, link, step)) {
+                return link;
+            }
+        }
+        return null;
+    }
+
+    private static S88ProcedureLink leavingAlongFlow(S88ProcedureLogic chart, String step) {
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.getFrom().stream().noneMatch(end -> step.equals(end.getValue()))) {
+                continue;
+            }
+            if (!loopsAwayFrom(chart, link, step)) {
+                return link;
+            }
+        }
+        return null;
+    }
+
+    private static boolean loopsBackTo(S88ProcedureLogic chart, S88ProcedureLink link,
+                                       String step) {
+        for (S88IdRef from : link.getFrom()) {
+            S88ProcedureLink intoBar = StructureQueries.arrivingAt(chart, from.getValue());
+            if (intoBar != null && intoBar.getFrom().size() == 1
+                    && step.equals(intoBar.getFrom().getFirst().getValue())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean loopsAwayFrom(S88ProcedureLogic chart, S88ProcedureLink link,
+                                         String step) {
+        for (S88IdRef to : link.getTo()) {
+            S88ProcedureLink outOfBar = StructureQueries.leavingFrom(chart, to.getValue());
+            if (outOfBar != null && outOfBar.getTo().size() == 1
+                    && step.equals(outOfBar.getTo().getFirst().getValue())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
