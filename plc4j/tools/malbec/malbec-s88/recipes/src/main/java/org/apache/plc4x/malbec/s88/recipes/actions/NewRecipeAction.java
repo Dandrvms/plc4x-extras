@@ -28,14 +28,14 @@ import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
-import org.apache.plc4x.malbec.s88.recipes.panels.RecipeEditorTopComponent;
 import org.apache.plc4x.malbec.s88.recipes.services.S88RecipeProjectServices;
 import org.netbeans.api.project.Project;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
+import org.openide.cookies.OpenCookie;
 import org.openide.filesystems.FileObject;
+import org.openide.loaders.DataObject;
 import org.openide.util.ContextAwareAction;
-import org.openide.util.Exceptions;
 import org.openide.util.Lookup;
 
 /**
@@ -99,8 +99,12 @@ public class NewRecipeAction extends AbstractAction implements ContextAwareActio
             S88RecipeProjectServices.createRepository("xml", new FileObjectStorage(recipeXml))
                     .saveRecipe(recipe);
             project.getProjectDirectory().refresh();
-            RecipeEditorTopComponent.showFor(recipeXml);
-            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message("Recipe " + name + " created.", NotifyDescriptor.QUESTION_MESSAGE));
+            OpenCookie open = DataObject.find(recipeXml).getCookie(OpenCookie.class);
+            if (open != null) {
+                open.open();
+            }
+            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
+                    "Recipe " + name + " created.", NotifyDescriptor.INFORMATION_MESSAGE));
         } catch (IOException | IllegalArgumentException ex) {
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(ex.getMessage(), NotifyDescriptor.WARNING_MESSAGE));
         }

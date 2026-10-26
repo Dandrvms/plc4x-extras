@@ -320,7 +320,7 @@ class SetBarConditionUseCaseTest {
                 S88VariableAddress.parse("Reports/TEMPERATURA_ACTUAL"),
                 org.apache.plc4x.malbec.s88.api.S88ConditionOperator.GREATER, "80");
 
-        assertEquals("CALENTAMIENTO_1.STATE = COMPLETE", byEquipment.toDisplay(),
+        assertEquals("STATE = COMPLETE", byEquipment.toDisplay(),
                 "because the raw text names the container and uses the separators a recipe stores,"
                         + " and neither is what the person at the chart reads");
         assertEquals("TEMPERATURA_ACTUAL > 80", byClass.toDisplay(),

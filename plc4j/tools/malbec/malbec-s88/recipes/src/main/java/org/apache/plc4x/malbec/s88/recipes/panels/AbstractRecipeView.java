@@ -20,17 +20,21 @@ package org.apache.plc4x.malbec.s88.recipes.panels;
 
 import java.awt.BorderLayout;
 import java.awt.Image;
+import java.io.IOException;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.*;
 
-import org.apache.plc4x.malbec.s88.recipes.actions.RecipeSaveAction;
+import org.apache.plc4x.malbec.s88.recipes.data.RecipeDataObject;
 import org.netbeans.core.spi.multiview.CloseOperationState;
 import org.netbeans.core.spi.multiview.MultiViewElement;
 import org.netbeans.core.spi.multiview.MultiViewElementCallback;
 import org.netbeans.core.spi.multiview.MultiViewFactory;
+import org.openide.DialogDisplayer;
+import org.openide.NotifyDescriptor;
 import org.openide.awt.UndoRedo;
+import org.openide.cookies.SaveCookie;
 import org.openide.util.ImageUtilities;
 import org.openide.util.Lookup;
 import org.openide.util.lookup.Lookups;
@@ -49,8 +53,8 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     private static final Logger LOG = Logger.getLogger(AbstractRecipeView.class.getName());
 
     protected final RecipeEditorModel model;
+    private final Lookup context;
     private final JToolBar toolBar = new JToolBar();
-    private final Action save;
     private final Consumer<RecipeEditorModel> onRecipeChanged;
     private transient MultiViewElementCallback callback;
 
@@ -60,16 +64,35 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     private final Timer pendingRedraw;
 
     protected AbstractRecipeView(RecipeEditorModel model) {
+        this(Lookups.singleton(model), model);
+    }
+
+    protected AbstractRecipeView(Lookup context) {
+        this(context, modelFrom(context));
+    }
+
+    private AbstractRecipeView(Lookup context, RecipeEditorModel model) {
+        this.context = context;
         this.model = model;
-        this.onRecipeChanged = changed -> refreshSaveAndRedraw();
-        this.save = new RecipeSaveAction().createContextAwareInstance(getLookup());
+        this.onRecipeChanged = changed -> askForRedraw();
         pendingRedraw = new Timer(redrawDelayMillis(),
                 event -> SwingUtilities.invokeLater(this::redrawSafely));
         pendingRedraw.setRepeats(false);
         setLayout(new BorderLayout());
         toolBar.setFloatable(false);
-        toolBar.add(save);
         add(toolBar, BorderLayout.NORTH);
+    }
+
+    private static RecipeEditorModel modelFrom(Lookup context) {
+        RecipeDataObject dataObject = context.lookup(RecipeDataObject.class);
+        if (dataObject != null) {
+            return dataObject.model();
+        }
+        RecipeEditorModel model = context.lookup(RecipeEditorModel.class);
+        if (model == null) {
+            throw new IllegalStateException("The recipe view has no recipe model.");
+        }
+        return model;
     }
 
     /**
@@ -79,12 +102,6 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
      */
     protected int redrawDelayMillis() {
         return 120;
-    }
-
-    /** Keeps the Save button in step with whether there is anything to save, then redraws. */
-    private void refreshSaveAndRedraw() {
-        save.setEnabled(model.isModified());
-        askForRedraw();
     }
 
     /**
@@ -131,18 +148,17 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
 
     @Override
     public Action[] getActions() {
-        return new Action[0];
+        return callback != null ? callback.createDefaultActions() : new Action[0];
     }
 
     @Override
     public Lookup getLookup() {
-        return Lookups.singleton(model);
+        return context;
     }
 
     @Override
     public void componentOpened() {
         model.addChangeListener(onRecipeChanged);
-        save.setEnabled(model.isModified());
         redrawSafely();
     }
 
@@ -216,7 +232,7 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
             return CloseOperationState.STATE_OK;
         }
         return MultiViewFactory.createUnsafeCloseState(UNSAVED_WARNING,
-                new SaveChanges(model), new DiscardChanges());
+                new SaveChanges(context, model), new DiscardChanges());
     }
 
     /**
@@ -229,17 +245,44 @@ public abstract class AbstractRecipeView extends JPanel implements MultiViewElem
     private static final class SaveChanges extends AbstractAction {
 
         private static final long serialVersionUID = 1L;
+        private final Lookup context;
         private final RecipeEditorModel model;
 
-        SaveChanges(RecipeEditorModel model) {
+        SaveChanges(Lookup context, RecipeEditorModel model) {
             super("Save");
+            this.context = context;
             this.model = model;
+            putValue(Action.LONG_DESCRIPTION,
+                    recipeName(model) + " has changes that are not saved.");
         }
 
         @Override
         public void actionPerformed(java.awt.event.ActionEvent event) {
-            RecipeSaveAction.save(model);
+            SaveCookie cookie = context.lookup(SaveCookie.class);
+            try {
+                if (cookie != null) {
+                    cookie.save();
+                } else {
+                    model.save();
+                }
+            } catch (IOException | RuntimeException failure) {
+                if (cookie == null) {
+                    reportSaveFailure(model);
+                }
+            }
         }
+    }
+
+    private static void reportSaveFailure(RecipeEditorModel model) {
+        DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
+                recipeName(model) + " could not be saved.",
+                NotifyDescriptor.ERROR_MESSAGE));
+    }
+
+    private static String recipeName(RecipeEditorModel model) {
+        return model.getRecipeFile() == null
+                ? "The recipe"
+                : "'" + model.getRecipeFile().getNameExt() + "'";
     }
 
     /** Throws the changes away, which is what closing without saving means. */

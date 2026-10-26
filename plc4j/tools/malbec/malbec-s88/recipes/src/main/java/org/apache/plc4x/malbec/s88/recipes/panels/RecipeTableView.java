@@ -31,24 +31,42 @@ import javax.swing.table.AbstractTableModel;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
+import org.netbeans.core.spi.multiview.MultiViewElement;
+import org.openide.util.Lookup;
+import org.openide.util.lookup.Lookups;
+import org.openide.windows.TopComponent;
 
 /**
  * The steps of a recipe, one per row.
  */
+@MultiViewElement.Registration(
+        displayName = "Steps",
+        iconBase = "org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png",
+        mimeType = "text/b2mml-recipe+xml",
+        persistenceType = TopComponent.PERSISTENCE_ONLY_OPENED,
+        preferredID = "RecipeTable",
+        position = 100
+)
 public final class RecipeTableView extends AbstractRecipeView {
+
+    public static final String PREFERRED_ID = "RecipeTable";
 
     private static final String[] COLUMNS =
             {"Step", "Kind", "Equipment", "Parameters"};
 
     private final StepTableModel tableModel = new StepTableModel();
 
-    public RecipeTableView(RecipeEditorModel model) {
-        super(model);
+    public RecipeTableView(Lookup context) {
+        super(context);
         JTable table = new JTable(tableModel);
         table.setFont(table.getFont().deriveFont(Font.PLAIN));
         table.setAutoCreateRowSorter(true);
         table.setFillsViewportHeight(true);
         add(new JScrollPane(table), BorderLayout.CENTER);
+    }
+
+    public RecipeTableView(RecipeEditorModel model) {
+        this(Lookups.singleton(model));
     }
 
     @Override

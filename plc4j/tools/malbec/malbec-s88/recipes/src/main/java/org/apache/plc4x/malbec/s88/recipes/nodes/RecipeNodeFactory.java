@@ -20,27 +20,27 @@ package org.apache.plc4x.malbec.s88.recipes.nodes;
 
 import java.util.List;
 import java.util.Locale;
+import org.apache.plc4x.malbec.s88.recipes.data.RecipeDataObject;
 import org.netbeans.api.project.Project;
 import org.openide.filesystems.FileChangeAdapter;
 import org.openide.filesystems.FileEvent;
-
 import org.openide.filesystems.FileObject;
+import org.openide.loaders.DataObject;
+import org.openide.loaders.DataObjectNotFoundException;
 import org.openide.nodes.ChildFactory;
 import org.openide.nodes.Node;
 
 /**
- * Builds the recipe nodes of a recipe set.
+ * Builds the recipe nodes of a recipe set from the data objects the platform made for its files.
  */
-public final class RecipeNodeFactory extends ChildFactory<FileObject> {
+public final class RecipeNodeFactory extends ChildFactory<DataObject> {
 
     /** What a file in a recipe set has to be called to be a recipe. */
     private static final String RECIPE_EXTENSION = ".xml";
 
-    private final Project project;
     private final FileObject folder;
 
     public RecipeNodeFactory(Project project) {
-        this.project = project;
         this.folder = project.getProjectDirectory();
         folder.addFileChangeListener(new FileChangeAdapter() {
             @Override
@@ -53,6 +53,7 @@ public final class RecipeNodeFactory extends ChildFactory<FileObject> {
                 refresh(true);
             }
 
+            @Override
             public void fileDeleted(FileEvent event) {
                 refresh(true);
             }
@@ -60,21 +61,29 @@ public final class RecipeNodeFactory extends ChildFactory<FileObject> {
     }
 
     @Override
-    protected boolean createKeys(List<FileObject> toPopulate) {
+    protected boolean createKeys(List<DataObject> toPopulate) {
         for (FileObject child : folder.getChildren()) {
-            if (isRecipe(child)) {
-                toPopulate.add(child);
+            if (!isRecipeFile(child)) {
+                continue;
+            }
+            try {
+                DataObject dataObject = DataObject.find(child);
+                if (dataObject instanceof RecipeDataObject) {
+                    toPopulate.add(dataObject);
+                }
+            } catch (DataObjectNotFoundException ex) {
+                // The file is not a recipe this module knows how to edit.
             }
         }
         return true;
     }
 
     @Override
-    protected Node createNodeForKey(FileObject key) {
-        return new RecipeNode(project, key);
+    protected Node createNodeForKey(DataObject key) {
+        return key.getNodeDelegate();
     }
 
-    private static boolean isRecipe(FileObject file) {
+    private static boolean isRecipeFile(FileObject file) {
         return file != null
                 && !file.isFolder()
                 && file.getNameExt().toLowerCase(Locale.ROOT).endsWith(RECIPE_EXTENSION);

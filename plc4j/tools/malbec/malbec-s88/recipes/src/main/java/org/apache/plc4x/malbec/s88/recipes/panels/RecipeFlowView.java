@@ -38,12 +38,25 @@ import org.apache.plc4x.malbec.s88.core.RecipeFlowFormatter;
 import org.netbeans.core.api.multiview.MultiViewHandler;
 import org.netbeans.core.api.multiview.MultiViewPerspective;
 import org.netbeans.core.api.multiview.MultiViews;
+import org.netbeans.core.spi.multiview.MultiViewElement;
+import org.openide.util.Lookup;
+import org.openide.util.lookup.Lookups;
 import org.openide.windows.TopComponent;
 
 /**
  * The route through a recipe, as a list of the steps and branches it takes.
  */
+@MultiViewElement.Registration(
+        displayName = "Flow",
+        iconBase = "org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png",
+        mimeType = "text/b2mml-recipe+xml",
+        persistenceType = TopComponent.PERSISTENCE_ONLY_OPENED,
+        preferredID = "RecipeFlow",
+        position = 200
+)
 public final class RecipeFlowView extends AbstractRecipeView {
+
+    public static final String PREFERRED_ID = "RecipeFlow";
 
     private static final int MAX_ROWS = 5000;
     private static final int MAX_DEPTH = 12;
@@ -60,8 +73,8 @@ public final class RecipeFlowView extends AbstractRecipeView {
     private RecipeFlowAnalyzer.Route route =
             new RecipeFlowAnalyzer.Route(List.of(), List.of());
 
-    public RecipeFlowView(RecipeEditorModel model) {
-        super(model);
+    public RecipeFlowView(Lookup context) {
+        super(context);
         table.setFillsViewportHeight(true);
         table.setFont(table.getFont().deriveFont(Font.PLAIN));
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -87,6 +100,10 @@ public final class RecipeFlowView extends AbstractRecipeView {
         add(new JScrollPane(table), BorderLayout.CENTER);
         add(warningsPanel, BorderLayout.SOUTH);
         addActions();
+    }
+
+    public RecipeFlowView(RecipeEditorModel model) {
+        this(Lookups.singleton(model));
     }
 
     private void addActions() {
@@ -212,8 +229,7 @@ public final class RecipeFlowView extends AbstractRecipeView {
             return;
         }
         for (MultiViewPerspective perspective : handler.getPerspectives()) {
-            if (perspective.preferredID().startsWith(
-                    RecipeMultiViewDescription.CHART_ID_PREFIX)) {
+            if (RecipeChartView.PREFERRED_ID.equals(perspective.preferredID())) {
                 handler.requestVisible(perspective);
                 handler.requestActive(perspective);
                 return;

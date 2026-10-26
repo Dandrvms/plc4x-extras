@@ -197,7 +197,7 @@ public final class S88ConditionExpression {
         if (operator == S88ConditionOperator.OTHER) {
             return toText();
         }
-        String read = equipment == null ? variable.getName() : equipment + "." + variable.getName();
+        String read = variable.getName();
         return read + " " + operator.getSymbol() + " " + literal;
     }
 

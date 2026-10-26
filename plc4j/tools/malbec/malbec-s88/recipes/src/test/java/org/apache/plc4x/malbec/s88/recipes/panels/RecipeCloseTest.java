@@ -30,6 +30,7 @@ import org.netbeans.core.spi.multiview.MultiViewFactory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -112,11 +113,14 @@ class RecipeCloseTest {
      */
     @Test
     void aWindowWithTwoViewsAsksAboutTheSameThingOnce() {
-        CloseOperationState[] fromBothViews = {unsaved(), unsaved()};
+        CloseOperationState first = unsaved();
+        CloseOperationState second = unsaved();
 
-        assertEquals(1, RecipeCloseHandler.howManyKinds(fromBothViews),
+        assertEquals(first.getCloseWarningID(), second.getCloseWarningID(),
                 "and asking the same question twice before it was answered once is how an operator"
                         + " answers about one tab and loses the other");
+        assertEquals(AbstractRecipeView.UNSAVED_WARNING, first.getCloseWarningID(),
+                "because both views report the same problem of the same recipe");
     }
 
     @Test
@@ -125,39 +129,12 @@ class RecipeCloseTest {
             RecipeEditorModel model = openReadOnly();
             RecipeEditorViewStub view = new RecipeEditorViewStub(model);
             addAChangeTo(view);
-            RecipeCloseHandler handler = new RecipeCloseHandler(model);
 
-            assertFalse(handler.decide(RecipeCloseHandler.Choice.SAVE),
+            assertThrows(RuntimeException.class, model::save,
                     "because a recipe that could not be written is still only in the model, and"
                             + " closing would throw it away");
             assertTrue(model.isModified(),
                     "and the changes are still there to be written again");
-        });
-    }
-
-    @Test
-    void writingTheRecipeOutLetsTheHandlerClose() {
-        onSwingThread(() -> {
-            RecipeEditorModel model = open();
-            RecipeEditorViewStub view = new RecipeEditorViewStub(model);
-            addAChangeTo(view);
-            RecipeCloseHandler handler = new RecipeCloseHandler(model);
-
-            assertTrue(handler.decide(RecipeCloseHandler.Choice.SAVE),
-                    "because the recipe went onto disk and there is nothing left to lose");
-            assertFalse(model.isModified(), "and there is nothing left to save");
-        });
-    }
-
-    @Test
-    void leavingTheChangesClosesAndGoingBackDoesNot() {
-        onSwingThread(() -> {
-            RecipeCloseHandler handler = new RecipeCloseHandler(open());
-
-            assertTrue(handler.decide(RecipeCloseHandler.Choice.DISCARD),
-                    "because leaving the changes behind is a choice the operator can make");
-            assertFalse(handler.decide(RecipeCloseHandler.Choice.GO_BACK),
-                    "and keeping the window open is how every other answer is taken");
         });
     }
 

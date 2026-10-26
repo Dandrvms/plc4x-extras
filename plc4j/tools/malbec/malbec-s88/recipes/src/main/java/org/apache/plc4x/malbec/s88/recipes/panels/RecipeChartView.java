@@ -32,6 +32,10 @@ import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
+import org.netbeans.core.spi.multiview.MultiViewElement;
+import org.openide.util.Lookup;
+import org.openide.util.lookup.Lookups;
+import org.openide.windows.TopComponent;
 
 /**
  * The chart of a recipe, drawn as boxes and transitions.
@@ -46,15 +50,25 @@ import javax.swing.KeyStroke;
  * bottom, so the chart is arranged again every time it is drawn rather than remembering where a box
  * was when it was last saved.
  */
+@MultiViewElement.Registration(
+        displayName = "Chart",
+        iconBase = "org/apache/plc4x/malbec/s88/recipes/nodes/recipe.png",
+        mimeType = "text/b2mml-recipe+xml",
+        persistenceType = TopComponent.PERSISTENCE_ONLY_OPENED,
+        preferredID = "RecipeChart",
+        position = 0
+)
 public final class RecipeChartView extends AbstractRecipeView {
+
+    public static final String PREFERRED_ID = "RecipeChart";
 
     private final RecipeChartScene scene = new RecipeChartScene();
 
     /** The orders of this chart, which the bar, the menu and the keys all run. */
     private final RecipeChartToolbar toolbar;
 
-    public RecipeChartView(RecipeEditorModel model) {
-        super(model);
+    public RecipeChartView(Lookup context) {
+        super(context);
         toolbar = new RecipeChartToolbar(this, scene);
         scene.setOnConnected(toolbar::join);
         scene.setOnSelectionChanged(() -> {
@@ -73,6 +87,10 @@ public final class RecipeChartView extends AbstractRecipeView {
         JPanel below = new JPanel(new BorderLayout());
         below.add(problems, BorderLayout.CENTER);
         add(below, BorderLayout.SOUTH);
+    }
+
+    public RecipeChartView(RecipeEditorModel model) {
+        this(Lookups.singleton(model));
     }
 
     /** The component the library draws in. It is also what turns a pointer into a chart position. */
