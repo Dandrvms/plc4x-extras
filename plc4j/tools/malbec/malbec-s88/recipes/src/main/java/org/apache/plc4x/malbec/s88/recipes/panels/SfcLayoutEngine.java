@@ -66,6 +66,12 @@ final class SfcLayoutEngine {
     /** The optional skips, by the two bars they join. */
     private final Set<String> skips = new LinkedHashSet<>();
 
+    /** The transitions that skip a step, which are the sources of the optional skips. */
+    private final Set<String> skipSources = new LinkedHashSet<>();
+
+    /** The branches that have no step, so they still need the room a step would take. */
+    private final Set<String> branchesWithoutAStep = new LinkedHashSet<>();
+
     /** Whether each skip is drawn to the right of the work it leaves out. */
     private final Map<String, Boolean> skipToTheRight = new LinkedHashMap<>();
 
@@ -136,6 +142,18 @@ final class SfcLayoutEngine {
     }
 
     /**
+     * How much room a node needs across for the branches under it.
+     *
+     * <p>A branch with no step is still a branch, and the space it would have taken is kept open
+     * so that the branches beside it sit where a normal selective block puts them.
+     */
+    private int layoutWidthOf(String node) {
+        return branchesWithoutAStep.contains(node)
+                ? Math.max(widthOf(node), SfcMetrics.STEP_WIDTH)
+                : widthOf(node);
+    }
+
+    /**
      * Works out where everything goes.
      *
      * @return the corners of every node and bar, the lines between them, and anything that could not
@@ -177,6 +195,7 @@ final class SfcLayoutEngine {
                 String edgeId = edge(from.getFirst(), to.getFirst());
                 boolean right = skipGoesRight(link);
                 skips.add(edgeId);
+                skipSources.add(from.getFirst());
                 skipToTheRight.put(edgeId, right);
                 if (!right) {
                     leftSkips++;
@@ -189,7 +208,39 @@ final class SfcLayoutEngine {
                 }
             }
         }
+        findBranchesWithoutAStep();
         checkAlternation();
+    }
+
+    /**
+     * Finds the transitions that are a whole branch with no step on it.
+     *
+     * <p>Such a transition is a side of a selective split and a side of the join that follows it,
+     * with nothing between the two. An optional skip is the same branch before it is flattened, so
+     * its source transition is taken as one too.
+     */
+    private void findBranchesWithoutAStep() {
+        Set<String> splitEnds = new LinkedHashSet<>();
+        Set<String> joinEnds = new LinkedHashSet<>();
+        for (S88ProcedureLink link : links) {
+            if (link.isDivergent() && !link.getLinkType().isParallel()) {
+                for (String to : internalNames(link.getTo())) {
+                    if (shapes.get(to) == RecipeShapes.Shape.TRANSITION) {
+                        splitEnds.add(to);
+                    }
+                }
+            }
+            if (link.isConvergent() && !link.getLinkType().isParallel()) {
+                for (String from : internalNames(link.getFrom())) {
+                    if (shapes.get(from) == RecipeShapes.Shape.TRANSITION) {
+                        joinEnds.add(from);
+                    }
+                }
+            }
+        }
+        branchesWithoutAStep.addAll(splitEnds);
+        branchesWithoutAStep.retainAll(joinEnds);
+        branchesWithoutAStep.addAll(skipSources);
     }
 
     /** The ends of a line that name something this chart carries. */
@@ -376,7 +427,7 @@ final class SfcLayoutEngine {
         for (Map.Entry<String, int[]> entry : leafRange.entrySet()) {
             int[] range = entry.getValue();
             int covered = Math.max(1, range[1] - range[0]);
-            int each = (widthOf(entry.getKey()) + covered - 1) / covered;
+            int each = (layoutWidthOf(entry.getKey()) + covered - 1) / covered;
             for (int leaf = range[0]; leaf < range[1]; leaf++) {
                 leafWidth[leaf] = Math.max(leafWidth[leaf], each);
             }
@@ -500,7 +551,7 @@ final class SfcLayoutEngine {
             for (int i = 1; i < inRow.size(); i++) {
                 String here = inRow.get(i);
                 String before = inRow.get(i - 1);
-                int room = (widthOf(before) + widthOf(here)) / 2 + SfcMetrics.GAP;
+                int room = (layoutWidthOf(before) + layoutWidthOf(here)) / 2 + SfcMetrics.GAP;
                 int wanted = axis.getOrDefault(here, 0);
                 int earliest = axis.getOrDefault(before, 0) + room;
                 if (wanted < earliest) {
@@ -562,6 +613,12 @@ final class SfcLayoutEngine {
 
         Map<String, Boolean> syncBars = linesWithABar(corners);
         Map<String, SyncBar> drawnSyncBars = new LinkedHashMap<>();
+        List<SkipJoinBar> skipBars = skipJoinBars(corners);
+        Map<String, Rectangle> skipBarByTarget = new LinkedHashMap<>();
+        for (SkipJoinBar skipBar : skipBars) {
+            drawnSyncBars.put(skipBar.linkId(), new SyncBar(skipBar.where(), false));
+            skipBarByTarget.put(skipBar.target(), skipBar.where());
+        }
         List<Link> drawn = new ArrayList<>();
         int rightmost = rightmostOf(corners);
         assignLanes(corners);
@@ -570,6 +627,14 @@ final class SfcLayoutEngine {
             if (syncBars.containsKey(link.getId())) {
                 bar = syncBarBetween(link, corners);
                 drawnSyncBars.put(link.getId(), new SyncBar(bar, syncBars.get(link.getId())));
+            } else {
+                for (String to : internalNames(link.getTo())) {
+                    Rectangle joinBar = skipBarByTarget.get(to);
+                    if (joinBar != null) {
+                        bar = joinBar;
+                        break;
+                    }
+                }
             }
             for (String from : internalNames(link.getFrom())) {
                 for (String to : internalNames(link.getTo())) {
@@ -688,12 +753,12 @@ final class SfcLayoutEngine {
         int lowestTop = Integer.MAX_VALUE;
         for (String one : from) {
             Rectangle box = corners.get(one);
-            centres.add(box.x + box.width / 2);
+            centres.add(acrossAt(one, box));
             highestBottom = Math.max(highestBottom, leavesAt(one, box).y);
         }
         for (String other : to) {
             Rectangle box = corners.get(other);
-            centres.add(box.x + box.width / 2);
+            centres.add(acrossAt(other, box));
             lowestTop = Math.min(lowestTop, arrivesAt(other, box).y);
         }
         int left = Integer.MAX_VALUE;
@@ -712,6 +777,54 @@ final class SfcLayoutEngine {
     }
 
     /**
+     * The bars that turn an optional skip into the same join a selective branch gets.
+     * <p>
+     * The skip has one branch with a step and one branch with nothing. The step and the skip meet
+     * at the same transition, so the bar spans both branches and each line goes down its own side.
+     * A chart that does not fit this shape keeps the old route round the side.
+     */
+    private List<SkipJoinBar> skipJoinBars(Map<String, Rectangle> corners) {
+        List<SkipJoinBar> bars = new ArrayList<>();
+        for (S88ProcedureLink link : links) {
+            List<String> from = internalNames(link.getFrom());
+            List<String> to = internalNames(link.getTo());
+            if (from.size() != 1 || to.size() != 1) {
+                continue;
+            }
+            String skipFrom = from.getFirst();
+            String skipTo = to.getFirst();
+            if (!skips.contains(edge(skipFrom, skipTo))) {
+                continue;
+            }
+            List<String> arriving = new ArrayList<>(predecessors.getOrDefault(skipTo, Set.of()));
+            if (arriving.size() != 2) {
+                continue;
+            }
+            String work = arriving.get(0).equals(skipFrom) ? arriving.get(1) : arriving.get(0);
+            if (shapes.get(work) == RecipeShapes.Shape.TRANSITION) {
+                continue;
+            }
+            Rectangle source = corners.get(skipFrom);
+            Rectangle other = corners.get(work);
+            Rectangle target = corners.get(skipTo);
+            if (source == null || other == null || target == null) {
+                continue;
+            }
+            int left = Math.min(acrossAt(skipFrom, source), acrossAt(work, other));
+            int right = Math.max(acrossAt(skipFrom, source), acrossAt(work, other));
+            int highestBottom = Math.max(leavesAt(skipFrom, source).y, leavesAt(work, other).y);
+            int lowestTop = arrivesAt(skipTo, target).y;
+            int middle = (highestBottom + lowestTop) / 2;
+            bars.add(new SkipJoinBar(link.getId(), skipTo, new Rectangle(
+                    left - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                    middle - SfcMetrics.SYNC_BAR_HEIGHT / 2,
+                    right - left + SfcMetrics.SYNC_BAR_WIDTH,
+                    SfcMetrics.SYNC_BAR_HEIGHT)));
+        }
+        return bars;
+    }
+
+    /**
      * The line between two things, as the points to draw it through.
      */
     private Link route(String linkId, String from, String to, Map<String, Rectangle> corners,
@@ -721,7 +834,7 @@ final class SfcLayoutEngine {
         Point leaving = leavesAt(from, source);
         Point arriving = arrivesAt(to, target);
 
-        if (skips.contains(edge(from, to))) {
+        if (syncBar == null && skips.contains(edge(from, to))) {
             return skipRoute(linkId, from, to, source, target);
         }
         if (goingBackwards.contains(edge(from, to))) {
@@ -895,6 +1008,16 @@ final class SfcLayoutEngine {
      * @param doubled whether the branches run at once, which is what makes it two bars
      */
     record SyncBar(Rectangle where, boolean doubled) {
+    }
+
+    /**
+     * The join bar made from an optional skip and the step it leaves out.
+     *
+     * @param linkId the skip line this bar belongs to
+     * @param target the transition both branches arrive at
+     * @param where  where it is drawn
+     */
+    private record SkipJoinBar(String linkId, String target, Rectangle where) {
     }
 
     /**

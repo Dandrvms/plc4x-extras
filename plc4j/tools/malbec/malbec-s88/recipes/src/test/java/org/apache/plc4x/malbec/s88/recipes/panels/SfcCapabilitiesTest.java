@@ -102,6 +102,31 @@ class SfcCapabilitiesTest {
         assertTrue(removed, "the optional fixture offers a skip to remove");
     }
 
+    /** The empty branch left by flattening an optional branch can still be taken off. */
+    @Test
+    void removeSkipAlsoTakesOffAnEmptyBranchLeftByFlattening() {
+        S88MasterRecipe recipe = fixture("RAMA_OPCIONAL_CON_RAMA");
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+        assertEquals("PACK", StructureQueries.emptyBranchTarget(chart, "T_SKIP"),
+                "the flattened branch rejoins at the step after the block");
+
+        assertTrue(ChartCapabilities.can(recipe, null, ChartOp.REMOVE_SKIP, Set.of("T_SKIP"))
+                        .enabled(),
+                "the empty branch is offered as something that can come off");
+
+        S88MasterRecipe trial = RecipeDeepCopy.copyMasterRecipe(recipe);
+        ChartCapabilities.perform(trial, null, ChartOp.REMOVE_SKIP, Set.of("T_SKIP"));
+        S88ProcedureLogic after = trial.getProcedureLogic();
+        assertTrue(after.findTransition("T_SKIP").isEmpty(), "the empty branch is gone");
+        assertFalse(after.getLinks().stream().anyMatch(link ->
+                        link.getFrom().stream().anyMatch(end -> "T_SKIP".equals(end.getValue()))
+                                || link.getTo().stream()
+                                        .anyMatch(end -> "T_SKIP".equals(end.getValue()))),
+                "and no line still names it");
+        assertTrue(RecipeConformance.of(trial).excess().isEmpty(),
+                "the chart still holds together: " + RecipeConformance.of(trial).excess());
+    }
+
     /** Inserting before a step puts one more step in front of it. */
     @Test
     void insertBeforeMakesOneStepAndPicksIt() {

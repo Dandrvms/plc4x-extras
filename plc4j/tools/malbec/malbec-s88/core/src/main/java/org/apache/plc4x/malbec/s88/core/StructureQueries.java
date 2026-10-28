@@ -239,6 +239,54 @@ public enum StructureQueries {
         return false;
     }
 
+    /**
+     * The step an empty branch rejoins at, when the bar is a transition on a branch with no step.
+     *
+     * <p>A branch left empty by flattening an optional branch is still a side of a selective split
+     * and a side of the join that follows it. It is the only side with nothing between the two
+     * bars, so it can be found without knowing which branch it used to skip.
+     *
+     * @param logic the chart to read
+     * @param barId the transition that may be an empty branch
+     * @return the step the branch rejoins at, or {@code null} when it is not an empty branch
+     */
+    public static String emptyBranchTarget(S88ProcedureLogic logic, String barId) {
+        if (logic == null || barId == null || logic.findTransition(barId).isEmpty()) {
+            return null;
+        }
+        S88ProcedureLink split = null;
+        S88ProcedureLink join = null;
+        int touching = 0;
+        for (S88ProcedureLink link : logic.getLinks()) {
+            boolean leaves = link.getFrom().stream()
+                    .anyMatch(end -> barId.equals(end.getValue()));
+            boolean arrives = link.getTo().stream()
+                    .anyMatch(end -> barId.equals(end.getValue()));
+            if (!leaves && !arrives) {
+                continue;
+            }
+            touching++;
+            if (arrives && !leaves) {
+                if (split != null || !link.isDivergent() || link.getLinkType().isParallel()) {
+                    return null;
+                }
+                split = link;
+            } else if (leaves && !arrives) {
+                if (join != null || !link.isConvergent() || link.getLinkType().isParallel()) {
+                    return null;
+                }
+                join = link;
+            } else {
+                return null;
+            }
+        }
+        if (touching != 2 || split == null || join == null || join.getTo().size() != 1) {
+            return null;
+        }
+        String target = join.getTo().getFirst().getValue();
+        return logic.findStep(target).isPresent() ? target : null;
+    }
+
     /** Whether one side of a split reaches a step that goes on to the given bar. */
     private static boolean reachesAStepFeeding(S88ProcedureLogic logic, String start,
                                                String targetBar, S88ProcedureLink skip) {

@@ -50,7 +50,9 @@ public final class RecipeNodeFactory extends ChildFactory<DataObject> {
 
             @Override
             public void fileDataCreated(FileEvent event) {
-                refresh(true);
+                if (event.getFile().getSize() > 0) {
+                    refresh(true);
+                }
             }
 
             @Override

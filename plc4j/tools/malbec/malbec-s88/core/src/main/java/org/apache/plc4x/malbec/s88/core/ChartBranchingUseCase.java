@@ -102,6 +102,7 @@ public final class ChartBranchingUseCase {
             throw new IllegalStateException(("Step '" + boxId + "' is reached by a line the flow joins"
             + " on, so there is no one branch to open another beside."));
         }
+        flattenOptionalBranch(chart, entering, leaving);
         String barBehind = entering.getFrom().getFirst().getValue();
         S88ProcedureLink feeding = arrivingAt(chart, barBehind);
         String barAfter = leaving.getTo().getFirst().getValue();
@@ -296,6 +297,76 @@ public final class ChartBranchingUseCase {
         wider.addTo(extraEnd);
         wider.setLinkType(type);
         return wider;
+    }
+
+    /**
+     * Turns a step's own optional branch into a normal empty branch before another branch is added.
+     *
+     * <p>An optional branch is a split with the step on one side and a skip on the other. Adding a
+     * branch beside the step while that split is still there leaves the new branch outside the
+     * optional block, so the two joins do not line up. Flattening first puts the empty side back
+     * into the line that leaves the step, where any other branch can join it.
+     *
+     * <p>Only an optional branch that is a block of its own is flattened. When the step is the
+     * first step of a branch, its split is shared with the block outside it, and moving the skip
+     * would move it out of that block.
+     */
+    private static void flattenOptionalBranch(S88ProcedureLogic chart, S88ProcedureLink entering,
+                                              S88ProcedureLink leaving) {
+        if (entering == null || leaving == null
+                || entering.isDivergent() || entering.isConvergent()
+                || leaving.isDivergent() || leaving.isConvergent()
+                || entering.getFrom().size() != 1 || leaving.getTo().size() != 1) {
+            return;
+        }
+        String before = entering.getFrom().getFirst().getValue();
+        String afterBar = leaving.getTo().getFirst().getValue();
+        S88ProcedureLink skip = null;
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (StructureQueries.isOptionalSkip(chart, link)
+                    && link.getTo().size() == 1
+                    && afterBar.equals(link.getTo().getFirst().getValue())) {
+                skip = link;
+                break;
+            }
+        }
+        if (skip == null || skip.getFrom().size() != 1) {
+            return;
+        }
+        String skipBar = skip.getFrom().getFirst().getValue();
+        boolean itsOwnBlock = chart.getLinks().stream()
+                .anyMatch(link -> link.isDivergent() && !link.getLinkType().isParallel()
+                        && link.getTo().size() == 2
+                        && hasEnd(link.getTo(), before)
+                        && hasEnd(link.getTo(), skipBar));
+        if (!itsOwnBlock) {
+            return;
+        }
+        S88ProcedureLink onward = null;
+        for (S88ProcedureLink link : chart.getLinks()) {
+            if (link.getFrom().size() == 1
+                    && afterBar.equals(link.getFrom().getFirst().getValue())) {
+                if (onward != null) {
+                    return;
+                }
+                onward = link;
+            }
+        }
+        if (onward == null || onward.getTo().size() != 1
+                || chart.findStep(onward.getTo().getFirst().getValue()).isEmpty()) {
+            return;
+        }
+        S88ProcedureLink joined = new S88ProcedureLink(onward.getId());
+        onward.getFrom().forEach(joined::addFrom);
+        onward.getTo().forEach(joined::addTo);
+        joined.addFrom(S88IdRef.transition(skipBar));
+        joined.setLinkType(S88LinkType.SERIAL_CONVERGENT);
+        put(chart, onward, joined);
+        chart.removeLink(skip);
+    }
+
+    private static boolean hasEnd(List<S88IdRef> ends, String id) {
+        return ends.stream().anyMatch(end -> id.equals(end.getValue()));
     }
 
     /**
@@ -604,6 +675,7 @@ public final class ChartBranchingUseCase {
         S88ProcedureLink entering = arrivingAt(chart, boxId);
         S88ProcedureLink leaving = leavingFrom(chart, boxId);
         requireBarsOfItsOwn(boxId, entering, leaving);
+        flattenOptionalBranch(chart, entering, leaving);
         String box = newStep(recipe, step, chart);
         put(chart, entering, widenArrival(entering, S88IdRef.step(box),
                 S88LinkType.PARALLEL_DIVERGENT));

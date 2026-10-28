@@ -87,16 +87,18 @@ class SfcStructureTest {
     }
 
     /**
-     * A branch that skips a step is drawn round the step instead of through it.
+     * A branch that skips a step is drawn as the same join as a selective branch, with no step on
+     * the side that skips it.
      */
     @Test
-    void anOptionalBranchIsDrawnRoundTheStepItSkips() {
+    void anOptionalBranchIsDrawnLikeASelectiveBranchWithoutItsStep() {
         S88MasterRecipe recipe = SfcFixtures.optionalBranch();
         SfcLayoutEngine.Placement at = SfcFixtures.arranged(recipe);
 
         assertTrue(at.complaints().isEmpty(),
                 "a skip round a step holds together: " + at.complaints());
         java.awt.Rectangle work = at.steps().get("WORK");
+        java.awt.Rectangle skip = at.bars().get("T_SKIP");
         String skipLine = recipe.getProcedureLogic().getLinks().stream()
                 .filter(link -> link.getFrom().stream()
                         .anyMatch(end -> "T_SKIP".equals(end.getValue())))
@@ -109,9 +111,85 @@ class SfcStructureTest {
                 .filter(link -> link.lineId().equals(skipLine))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(6, drawn.path().size(), "the skip is drawn in six turns");
+        assertEquals(4, drawn.path().size(),
+                "the skip goes down its own branch and along the join bar");
+        assertEquals(skip.x + SfcMetrics.TRANSITION_WIDTH / 2, drawn.path().get(0).x,
+                "the skip leaves its own branch");
+        assertEquals(skip.x + SfcMetrics.TRANSITION_WIDTH / 2, drawn.path().get(1).x,
+                "and stays on it until the join bar");
         assertTrue(drawn.path().stream().noneMatch(work::contains),
                 "and none of them is inside the step it skips: " + drawn.path());
+
+        SfcLayoutEngine.SyncBar bar = at.syncBars().get(skipLine);
+        assertTrue(bar != null, "the skip joins the other branch at a bar");
+        assertEquals(work.x + work.width / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.where().x, "the bar starts on the branch with the step");
+        assertEquals(skip.x + SfcMetrics.TRANSITION_WIDTH / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.where().x + bar.where().width, "and ends on the skipped branch");
+        assertTrue(drawn.path().stream().allMatch(point ->
+                        point.x <= skip.x + SfcMetrics.TRANSITION_WIDTH / 2),
+                "the skip does not go out to a lane beyond its branch: " + drawn.path());
+    }
+
+    /** Adding a branch beside an optional step turns the optional block into one normal block. */
+    @Test
+    void aBranchAddedBesideAnOptionalStepLeavesNoSkip() {
+        S88MasterRecipe recipe = SfcFixtures.optionalBranchWithAnotherBranch();
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+
+        assertTrue(chart.getLinks().stream()
+                        .noneMatch(link -> StructureQueries.isOptionalSkip(chart, link)),
+                "the skip is now a normal empty branch");
+        assertTrue(RecipeConformance.of(recipe).excess().isEmpty(),
+                "the chart holds together: " + RecipeConformance.of(recipe).excess());
+        assertEquals(3, chart.getLinks().stream()
+                        .filter(link -> link.isDivergent()
+                                && link.getTo().stream().anyMatch(end ->
+                                        "T_WORK".equals(end.getValue())))
+                        .findFirst()
+                        .orElseThrow()
+                        .getTo().size(),
+                "the split carries the optional side and the branch that was added");
+        assertEquals(3, chart.getLinks().stream()
+                        .filter(link -> link.isConvergent()
+                                && link.getTo().stream().anyMatch(end ->
+                                        "PACK".equals(end.getValue())))
+                        .findFirst()
+                        .orElseThrow()
+                        .getFrom().size(),
+                "and the join carries both of them and the work side");
+    }
+
+    /** A parallel under an optional step leaves the empty branch outside the nested block. */
+    @Test
+    void aParallelUnderAnOptionalStepLeavesTheEmptyBranchOutsideIt() {
+        S88MasterRecipe recipe = SfcFixtures.optionalBranchWithNestedParallel();
+        S88ProcedureLogic chart = recipe.getProcedureLogic();
+
+        assertEquals("PACK", StructureQueries.emptyBranchTarget(chart, "T_SKIP"),
+                "the empty branch still rejoins after the nested block");
+        assertEquals(List.of("WORK", "STEP"), chart.getLinks().stream()
+                        .filter(link -> link.isConvergent()
+                                && link.getTo().stream().anyMatch(end ->
+                                        "T_JOIN".equals(end.getValue())))
+                        .findFirst()
+                        .orElseThrow()
+                        .getFrom().stream()
+                        .map(S88IdRef::getValue)
+                        .toList(),
+                "the nested parallel block closes on its own join");
+        assertEquals(List.of("T_JOIN", "T_SKIP"), chart.getLinks().stream()
+                        .filter(link -> link.isConvergent()
+                                && link.getTo().stream().anyMatch(end ->
+                                        "PACK".equals(end.getValue())))
+                        .findFirst()
+                        .orElseThrow()
+                        .getFrom().stream()
+                        .map(S88IdRef::getValue)
+                        .toList(),
+                "and the empty branch joins after it");
+        assertTrue(RecipeConformance.of(recipe).excess().isEmpty(),
+                "the chart holds together: " + RecipeConformance.of(recipe).excess());
     }
 
     /**

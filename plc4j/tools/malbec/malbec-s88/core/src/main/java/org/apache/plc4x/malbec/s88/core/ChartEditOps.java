@@ -118,12 +118,13 @@ public final class ChartEditOps {
     }
 
     /**
-     * Takes away the line that skips from one transition to another.
+     * Takes away the line that skips from one transition to another, or the empty branch left when
+     * an optional branch was flattened.
      *
      * @param recipe recipe being edited, may be {@code null} when no change event is wanted
      * @param step   step whose chart is being edited, {@code null} for the chart of the recipe
-     * @param fromId transition the skip leaves
-     * @param toId   transition the skip reaches
+     * @param fromId transition the skip leaves, or the empty branch to take off
+     * @param toId   transition the skip reaches, or the step the empty branch rejoins at
      * @throws IllegalArgumentException when there is no chart, no node, or no skip between them
      * @throws IllegalStateException    when the chart would no longer run
      */
@@ -132,6 +133,10 @@ public final class ChartEditOps {
         S88ProcedureLogic chart = chartOf(recipe, step);
         requireNode(chart, fromId);
         requireNode(chart, toId);
+        if (toId.equals(StructureQueries.emptyBranchTarget(chart, fromId))) {
+            removeEmptyBranch(recipe, chart, fromId);
+            return;
+        }
         ChartGraph graph = ChartGraph.of(chart);
         if (!graph.isTransition(fromId) || !graph.isTransition(toId)
                 || !graph.isSkip(fromId, toId)) {
@@ -144,6 +149,29 @@ public final class ChartEditOps {
         ChartNormalizer.normalize(edited);
         refuseNewProblems(chart, edited, "Taking the skip from '" + fromId + "' to '" + toId
                 + "' off");
+        copyOnto(edited, chart);
+        announce(recipe);
+    }
+
+    /** Takes an empty branch off the split and the join that hold it. */
+    private static void removeEmptyBranch(S88Recipe recipe, S88ProcedureLogic chart, String barId) {
+        S88ProcedureLogic edited = RecipeDeepCopy.copyChart(chart);
+        S88ProcedureLink split = edited.getLinks().stream()
+                .filter(link -> link.isDivergent() && contains(link.getTo(), barId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("The empty branch '" + barId
+                        + "' has no split to come off."));
+        S88ProcedureLink join = edited.getLinks().stream()
+                .filter(link -> link.isConvergent() && contains(link.getFrom(), barId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("The empty branch '" + barId
+                        + "' has no join to come off."));
+
+        replace(edited, split, split.getFrom(), without(split.getTo(), barId));
+        replace(edited, join, without(join.getFrom(), barId), join.getTo());
+        edited.findTransition(barId).ifPresent(edited::removeTransition);
+        ChartNormalizer.normalize(edited);
+        refuseNewProblems(chart, edited, "Taking the empty branch '" + barId + "' off");
         copyOnto(edited, chart);
         announce(recipe);
     }

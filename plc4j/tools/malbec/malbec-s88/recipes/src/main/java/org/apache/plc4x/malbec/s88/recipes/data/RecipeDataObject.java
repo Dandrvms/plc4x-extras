@@ -212,10 +212,7 @@ public class RecipeDataObject extends MultiDataObject implements UndoRedo.Provid
                 }
                 current.save();
                 applyModifiedState(false);
-            } catch (IOException failure) {
-                reportSaveFailure(failure);
-                throw failure;
-            } catch (RuntimeException failure) {
+            } catch (IOException | RuntimeException failure) {
                 reportSaveFailure(failure);
                 throw failure;
             }

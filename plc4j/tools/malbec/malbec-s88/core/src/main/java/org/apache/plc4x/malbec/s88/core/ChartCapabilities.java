@@ -441,8 +441,30 @@ public final class ChartCapabilities {
                     }
                 }
             }
+            String empty = emptyBranchIn(chart, id);
+            if (empty != null) {
+                return new String[]{empty, StructureQueries.emptyBranchTarget(chart, empty)};
+            }
         }
         throw new IllegalArgumentException("The picked thing is not a skip.");
+    }
+
+    /** The empty branch the picked node or line belongs to, if it is one. */
+    private static String emptyBranchIn(S88ProcedureLogic chart, String id) {
+        if (StructureQueries.emptyBranchTarget(chart, id) != null) {
+            return id;
+        }
+        S88ProcedureLink line = chart.findLink(id).orElse(null);
+        if (line == null || line.getTo().size() != 1) {
+            return null;
+        }
+        String target = line.getTo().getFirst().getValue();
+        for (S88IdRef from : line.getFrom()) {
+            if (target.equals(StructureQueries.emptyBranchTarget(chart, from.getValue()))) {
+                return from.getValue();
+            }
+        }
+        return null;
     }
 
     private static String commonStepAfter(S88ProcedureLogic chart, List<String> boxes) {

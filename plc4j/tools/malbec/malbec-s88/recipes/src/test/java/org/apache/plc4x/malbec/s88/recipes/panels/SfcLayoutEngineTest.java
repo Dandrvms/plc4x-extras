@@ -23,6 +23,7 @@ import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.awt.Rectangle;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -307,6 +308,130 @@ class SfcLayoutEngineTest {
         assertTrue(bar.x + bar.width >= Math.max(heat.x + heat.width / 2, cool.x + cool.width / 2),
                 "and ends past the rightmost one, and the bar is " + bar + " for " + heat + " "
                         + cool);
+    }
+
+    /** A bar sits on the transitions it joins, not on the labels that widen them to the right. */
+    @Test
+    void theBarAcrossASelectiveSplitLeavesTheSameOverhangAtBothEnds() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.selectiveDivergence());
+
+        Rectangle left = at.bars().get("T_HEAT_READY");
+        Rectangle right = at.bars().get("T_COOL_READY");
+        Rectangle top = at.syncBars().get("L3").where();
+
+        assertEquals(left.x + SfcMetrics.TRANSITION_WIDTH / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                top.x, "the left end sits on the left transition, not on its label");
+        assertEquals(right.x + SfcMetrics.TRANSITION_WIDTH / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                top.x + top.width, "the right end sits on the right transition, not past its label");
+
+        Rectangle heat = at.steps().get("HEAT");
+        Rectangle cool = at.steps().get("COOL");
+        Rectangle bottom = at.syncBars().get("L6").where();
+
+        assertEquals(heat.x + heat.width / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bottom.x, "the join starts on the left branch");
+        assertEquals(cool.x + cool.width / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bottom.x + bottom.width, "the join ends on the right branch");
+    }
+
+    /** An optional branch gets the join bar of a selective branch, without a step on one side. */
+    @Test
+    void anOptionalBranchGetsAJoinBarAcrossItsTwoSides() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.optionalBranch());
+
+        Rectangle work = at.steps().get("WORK");
+        Rectangle skip = at.bars().get("T_SKIP");
+        Rectangle bar = at.syncBars().values().stream()
+                .map(SfcLayoutEngine.SyncBar::where)
+                .filter(where -> where.y > work.y + work.height)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(work.x + work.width / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.x, "the bar starts on the branch with the step");
+        assertEquals(skip.x + SfcMetrics.TRANSITION_WIDTH / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.x + bar.width, "and ends on the skipped branch");
+
+        int rightmost = Math.max(skip.x + SfcMetrics.TRANSITION_WIDTH, work.x + work.width);
+        for (SfcLayoutEngine.Link link : at.links()) {
+            for (Point point : link.path()) {
+                assertTrue(point.x <= rightmost,
+                        "the optional branch stays on its own side: " + link.path());
+            }
+        }
+    }
+
+    /** The empty side of an optional branch keeps the room a step would have taken. */
+    @Test
+    void anOptionalBranchReservesTheRoomOfAStep() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.optionalBranch());
+
+        Rectangle work = at.steps().get("WORK");
+        Rectangle skip = at.bars().get("T_SKIP");
+        int workCentre = work.x + work.width / 2;
+        int skipCentre = skip.x + SfcMetrics.TRANSITION_WIDTH / 2;
+
+        assertTrue(skipCentre - workCentre >= SfcMetrics.STEP_WIDTH,
+                "the skipped side is as far away as a step: " + workCentre + " to " + skipCentre);
+    }
+
+    /** A branch added beside an optional step joins it on one bar, as a normal selective does. */
+    @Test
+    void aBranchAddedBesideAnOptionalStepJoinsOnOneBar() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.optionalBranchWithAnotherBranch());
+
+        Rectangle work = at.steps().get("WORK");
+        Rectangle added = at.steps().get("STEP");
+        Rectangle bar = at.syncBars().values().stream()
+                .map(SfcLayoutEngine.SyncBar::where)
+                .filter(where -> where.y > work.y + work.height)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(work.x + work.width / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.x, "the bar starts on the optional step's side");
+        assertEquals(added.x + added.width / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                bar.x + bar.width, "and ends on the branch that was added");
+        assertTrue(at.complaints().isEmpty(), "the chart holds together: " + at.complaints());
+    }
+
+    /** A parallel under an optional step keeps the empty branch out of the nested block. */
+    @Test
+    void aParallelUnderAnOptionalStepKeepsTheEmptyBranchOutsideIt() {
+        SfcLayoutEngine.Placement at = arrange(SfcFixtures.optionalBranchWithNestedParallel());
+
+        Rectangle work = at.steps().get("WORK");
+        Rectangle nested = at.steps().get("STEP");
+        Rectangle join = at.bars().get("T_JOIN");
+        Rectangle skip = at.bars().get("T_SKIP");
+        List<SfcLayoutEngine.SyncBar> bars = at.syncBars().values().stream()
+                .filter(bar -> bar.where().y > work.y + work.height)
+                .sorted(Comparator.comparingInt(bar -> bar.where().y))
+                .toList();
+        assertEquals(2, bars.size(), "the nested block and the optional block each have a bar");
+        SfcLayoutEngine.SyncBar nestedBar = bars.get(0);
+        SfcLayoutEngine.SyncBar outerBar = bars.get(1);
+
+        assertTrue(nestedBar.where().y < outerBar.where().y,
+                "the nested block closes before the optional block does");
+        assertEquals(work.x + work.width / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                nestedBar.where().x, "the nested bar starts on the step");
+        assertEquals(nested.x + nested.width / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                nestedBar.where().x + nestedBar.where().width,
+                "and ends on the step added beside it");
+        assertEquals(join.x + SfcMetrics.TRANSITION_WIDTH / 2 - SfcMetrics.SYNC_BAR_WIDTH / 2,
+                outerBar.where().x, "the outer bar starts under the nested join");
+        assertEquals(skip.x + SfcMetrics.TRANSITION_WIDTH / 2 + SfcMetrics.SYNC_BAR_WIDTH / 2,
+                outerBar.where().x + outerBar.where().width,
+                "and ends on the empty branch");
+        assertTrue(at.links().stream()
+                        .flatMap(link -> link.path().stream())
+                        .noneMatch(point -> point.x > nested.x
+                                && point.x < nested.x + nested.width
+                                && point.y > nested.y
+                                && point.y < nested.y + nested.height),
+                "no line goes through the step the parallel block added");
+        assertTrue(at.complaints().isEmpty(), "the chart holds together: " + at.complaints());
     }
 
     @Test

@@ -146,6 +146,8 @@ final class SfcFixtures {
                 "paralela-dentro-de-paralela",
                 "selectiva-dentro-de-selectiva",
                 "rama-opcional",
+                "rama-opcional-con-rama",
+                "rama-opcional-con-paralela",
                 "bucle-con-paralela",
                 "dos-niveles-de-subgrafico",
                 "botones-lineal",
@@ -186,6 +188,8 @@ final class SfcFixtures {
                 parallelInsideParallel(),
                 selectiveInsideSelective(),
                 optionalBranch(),
+                optionalBranchWithAnotherBranch(),
+                optionalBranchWithNestedParallel(),
                 loopAroundParallel(),
                 twoLevelsOfSubchart());
     }
@@ -852,7 +856,11 @@ final class SfcFixtures {
      * step that the other side feeds.
      */
     static S88MasterRecipe optionalBranch() {
-        Chart chart = new Chart("RAMA_OPCIONAL");
+        return optionalBranch("RAMA_OPCIONAL");
+    }
+
+    private static S88MasterRecipe optionalBranch(String id) {
+        Chart chart = new Chart(id);
         chart.bar("T_START");
         chart.bar("T_WORK");
         chart.bar("T_SKIP");
@@ -867,6 +875,20 @@ final class SfcFixtures {
         chart.up("T_JOIN", "PACK");
         chart.down("PACK", "T_END");
         return chart.finishFrom("T_END");
+    }
+
+    /** The optional branch with another branch added beside its step. */
+    static S88MasterRecipe optionalBranchWithAnotherBranch() {
+        S88MasterRecipe recipe = optionalBranch("RAMA_OPCIONAL_CON_RAMA");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "WORK");
+        return recipe;
+    }
+
+    /** The optional branch with a parallel block put under its step. */
+    static S88MasterRecipe optionalBranchWithNestedParallel() {
+        S88MasterRecipe recipe = optionalBranch("RAMA_OPCIONAL_CON_PARALELA");
+        ChartBranchingUseCase.nestParallelBranch(recipe, null, "WORK");
+        return recipe;
     }
 
     /**

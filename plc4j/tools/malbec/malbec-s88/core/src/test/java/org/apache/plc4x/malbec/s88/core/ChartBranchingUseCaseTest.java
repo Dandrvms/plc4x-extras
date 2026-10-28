@@ -220,6 +220,44 @@ class ChartBranchingUseCaseTest {
     }
 
     @Test
+    void addingABranchBesideAnOptionalStepMakesOneJoin() {
+        S88MasterRecipe recipe = withOneStep();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
+        ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP");
+
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
+
+        assertEquals(List.of("T_STEP", "T_SKIP", "T_BRANCH"), departuresOf(recipe, "BEGIN"),
+                "the optional branch and the new one leave the same split");
+        assertEquals(List.of("T_STEP_1", "T_SKIP", "T_BRANCH_1"),
+                arrivalsOf(recipe, "STEP_1"),
+                "and both come back together on the same join");
+        assertTrue(chartOf(recipe).getLinks().stream()
+                        .noneMatch(link -> StructureQueries.isOptionalSkip(chartOf(recipe), link)),
+                "the optional skip is now a normal empty branch");
+        assertEquals(List.of(), ChartSoundness.check(recipe.getProcedureLogic()),
+                "and the chart still runs");
+    }
+
+    @Test
+    void aParallelUnderAnOptionalStepKeepsTheEmptyBranchOutsideIt() {
+        S88MasterRecipe recipe = withOneStep();
+        BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
+        ChartBranchingUseCase.addOptionalBranch(recipe, null, "STEP");
+
+        ChartBranchingUseCase.nestParallelBranch(recipe, null, "STEP");
+
+        assertEquals(List.of("STEP", "STEP_2"), arrivalsOf(recipe, "T_STEP_1"),
+                "the parallel block under the step has its own join");
+        assertEquals(List.of("T_STEP_1", "T_SKIP"), arrivalsOf(recipe, "STEP_1"),
+                "and the empty branch joins after that block rather than inside it");
+        assertEquals(List.of("T_STEP", "T_SKIP"), departuresOf(recipe, "BEGIN"),
+                "the optional split is still the outer one");
+        assertEquals(List.of(), ChartSoundness.check(recipe.getProcedureLogic()),
+                "and the chart still runs");
+    }
+
+    @Test
     void onlyAPlainStepCanBeMadeOptional() {
         S88MasterRecipe recipe = withOneStep();
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "STEP");
