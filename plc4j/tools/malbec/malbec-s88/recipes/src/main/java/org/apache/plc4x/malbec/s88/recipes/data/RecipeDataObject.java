@@ -20,7 +20,7 @@ package org.apache.plc4x.malbec.s88.recipes.data;
 
 import java.beans.BeanInfo;
 import java.io.IOException;
-import org.apache.plc4x.malbec.s88.recipes.panels.RecipeEditorModel;
+import org.apache.plc4x.malbec.s88.recipes.editor.RecipeEditorModel;
 import org.netbeans.core.api.multiview.MultiViews;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
