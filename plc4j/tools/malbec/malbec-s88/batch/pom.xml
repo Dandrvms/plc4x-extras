@@ -32,6 +32,17 @@
                 <groupId>org.apache.netbeans.utilities</groupId>
                 <artifactId>nbm-maven-plugin</artifactId>
                 <extensions>true</extensions>
+                <configuration>
+                    <publicPackages>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.model</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.builder</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.link</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.client</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.client.sim</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.runtime</publicPackage>
+                        <publicPackage>org.apache.plc4x.malbec.s88.batch.runtime.report</publicPackage>
+                    </publicPackages>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -44,5 +55,43 @@
             </plugin>
         </plugins>
     </build>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.plc4x.malbec.s88</groupId>
+            <artifactId>api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.plc4x.malbec.s88</groupId>
+            <artifactId>core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+            <type>jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
     <name>${project.groupId}:${project.artifactId}</name>
 </project>

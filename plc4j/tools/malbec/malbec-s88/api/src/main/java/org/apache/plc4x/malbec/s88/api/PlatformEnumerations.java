@@ -59,10 +59,9 @@ public final class PlatformEnumerations {
      * <p>
      * {@code NONE} comes first and is what a module reads when no order has arrived, which is what
      * it sees for as long as the batch server is away. The rest are deliberate: {@code PAUSE}
-     * stops the phase at the next safe point and {@code HOLD} takes it to a safe condition now,
-     * and {@code RESUME} is what undo them, so neither is a synonym of the
-     * other. {@code RESTART} runs the phase again from its start and {@code RESET} leaves it ready
-     * to be started, which are also not the same thing.
+     * stops the phase at the next safe point and {@code RESUME} undoes it; {@code HOLD} takes it
+     * to a safe condition and {@code RESTART} resumes it from there. {@code STOP} and
+     * {@code ABORT} end the execution, and {@code RESET} leaves the module ready to start again.
      */
     private static final List<String> COMMAND_VALUES = List.of(
             "NONE",
