@@ -67,6 +67,23 @@ class SimulatedModuleTest {
     }
 
     @Test
+    void followRuleSnapsToTheSetpointInsideTheTolerance() {
+        Fixture fixture = fixture("CALENTADOR_1");
+        fixture.store().set("TEMPERATURA_ACTUAL", 71.5, 0.0);
+        fixture.store().set("TEMPERATURA_SP", 72.0, 0.0);
+        SimulationProfile profile = SimulationProfile.defaults().withFollowRules(List.of(
+                new FollowRule("CALENTADOR_1", "TEMPERATURA_ACTUAL", "TEMPERATURA_SP",
+                        20.0, 0.5, 20.0)));
+        SimulatedModule module = new SimulatedModule("CALENTADOR_1", fixture.element(),
+                profile, fixture.store());
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(1.0, 1.0);
+
+        assertEquals(72.0, fixture.store().numeric("TEMPERATURA_ACTUAL"), 1e-9);
+    }
+
+    @Test
     void pauseAndHoldFreezeValuesAndElapsed() {
         Fixture fixture = fixture("CALENTADOR_1");
         fixture.store().set("TEMPERATURA_SP", 100.0, 0.0);

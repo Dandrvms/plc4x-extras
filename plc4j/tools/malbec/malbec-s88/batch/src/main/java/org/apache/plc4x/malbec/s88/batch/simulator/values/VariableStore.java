@@ -32,6 +32,7 @@ import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.PlatformVariables;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
+import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 
@@ -70,7 +71,9 @@ public final class VariableStore {
             }
             store.addDefinitions(plant, module, S88PlantModel.REPORTS);
             store.addDefinitions(plant, module, S88PlantModel.PARAMETERS);
-            store.addPlatformVariables(module, warnings);
+            if (module.getLevel() == S88Level.EQUIPMENTMODULE) {
+                store.addPlatformVariables(module, warnings);
+            }
         }
         return store;
     }

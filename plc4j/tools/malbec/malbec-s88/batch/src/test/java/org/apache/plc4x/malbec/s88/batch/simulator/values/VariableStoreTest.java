@@ -27,6 +27,7 @@ import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,6 +45,19 @@ class VariableStoreTest {
         assertEquals("IDLE", store.text("STATE_CALENTADOR_1"));
         assertEquals("NONE", store.text("COMMAND_CALENTADOR_1"));
         assertTrue(store.get("STATE_CALENTADOR_1").enumerationValues().contains("COMPLETE"));
+    }
+
+    @Test
+    void addsPlatformVariablesOnlyToEquipmentModules() {
+        List<String> warnings = new ArrayList<>();
+        VariableStore store = VariableStore.of(DemoFixtures.plant(),
+                List.of("REACTOR_1", "BOMBA_1"), warnings);
+
+        assertTrue(warnings.isEmpty(), () -> String.join("\n", warnings));
+        assertFalse(store.contains("STATE_REACTOR_1"));
+        assertFalse(store.contains("COMMAND_REACTOR_1"));
+        assertTrue(store.contains("STATE_BOMBA_1"));
+        assertTrue(store.contains("COMMAND_BOMBA_1"));
     }
 
     @Test

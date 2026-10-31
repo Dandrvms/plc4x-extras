@@ -212,6 +212,9 @@ public final class SimulatedModule {
             double next = Math.abs(delta) <= largest
                     ? target
                     : value + Math.copySign(largest, delta);
+            if (Math.abs(target - next) <= rule.tolerance()) {
+                next = target;
+            }
             if (Double.compare(next, value) != 0) {
                 store.set(report, next, simTime);
             }

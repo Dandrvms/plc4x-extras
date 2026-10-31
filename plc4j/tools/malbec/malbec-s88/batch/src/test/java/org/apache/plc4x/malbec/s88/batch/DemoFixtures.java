@@ -27,11 +27,14 @@ import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchRequest;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
+import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
@@ -131,6 +134,59 @@ public final class DemoFixtures {
         UpdateRecipeParameterUseCase.execute(recipe, hold, "Parameters/DURACION",
                 "30", DataType.INTEGER, null);
         return recipe;
+    }
+
+    public static S88MasterRecipe alternativeRecipe(S88PlantSnapshot plant) {
+        S88MasterRecipe recipe = branchableRecipe("DEMO_ALTERNATIVA");
+        ChartBranchingUseCase.addAlternativeBranch(recipe, null, "UP_REACTOR")
+                .setEquipmentClassId("REACTOR_TIPO");
+        return recipe;
+    }
+
+    public static S88MasterRecipe parallelRecipe(S88PlantSnapshot plant) {
+        S88MasterRecipe recipe = branchableRecipe("DEMO_PARALELA");
+        ChartBranchingUseCase.addParallelBranch(recipe, null, "UP_REACTOR")
+                .setEquipmentClassId("REACTOR_TIPO");
+        return recipe;
+    }
+
+    public static S88MasterRecipe loopRecipe(S88PlantSnapshot plant) {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("DEMO_BUCLE",
+                S88RecipeKind.CLASS);
+        recipe.setVersion("1.0");
+        EditProcedureLogicUseCase.insertStepAfter(recipe, null, "BEGIN", "U1", "U1", "T_U1",
+                "REACTOR_TIPO");
+        EditProcedureLogicUseCase.insertStepAfter(recipe, null, "U1", "U2", "U2", "T_U2",
+                "REACTOR_TIPO");
+        S88ProcedureLink toEnd = null;
+        for (S88ProcedureLink link : recipe.getProcedureLogic().getLinks()) {
+            if (names(link.getFrom(), "T1") && names(link.getTo(), "END")) {
+                toEnd = link;
+                break;
+            }
+        }
+        if (toEnd == null) {
+            throw new IllegalStateException("The loop fixture did not get a line to END");
+        }
+        recipe.getProcedureLogic().removeLink(toEnd);
+        S88ProcedureLink loop = new S88ProcedureLink("L_LOOP");
+        loop.addFrom(S88IdRef.transition("T1"));
+        loop.addTo(S88IdRef.transition("T_U1"));
+        recipe.getProcedureLogic().addLink(loop);
+        recipe.getProcedureLogic().addLink(toEnd);
+        return recipe;
+    }
+
+    private static S88MasterRecipe branchableRecipe(String id) {
+        S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute(id, S88RecipeKind.CLASS);
+        recipe.setVersion("1.0");
+        EditProcedureLogicUseCase.insertStepAfter(recipe, null, "BEGIN", "UP_REACTOR",
+                "UP_REACTOR", "T_UP", "REACTOR_TIPO");
+        return recipe;
+    }
+
+    private static boolean names(java.util.List<S88IdRef> refs, String id) {
+        return refs.stream().anyMatch(ref -> id.equals(ref.getValue()));
     }
 
     private static S88Element element(String id, String uid, S88Level level) {
