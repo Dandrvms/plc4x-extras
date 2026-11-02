@@ -71,8 +71,8 @@ class SimulationEngineTest {
         assertTrue(engine.command(BatchCommand.START).accepted());
         engine.tick();
 
-        String pending = engine.snapshot().pendingDecision();
-        assertNotNull(pending, () -> engine.drainEvents() + "\n" + engine.warnings());
+        String pending = engine.snapshot().pendingDecision().text();
+        assertFalse(pending.isEmpty(), () -> engine.drainEvents() + "\n" + engine.warnings());
         String branch = Arrays.stream(pending.split(","))
                 .filter(id -> !"T_UP".equals(id))
                 .findFirst()

@@ -36,6 +36,7 @@ import org.apache.plc4x.malbec.s88.batch.builder.PayloadValidator;
 import org.apache.plc4x.malbec.s88.batch.model.BatchCommand;
 import org.apache.plc4x.malbec.s88.batch.model.EventType;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
+import org.apache.plc4x.malbec.s88.batch.model.PendingDecision;
 import org.apache.plc4x.malbec.s88.batch.model.PreparedCondition;
 import org.apache.plc4x.malbec.s88.batch.model.PreparedSetpoint;
 import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
@@ -166,8 +167,9 @@ public final class SequenceEngine {
         return keys;
     }
 
-    public String pendingDecision() {
-        return decisions == null ? null : decisions.pendingDecision();
+    public PendingDecision pendingDecision() {
+        return decisions == null ? PendingDecision.NONE
+                : new PendingDecision(decisions.pendingCandidates());
     }
 
     private boolean processRun(ChartRun run, double simTime, boolean evaluate) {

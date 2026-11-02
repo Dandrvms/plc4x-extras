@@ -28,7 +28,7 @@ import org.apache.plc4x.malbec.s88.core.SimulationDecisionProvider;
 /** Chooses an alternative branch automatically or waits for an operator. */
 public final class EngineDecisionProvider implements SimulationDecisionProvider {
 
-    private final DecisionMode mode;
+    private DecisionMode mode;
     private final Map<String, List<String>> pending = new LinkedHashMap<>();
     private final Map<String, String> decided = new LinkedHashMap<>();
 
@@ -38,6 +38,14 @@ public final class EngineDecisionProvider implements SimulationDecisionProvider 
 
     public DecisionMode mode() {
         return mode;
+    }
+
+    /** Switches between automatic and operator decisions without losing a pending choice. */
+    public void setMode(DecisionMode mode) {
+        this.mode = mode == null ? DecisionMode.AUTO : mode;
+        if (this.mode == DecisionMode.AUTO) {
+            pending.clear();
+        }
     }
 
     @Override
@@ -79,8 +87,8 @@ public final class EngineDecisionProvider implements SimulationDecisionProvider 
         return false;
     }
 
-    /** The candidate transitions still waiting for an operator, joined by commas. */
-    public String pendingDecision() {
+    /** The candidate transitions still waiting for an operator, without repetitions. */
+    public List<String> pendingCandidates() {
         List<String> candidates = new ArrayList<>();
         for (List<String> group : pending.values()) {
             for (String candidate : group) {
@@ -89,6 +97,12 @@ public final class EngineDecisionProvider implements SimulationDecisionProvider 
                 }
             }
         }
+        return List.copyOf(candidates);
+    }
+
+    /** The candidate transitions still waiting for an operator, joined by commas. */
+    public String pendingDecision() {
+        List<String> candidates = pendingCandidates();
         return candidates.isEmpty() ? null : String.join(",", candidates);
     }
 

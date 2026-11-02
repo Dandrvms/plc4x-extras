@@ -25,13 +25,13 @@ import java.util.Set;
 /**
  * An immutable view of a batch at one instant.
  *
- * @param pendingDecision the transitions waiting for an operator, {@code null} when none is
+ * @param pendingDecision the transitions waiting for an operator, never {@code null}
  */
 public record BatchSnapshot(String batchId, int run, BatchMode mode, ModuleState batchState,
                             boolean connected, double simTime, double wallElapsedSeconds,
                             List<StepStatus> activeSteps, Set<String> completedStepKeys,
                             Set<String> firedTransitionKeys, Map<String, VariableSample> variables,
-                            List<BatchEvent> newEvents, String pendingDecision) {
+                            List<BatchEvent> newEvents, PendingDecision pendingDecision) {
 
     public BatchSnapshot {
         activeSteps = List.copyOf(activeSteps);
@@ -39,5 +39,6 @@ public record BatchSnapshot(String batchId, int run, BatchMode mode, ModuleState
         firedTransitionKeys = Set.copyOf(firedTransitionKeys);
         variables = Map.copyOf(variables);
         newEvents = List.copyOf(newEvents);
+        pendingDecision = pendingDecision == null ? PendingDecision.NONE : pendingDecision;
     }
 }

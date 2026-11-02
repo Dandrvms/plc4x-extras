@@ -300,7 +300,12 @@ public final class GpClientProcessLink implements ProcessLink {
             if (!subscription.connected) {
                 markBad(subscription);
             } else if (!subscription.valueSeen) {
-                markBad(subscription);
+                VType rawValue = reader.getValue();
+                if (rawValue == null) {
+                    markBad(subscription);
+                } else {
+                    acceptValue(subscription, rawValue);
+                }
             }
         }
         if (event.isType(PVEvent.Type.VALUE)) {

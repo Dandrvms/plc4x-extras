@@ -42,6 +42,7 @@ import org.apache.plc4x.malbec.s88.batch.model.CommandResult;
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
 import org.apache.plc4x.malbec.s88.batch.model.EventType;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
+import org.apache.plc4x.malbec.s88.batch.model.PendingDecision;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
 import org.apache.plc4x.malbec.s88.batch.model.VariableSample;
 import org.apache.plc4x.malbec.s88.batch.simulator.time.SimClock;
@@ -56,6 +57,7 @@ public final class SimulationEngine {
 
     private static final String SIMULATOR = "simulator";
     private static final String OPERATOR = "operator";
+    private static final int MAX_EVENTS = 10_000;
 
     private final Clock clock;
     private final double maxActivationsPerStep;
@@ -66,6 +68,7 @@ public final class SimulationEngine {
 
     private BatchPayload payload;
     private SimulationProfile profile;
+    private ExitPolicy exitPolicy;
     private VariableStore store;
     private Map<String, SimulatedModule> modules = new LinkedHashMap<>();
     private EngineDecisionProvider decisions;
@@ -122,8 +125,8 @@ public final class SimulationEngine {
         payload = newPayload;
         profile = newPayload.profile() != null ? newPayload.profile()
                 : SimulationProfile.defaults();
-        load(ExitPolicy.COMPLETE_ON_EXIT, decisions == null
-                ? DecisionMode.AUTO : decisions.mode());
+        load(exitPolicy == null ? ExitPolicy.COMPLETE_ON_EXIT : exitPolicy,
+                decisions == null ? DecisionMode.AUTO : decisions.mode());
         run = currentRun;
         if (old != null && old.batchId() != null) {
             emit(EventType.BATCH_CREATED, "simulator", newPayload.batchId(), "IDLE",
@@ -132,8 +135,15 @@ public final class SimulationEngine {
     }
 
     public void tick() {
+        tick(profile.tickSeconds());
+    }
+
+    /** Advances the plant by exactly {@code dt} simulated seconds. */
+    public void tick(double dt) {
         ensureLoaded();
-        double dt = profile.tickSeconds();
+        if (dt < 0) {
+            throw new IllegalArgumentException("A tick cannot go backwards.");
+        }
         simClock.advance(dt);
         simTime = simClock.now();
         Map<String, ModuleState> before = moduleStates();
@@ -163,7 +173,7 @@ public final class SimulationEngine {
             return reject("No command was given.");
         }
         boolean allowed = command == BatchCommand.RESET
-                ? started || batchState != ModuleState.IDLE
+                ? true
                 : BatchCommands.allows(batchState, command);
         if (!allowed) {
             return reject(command + " is not valid in state " + batchState + ".");
@@ -294,6 +304,27 @@ public final class SimulationEngine {
                 sequence.firedTransitionKeys(), variables(), List.of(), sequence.pendingDecision());
     }
 
+    /** Writes a value into the simulated plant. */
+    public void setVariable(String publishedName, Object value) {
+        ensureLoaded();
+        store.set(publishedName, value, simTime);
+    }
+
+    public double tickSeconds() {
+        return profile.tickSeconds();
+    }
+
+    /** The variables of the plant, as the bridge publishes them. */
+    public Map<String, ProcessVariable> snapshotVariables() {
+        ensureLoaded();
+        return store.variables();
+    }
+
+    public void setDecisionMode(DecisionMode mode) {
+        ensureLoaded();
+        decisions.setMode(mode);
+    }
+
     public List<BatchEvent> drainEvents() {
         List<BatchEvent> drained = List.copyOf(events);
         events.clear();
@@ -328,6 +359,7 @@ public final class SimulationEngine {
         }
         warnings.clear();
         warnings.addAll(payload.warnings());
+        this.exitPolicy = exitPolicy == null ? ExitPolicy.COMPLETE_ON_EXIT : exitPolicy;
         if (payload.control() == null) {
             throw new IllegalArgumentException("A simulation needs a control recipe.");
         }
@@ -489,6 +521,9 @@ public final class SimulationEngine {
         events.add(new BatchEvent(seq++, payload == null ? null : payload.batchId(), run,
                 clock.instant(), simTime, type, source, elementId, state, oldValue, newValue,
                 details));
+        while (events.size() > MAX_EVENTS) {
+            events.remove(0);
+        }
     }
 
     private void ensureLoaded() {
