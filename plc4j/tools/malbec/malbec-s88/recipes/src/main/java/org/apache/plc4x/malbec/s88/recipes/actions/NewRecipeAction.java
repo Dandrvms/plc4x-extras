@@ -19,13 +19,15 @@
 
 package org.apache.plc4x.malbec.s88.recipes.actions;
 
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
+import java.time.Instant;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
-import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
+import org.apache.plc4x.malbec.s88.api.S88RecipeHeader;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
 import org.apache.plc4x.malbec.s88.recipes.services.S88RecipeProjectServices;
@@ -37,18 +39,12 @@ import org.openide.filesystems.FileObject;
 import org.openide.loaders.DataObject;
 import org.openide.util.ContextAwareAction;
 import org.openide.util.Lookup;
+import org.openide.windows.WindowManager;
 
 /**
  * Creates a new recipe as a file in the recipe set.
- * <p>
- * The user choose how the recipe names its equipment, by the class of it or by one particular
- * module.
  */
 public class NewRecipeAction extends AbstractAction implements ContextAwareAction {
-
-    /** What the recipe names its equipment by. */
-    private static final String BY_CLASS = "By equipment class";
-    private static final String BY_INSTANCE = "By specific equipment";
 
     private final Lookup context;
 
@@ -68,34 +64,30 @@ public class NewRecipeAction extends AbstractAction implements ContextAwareActio
             return;
         }
 
-        NotifyDescriptor.InputLine input = new NotifyDescriptor.InputLine("Recipe name:", "New Recipe");
-        input.setInputText("");
-        if (DialogDisplayer.getDefault().notify(input) != NotifyDescriptor.OK_OPTION) {
+        Window owner = WindowManager.getDefault().getMainWindow();
+        NewRecipeDialog.RecipeDraft draft = new NewRecipeDialog(owner, "").showDialog();
+        if (draft == null) {
             return;
         }
-        String name = input.getInputText() == null ? "" : input.getInputText().trim();
-        if (name.isEmpty()) {
-            DialogDisplayer.getDefault().notify(
-                    new NotifyDescriptor.Message("A recipe needs a name.", NotifyDescriptor.WARNING_MESSAGE));
+        String name = draft.name();
+        String fileName = draft.fileName();
+        FileObject existing = project.getProjectDirectory().getFileObject(fileName);
+        if (existing != null) {
+            DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
+                    "'" + fileName + "' already exists in this recipe set.",
+                    NotifyDescriptor.WARNING_MESSAGE));
             return;
         }
 
-        Object choice = DialogDisplayer.getDefault().notify(new NotifyDescriptor(
-                "Should this recipe name the class of the equipment, or one particular module?",
-                "New Recipe " + name,
-                NotifyDescriptor.QUESTION_MESSAGE,
-                NotifyDescriptor.DEFAULT_OPTION,
-                new Object[]{BY_CLASS, BY_INSTANCE, NotifyDescriptor.CANCEL_OPTION},
-                BY_CLASS));
-        if (choice == null || choice == NotifyDescriptor.CANCEL_OPTION) {
-            return;
-        }
-        S88RecipeKind kind = BY_INSTANCE.equals(choice) ? S88RecipeKind.INSTANCE : S88RecipeKind.CLASS;
-
+        FileObject recipeXml = null;
         try {
-            S88MasterRecipe recipe =
-                    CreateMasterRecipeUseCase.execute(name, kind);
-            FileObject recipeXml = project.getProjectDirectory().createData(name + ".xml");
+            S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute(name, draft.kind());
+            recipeXml = project.getProjectDirectory().createData(fileName);
+            S88RecipeHeader header = S88RecipeHeader.created(
+                    System.getProperty("user.name", S88RecipeHeader.UNKNOWN_AUTHOR),
+                    draft.description(), draft.kind(), S88RecipeHeader.PLANT_FILE, fileName,
+                    Instant.now());
+            header.applyTo(recipe);
             S88RecipeProjectServices.createRepository("xml", new FileObjectStorage(recipeXml))
                     .saveRecipe(recipe);
             project.getProjectDirectory().refresh();
@@ -106,6 +98,12 @@ public class NewRecipeAction extends AbstractAction implements ContextAwareActio
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(
                     "Recipe " + name + " created.", NotifyDescriptor.INFORMATION_MESSAGE));
         } catch (IOException | IllegalArgumentException ex) {
+            if (recipeXml != null) {
+                try {
+                    recipeXml.delete();
+                } catch (IOException ignored) {
+                }
+            }
             DialogDisplayer.getDefault().notify(new NotifyDescriptor.Message(ex.getMessage(), NotifyDescriptor.WARNING_MESSAGE));
         }
     }

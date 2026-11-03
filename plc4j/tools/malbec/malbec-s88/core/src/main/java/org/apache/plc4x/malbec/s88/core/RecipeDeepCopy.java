@@ -98,6 +98,8 @@ public class RecipeDeepCopy {
         copy.setId(source.getId());
         copy.setVersion(source.getVersion());
         copy.setVersionDate(source.getVersionDate());
+        copy.setLastModifiedDate(source.getLastModifiedDate());
+        copy.setAuthor(source.getAuthor());
         source.getDescriptions().forEach(copy::addDescription);
         for (S88EquipmentRequirement requirement : source.getEquipmentRequirements()) {
             copy.addEquipmentRequirement(copyRequirement(requirement));

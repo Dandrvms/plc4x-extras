@@ -44,6 +44,8 @@ public abstract class S88Recipe {
     private String id;
     private String version;
     private String versionDate;
+    private String lastModifiedDate;
+    private String author;
     private final List<String> descriptions = new ArrayList<>();
     private final List<S88EquipmentRequirement> equipmentRequirements = new ArrayList<>();
     /**
@@ -110,6 +112,42 @@ public abstract class S88Recipe {
 
     public void setVersionDate(String versionDate) {
         this.versionDate = versionDate;
+    }
+
+    /** The date the recipe file was last saved with changes. */
+    public String getLastModifiedDate() {
+        return lastModifiedDate;
+    }
+
+    public void setLastModifiedDate(String lastModifiedDate) {
+        this.lastModifiedDate = lastModifiedDate;
+    }
+
+    /** The user who created the recipe. */
+    public String getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
+    }
+
+    /** The name of the plant.xml the recipe was written against. */
+    public String getAreaModelFile() {
+        return otherInformationValue(S88OtherInformation.AREA_MODEL_FILE);
+    }
+
+    public void setAreaModelFile(String areaModelFile) {
+        setOtherInformationValue(S88OtherInformation.AREA_MODEL_FILE, areaModelFile);
+    }
+
+    /** The recipe file name, with its extension. */
+    public String getFileName() {
+        return otherInformationValue(S88OtherInformation.FILE_NAME);
+    }
+
+    public void setFileName(String fileName) {
+        setOtherInformationValue(S88OtherInformation.FILE_NAME, fileName);
     }
 
     public List<String> getDescriptions() {
@@ -253,6 +291,26 @@ public abstract class S88Recipe {
         S88OtherInformation replacement = S88ChartLayout.entryFor(layout);
         if (replacement != null) {
             addOtherInformation(replacement);
+        }
+    }
+
+    private String otherInformationValue(String id) {
+        S88OtherInformation info = S88OtherInformation.find(otherInformation, id);
+        return info == null ? null : info.getFirstValue();
+    }
+
+    private void setOtherInformationValue(String id, String value) {
+        String current = otherInformationValue(id);
+        if (java.util.Objects.equals(current, value)) {
+            return;
+        }
+        for (S88OtherInformation info : new ArrayList<>(otherInformation)) {
+            if (id.equalsIgnoreCase(info.getId())) {
+                removeOtherInformation(info);
+            }
+        }
+        if (value != null && !value.isBlank()) {
+            addOtherInformation(S88OtherInformation.of(id, value));
         }
     }
 

@@ -57,6 +57,12 @@ public static final String EQUIPMENT_UID = "EquipmentUID";
      */
     public static final String RECIPE_KIND = "RecipeKind";
 
+    /** The name of the plant.xml the recipe was written against. */
+    public static final String AREA_MODEL_FILE = "AreaModelFile";
+
+    /** The recipe file name, with its extension. */
+    public static final String FILE_NAME = "FileName";
+
     /**
      * Where the elements of a chart are drawn, held as the value of an entry with this id. Purely
      * presentational: a recipe that carries no layout still describes the same process and can be

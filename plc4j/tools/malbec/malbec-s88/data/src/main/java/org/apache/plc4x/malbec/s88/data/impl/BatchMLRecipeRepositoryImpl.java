@@ -51,9 +51,11 @@ import org.mesa.xml.b2MML.ConstraintType;
 import org.mesa.xml.b2MML.DescriptionType;
 import org.mesa.xml.b2MML.FormulaType;
 import org.mesa.xml.b2MML.FromIDType;
+import org.mesa.xml.b2MML.HeaderType;
 import org.mesa.xml.b2MML.IdentifierType;
 import org.mesa.xml.b2MML.LinkType;
 import org.mesa.xml.b2MML.MasterRecipeType;
+import org.mesa.xml.b2MML.ModificationLogType;
 import org.mesa.xml.b2MML.OtherInformationType;
 import org.mesa.xml.b2MML.ProcedureLogicType;
 import org.mesa.xml.b2MML.RecipeElementType;
@@ -89,10 +91,9 @@ import java.util.function.Consumer;
  * instance, and the class a step of a class recipe applies to. The names of those entries are
  * constants, so there is one place that says what they mean.
  * <p>
- * <b>Two things are not carried, on purpose.</b> The layout of a chart, meaning where its boxes and
- * bars were drawn, has no room on a step or a bar in the format, and only the recipe and its steps
- * have somewhere free. And (for now) the header, which is where the format keeps who wrote a recipe and who
- * approved it.
+ * The layout of a chart, meaning where its boxes and bars were drawn, has no room on a step or a
+ * bar in the format, so it is carried in {@code OtherInformation}. The header keeps who wrote the
+ * recipe and when it was last saved.
  */
 public class BatchMLRecipeRepositoryImpl implements S88RecipeRepository {
 
@@ -184,6 +185,7 @@ public class BatchMLRecipeRepositoryImpl implements S88RecipeRepository {
         recipe.setVersion(identifierOf(xml.getVersion()));
         recipe.setVersionDate(dateOf(xml.getVersionDate()));
         readDescriptions(xml.getDescriptionArray(), recipe::addDescription);
+        readHeader(xml, recipe);
         readRequirements(xml.getEquipmentRequirementArray(), recipe::addEquipmentRequirement);
         if (xml.isSetFormula()) {
             for (BatchParameterType parameter : xml.getFormula().getParameterArray()) {
@@ -199,14 +201,39 @@ public class BatchMLRecipeRepositoryImpl implements S88RecipeRepository {
         readOtherInformation(xml.getOtherInformationArray(), recipe::addOtherInformation);
     }
 
+    private void readHeader(MasterRecipeType xml, S88MasterRecipe recipe) {
+        HeaderType header = xml.getHeader();
+        if (header == null || header.sizeOfModificationLogArray() == 0) {
+            return;
+        }
+        ModificationLogType log =
+                header.getModificationLogArray(header.sizeOfModificationLogArray() - 1);
+        recipe.setLastModifiedDate(dateOf(log.getModifiedDate()));
+        recipe.setAuthor(identifierOf(log.getAuthor()));
+    }
+
     private void writeMaster(S88MasterRecipe recipe, MasterRecipeType xml) {
         writeIdentity(recipe, xml::addNewID, xml::addNewVersion, xml::addNewVersionDate);
         recipe.getDescriptions().forEach(text -> xml.addNewDescription().setStringValue(text));
+        writeHeader(recipe, xml);
         recipe.getEquipmentRequirements().forEach(r -> writeRequirement(r, xml.addNewEquipmentRequirement()));
         writeFormula(recipe, xml::addNewFormula);
         writeChart(recipe, xml::addNewProcedureLogic);
         recipe.getRecipeElements().forEach(element -> writeElement(element, xml.addNewRecipeElement()));
         writeOtherInformation(recipe.getOtherInformation(), xml::addNewOtherInformation);
+    }
+
+    private void writeHeader(S88MasterRecipe recipe, MasterRecipeType xml) {
+        if (recipe.getLastModifiedDate() == null && recipe.getAuthor() == null) {
+            return;
+        }
+        ModificationLogType log = xml.addNewHeader().addNewModificationLog();
+        if (recipe.getLastModifiedDate() != null && !recipe.getLastModifiedDate().isBlank()) {
+            log.addNewModifiedDate().setCalendarValue(calendarOf(recipe.getLastModifiedDate()));
+        }
+        if (recipe.getAuthor() != null && !recipe.getAuthor().isBlank()) {
+            log.addNewAuthor().setStringValue(recipe.getAuthor());
+        }
     }
 
     private void writeIdentity(S88MasterRecipe recipe,

@@ -758,7 +758,7 @@ class RecipeEditorModelTest {
     }
 
     @Test
-    void savingAfterAnEditAndUndoingItLeavesTheFileAsItWas() throws IOException {
+    void savingAfterAnEditAndUndoingItLeavesTheRecipeContentAsItWas() throws IOException {
         RecipeBytes.Memory storage = RecipeBytes.holding(SfcFixtures.lineal());
         byte[] onDisk = storage.written();
         RecipeEditorModel model = RecipeBytes.openOn(storage);
@@ -768,9 +768,50 @@ class RecipeEditorModelTest {
         model.getUndoRedo().undo();
         model.save();
 
-        assertArrayEquals(onDisk, storage.written(),
-                "an edit that was made and then taken back has left nothing on the file, and "
-                        + RecipeBytes.difference(onDisk, storage.written()));
+        S88MasterRecipe saved = RecipeBytes.openOn(storage).getRecipe();
+        saved.setVersion(null);
+        saved.setVersionDate(null);
+        saved.setLastModifiedDate(null);
+        saved.setAuthor(null);
+        saved.setAreaModelFile(null);
+        saved.setFileName(null);
+
+        assertArrayEquals(onDisk, RecipeBytes.of(saved),
+                "an edit that was made and then taken back has left the recipe content as it was, "
+                        + "and only the header was added by the save, and "
+                        + RecipeBytes.difference(onDisk, RecipeBytes.of(saved)));
+    }
+
+    @Test
+    void savingAChangeWritesTheHeaderAndUpdatesTheLastModification() throws IOException {
+        RecipeBytes.Memory storage = RecipeBytes.holding(SfcFixtures.lineal());
+        RecipeEditorModel model = RecipeBytes.openOn(storage);
+        String before = model.header().lastModifiedDate();
+
+        addStep(model, "QUENCH");
+        model.save();
+
+        S88MasterRecipe saved = RecipeBytes.openOn(storage).getRecipe();
+        assertEquals("1.0", saved.getVersion());
+        assertNotNull(saved.getVersionDate());
+        assertEquals("plant.xml", saved.getAreaModelFile());
+        assertEquals(System.getProperty("user.name", "unknown"), saved.getAuthor());
+        assertNotNull(saved.getLastModifiedDate());
+        assertFalse(java.util.Objects.equals(before, saved.getLastModifiedDate()));
+    }
+
+    @Test
+    void undoingAnEditKeepsTheHeaderOfTheLastSave() throws IOException {
+        RecipeBytes.Memory storage = RecipeBytes.holding(SfcFixtures.lineal());
+        RecipeEditorModel model = RecipeBytes.openOn(storage);
+        addStep(model, "QUENCH");
+        model.save();
+        String lastModified = model.header().lastModifiedDate();
+
+        model.getUndoRedo().undo();
+
+        assertEquals(lastModified, model.header().lastModifiedDate());
+        assertEquals(lastModified, model.getRecipe().getLastModifiedDate());
     }
 
     /**

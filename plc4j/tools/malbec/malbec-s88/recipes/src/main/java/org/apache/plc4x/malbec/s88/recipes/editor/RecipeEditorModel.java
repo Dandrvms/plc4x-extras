@@ -19,6 +19,7 @@
 package org.apache.plc4x.malbec.s88.recipes.editor;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -32,6 +33,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88RecipeHeader;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
@@ -59,6 +61,7 @@ public final class RecipeEditorModel {
     private final List<Consumer<String>> chartSelectionListeners = new CopyOnWriteArrayList<>();
     private final RecipeUndoRedo undoRedo = new RecipeUndoRedo();
     private S88MasterRecipe recipe;
+    private S88RecipeHeader header;
     private int savedPosition;
 
     /** A node the chart should pick as soon as it is drawn again. */
@@ -81,6 +84,7 @@ public final class RecipeEditorModel {
         this.recipe = recipe;
         this.repository = repository;
         this.plant = plant;
+        this.header = S88RecipeHeader.of(recipe);
         undoRedo.onApplied(this::fireChanged);
     }
 
@@ -197,6 +201,11 @@ public final class RecipeEditorModel {
      */
     public S88MasterRecipe getRecipe() {
         return recipe;
+    }
+
+    /** The header of the recipe, as it was read or last saved. */
+    public S88RecipeHeader header() {
+        return header;
     }
 
     /**
@@ -431,7 +440,24 @@ public final class RecipeEditorModel {
 
 
     public void save() throws IOException {
-        repository.saveRecipe(recipe);
+        if (!isModified()) {
+            return;
+        }
+        S88RecipeHeader previous = header;
+        String fileName = recipeFile == null ? null : recipeFile.getNameExt();
+        Instant now = Instant.now();
+        S88RecipeHeader saved = header.withDefaults(now,
+                System.getProperty("user.name", S88RecipeHeader.UNKNOWN_AUTHOR))
+                .saved(now, fileName);
+        saved.applyTo(recipe);
+        try {
+            repository.saveRecipe(recipe);
+        } catch (RuntimeException failure) {
+            previous.applyTo(recipe);
+            header = previous;
+            throw failure;
+        }
+        header = saved;
         savedPosition = undoRedo.position();
         fireChanged();
     }
@@ -443,6 +469,7 @@ public final class RecipeEditorModel {
             throw new IOException("'" + name(recipeFile) + "' no longer holds a recipe.");
         }
         recipe = reloaded;
+        header = S88RecipeHeader.of(reloaded);
         undoRedo.discardAll();
         savedPosition = undoRedo.position();
         fireChanged();
@@ -451,6 +478,7 @@ public final class RecipeEditorModel {
 
     private void replaceRecipe(S88MasterRecipe other) {
         this.recipe = other;
+        header.applyTo(other);
     }
 
 
