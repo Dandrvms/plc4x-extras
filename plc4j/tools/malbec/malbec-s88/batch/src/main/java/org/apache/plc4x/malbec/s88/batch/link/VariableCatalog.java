@@ -92,6 +92,36 @@ public final class VariableCatalog {
         return definitions;
     }
 
+    /** @return the variables the plant reports for the modules of the payload */
+    public static Map<String, Definition> reportsOf(BatchPayload payload) {
+        Map<String, Definition> definitions = new LinkedHashMap<>();
+        if (payload == null || payload.plant() == null) {
+            return definitions;
+        }
+        S88PlantSnapshot plant = payload.plant();
+        Set<String> moduleIds = new LinkedHashSet<>(payload.moduleOfStep().values());
+        for (String unitId : payload.unitOfStep().values()) {
+            moduleIds.add(unitId);
+        }
+        for (String moduleId : moduleIds) {
+            S88Element element = moduleId == null ? null : plant.findById(moduleId).orElse(null);
+            if (element == null) {
+                continue;
+            }
+            addDefinitions(plant, element, S88PlantModel.REPORTS, definitions);
+            if (element.getLevel() == S88Level.EQUIPMENTMODULE) {
+                for (PlatformVariable variable : PlatformVariable.values()) {
+                    if (variable.isReport()) {
+                        String name = variable.publishedName(moduleId);
+                        definitions.putIfAbsent(name, new Definition(name, variable.dataType(),
+                                null, enumerationValues(null, variable.enumeration())));
+                    }
+                }
+            }
+        }
+        return definitions;
+    }
+
     /** @return the writable variables a recipe sends to the plant */
     public static Map<String, Definition> parametersOf(BatchPayload payload) {
         Map<String, Definition> parameters = new LinkedHashMap<>();

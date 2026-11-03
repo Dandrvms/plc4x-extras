@@ -392,7 +392,7 @@ public final class SimulationEngine {
         simTime = 0;
         simClock.reset();
         wallStart = clock.instant();
-        run = 0;
+        run = 1;
         batchState = ModuleState.IDLE;
         started = false;
         sequenceComplete = false;

@@ -103,6 +103,7 @@ public final class LinkBatchClient implements BatchClient {
     private boolean linkWasLost;
     private boolean closed;
     private boolean connecting;
+    private boolean subscribed;
     private int run;
     private double simTime;
     private long eventSequence;
@@ -116,7 +117,7 @@ public final class LinkBatchClient implements BatchClient {
     public void load(BatchPayload newPayload) {
         Objects.requireNonNull(newPayload, "payload");
         synchronized (lock) {
-            if (connecting) {
+            if (connecting || subscribed) {
                 throw new IllegalStateException("Disconnect before loading another batch.");
             }
             this.payload = newPayload;
@@ -144,6 +145,7 @@ public final class LinkBatchClient implements BatchClient {
             this.firedKeys = Set.of();
             this.linkStatus = LinkStatus.DISCONNECTED;
             this.connected = false;
+            this.subscribed = false;
             this.linkWasLost = false;
             this.run = 0;
             this.simTime = 0;
@@ -163,10 +165,11 @@ public final class LinkBatchClient implements BatchClient {
             if (payload == null) {
                 throw new IllegalStateException("Load a batch before connecting.");
             }
-            if (connecting) {
+            if (connecting || subscribed) {
                 return;
             }
             connecting = true;
+            subscribed = true;
             link.addStatusListener(this::onStatus);
             for (Map.Entry<String, VariableCatalog.Definition> entry : catalog.entrySet()) {
                 subscribe(entry.getKey(), entry.getValue().type());
@@ -254,6 +257,7 @@ public final class LinkBatchClient implements BatchClient {
             }
             closed = true;
             connecting = false;
+            subscribed = false;
             connected = false;
             linkStatus = LinkStatus.DISCONNECTED;
             handles = List.copyOf(subscriptions.values());
@@ -354,6 +358,21 @@ public final class LinkBatchClient implements BatchClient {
                 event(EventType.STATE_CHANGED, "module", name.substring("STATE_".length()),
                         text(sample.value()), text(previous.value()), text(sample.value()),
                         "The module changed state.");
+                dirty = true;
+            }
+            if (name.startsWith("FAILURE_") && previous != null
+                    && !Objects.equals(previous.value(), sample.value())) {
+                String moduleId = name.substring("FAILURE_".length());
+                String failure = text(sample.value());
+                if (isNonZero(failure)) {
+                    event(EventType.FAILURE_INJECTED, "module", moduleId, null,
+                            text(previous.value()), failure,
+                            "The module reported a failure.");
+                } else {
+                    event(EventType.VALUE_CHANGED, "module", moduleId, null,
+                            text(previous.value()), failure,
+                            "The module failure was cleared.");
+                }
                 dirty = true;
             }
             if (dirty) {
@@ -662,6 +681,17 @@ public final class LinkBatchClient implements BatchClient {
             }
         }
         return values;
+    }
+
+    private static boolean isNonZero(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            return Double.parseDouble(value) != 0;
+        } catch (NumberFormatException notANumber) {
+            return false;
+        }
     }
 
     private static String messageOf(Throwable error) {
