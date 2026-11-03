@@ -32,6 +32,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
+import org.apache.plc4x.malbec.s88.recipes.actions.RunSimulationAction;
 import org.netbeans.core.spi.multiview.MultiViewElement;
 import org.openide.util.Lookup;
 import org.openide.util.lookup.Lookups;

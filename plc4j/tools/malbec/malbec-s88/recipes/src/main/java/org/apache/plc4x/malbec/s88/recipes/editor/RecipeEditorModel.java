@@ -38,6 +38,7 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
+import org.apache.plc4x.malbec.s88.core.EquipmentUidMigration;
 import org.apache.plc4x.malbec.s88.core.RecipeConformance;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
@@ -182,6 +183,7 @@ public final class RecipeEditorModel {
         if (recipe == null) {
             throw new IOException("'" + name(recipeFile) + "' does not hold a recipe, or is empty.");
         }
+        EquipmentUidMigration.repair(recipe, plant);
         return new RecipeEditorModel(recipeFile, recipe, repository, plant);
     }
 

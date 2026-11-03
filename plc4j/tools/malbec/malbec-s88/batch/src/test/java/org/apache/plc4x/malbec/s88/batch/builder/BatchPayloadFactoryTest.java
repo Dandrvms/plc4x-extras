@@ -26,9 +26,12 @@ import java.util.List;
 import java.util.Map;
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
+import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.batch.DemoFixtures;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
@@ -100,6 +103,22 @@ class BatchPayloadFactoryTest {
         S88RecipeElement phase = EditProcedureLogicUseCase.insertStepAfter(recipe, unit, "BEGIN",
                 "CALENTAR", "CALENTAR", "T_CALENTAR", null);
         phase.addActualEquipmentId("CALENTADOR_1");
+        phase.addParameter(S88RecipeParameter.of("TEMPERATURA_SP_CALENTADOR_1", "72",
+                DataType.REAL, null));
+        unit.getProcedureLogic().findTransition("T_CALENTAR").orElseThrow().setCondition(
+                "CALENTADOR_1#TEMPERATURA_ACTUAL_CALENTADOR_1#>=#72");
+
+        S88Element heater = plant.findById("CALENTADOR_1").orElseThrow();
+        Map<String, Object> reports = new java.util.LinkedHashMap<>(
+                heater.getStructuredProperty(S88PlantModel.REPORTS));
+        reports.put("TEMPERATURA_ACTUAL_CALENTADOR_1",
+                Map.of("Type", "REAL", "Eng_Units/Enum", "C"));
+        heater.setProperty(S88PlantModel.REPORTS, reports);
+        Map<String, Object> parameters = new java.util.LinkedHashMap<>(
+                heater.getStructuredProperty(S88PlantModel.PARAMETERS));
+        parameters.put("TEMPERATURA_SP_CALENTADOR_1",
+                Map.of("Type", "REAL", "Eng_Units/Enum", "C"));
+        heater.setProperty(S88PlantModel.PARAMETERS, parameters);
 
         PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(recipe, plant,
                 "BATCH-INSTANCE", Map.of(), null));
@@ -108,6 +127,12 @@ class BatchPayloadFactoryTest {
         assertNotNull(result.payload());
         assertEquals("REACTOR_1", result.payload().unitOfStep().get("/UP_REACTOR"));
         assertEquals("CALENTADOR_1", result.payload().moduleOfStep().get("UP_REACTOR/CALENTAR"));
+        PreparedCondition.Comparison condition = (PreparedCondition.Comparison)
+                result.payload().conditions().get("UP_REACTOR/T_CALENTAR");
+        assertEquals("TEMPERATURA_ACTUAL_CALENTADOR_1", condition.variable());
+        PreparedSetpoint setpoint = result.payload().setpoints()
+                .get("UP_REACTOR/CALENTAR").get(0);
+        assertEquals("TEMPERATURA_SP_CALENTADOR_1", setpoint.variable());
     }
 
     @Test

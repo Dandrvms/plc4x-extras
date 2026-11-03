@@ -68,11 +68,10 @@ public class PlantSnapshotUseCase {
     }
 
     private static S88Element copyElement(S88Element source, S88Element parent) {
-        S88Element copy = new S88Element();
+        S88Element copy = new S88Element(source.getUid());
         copy.setId(source.getId());
         copy.setLevel(source.getLevel());
         copy.setParent(parent);
-        copy.setProperty(S88Element.UID_PROPERTY, source.getUid());
         copy.setCheck(source.isCheck());
         for (S88ElementClass elementClass : source.getElementClasses()) {
             copy.addElementClass(copyClass(elementClass));
@@ -107,7 +106,9 @@ public class PlantSnapshotUseCase {
     private static Map<String, Object> copyProperties(Map<String, Object> source) {
         Map<String, Object> copy = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : source.entrySet()) {
-            copy.put(entry.getKey(), copyValue(entry.getValue()));
+            if (!S88Element.UID_PROPERTY.equals(entry.getKey())) {
+                copy.put(entry.getKey(), copyValue(entry.getValue()));
+            }
         }
         return copy;
     }

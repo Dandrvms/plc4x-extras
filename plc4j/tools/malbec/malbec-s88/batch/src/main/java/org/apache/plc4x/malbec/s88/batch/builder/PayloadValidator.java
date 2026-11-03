@@ -352,8 +352,10 @@ public final class PayloadValidator {
         }
         String variable;
         try {
-            variable = BaseNameResolver.resolveVariable(module, S88PlantModel.REPORTS, baseName)
-                    .orElse(null);
+            variable = recipe.addressesByClass()
+                    ? BaseNameResolver.resolveVariable(module, S88PlantModel.REPORTS, baseName)
+                            .orElse(null)
+                    : publishedIn(module, S88PlantModel.REPORTS, baseName) ? baseName : null;
         } catch (IllegalStateException ambiguous) {
             errors.add(ambiguous.getMessage());
             return null;
@@ -411,8 +413,10 @@ public final class PayloadValidator {
         String baseName = address.getName();
         String variable;
         try {
-            variable = BaseNameResolver.resolveVariable(target, S88PlantModel.PARAMETERS, baseName)
-                    .orElse(null);
+            variable = recipe.addressesByClass()
+                    ? BaseNameResolver.resolveVariable(target, S88PlantModel.PARAMETERS, baseName)
+                            .orElse(null)
+                    : publishedIn(target, S88PlantModel.PARAMETERS, baseName) ? baseName : null;
         } catch (IllegalStateException ambiguous) {
             errors.add(ambiguous.getMessage());
             return null;
@@ -589,6 +593,14 @@ public final class PayloadValidator {
 
     private static String label(String path) {
         return path == null || path.isBlank() ? "the recipe" : "'" + path + "'";
+    }
+
+    private static boolean publishedIn(S88Element element, String container, String name) {
+        if (element == null || name == null || name.isBlank()) {
+            return false;
+        }
+        Map<String, Object> definitions = element.getStructuredProperty(container);
+        return definitions != null && definitions.containsKey(name);
     }
 
     private static Map<String, Object> definitionOf(S88Element element, String container,

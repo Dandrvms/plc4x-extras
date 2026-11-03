@@ -52,6 +52,11 @@ import org.netbeans.api.visual.widget.Widget;
  */
 public final class RecipeChartScene extends GraphScene<String, String> {
 
+    /** How one node of the chart is doing in the running batch. */
+    public enum ExecState {
+        NONE, ACTIVE, PAUSED, HELD, DONE, FAULT
+    }
+
     /**
      * Most lines a box writes, which is what its fixed height holds at the chart font size.
      */
@@ -65,6 +70,11 @@ public final class RecipeChartScene extends GraphScene<String, String> {
     private final Set<String> selection = new LinkedHashSet<>();
     private String selected;
     private boolean joining;
+    private boolean readOnly;
+    private final Map<String, ExecState> execution = new LinkedHashMap<>();
+    private final Set<String> firedTransitions = new LinkedHashSet<>();
+    private final Map<String, String> badges = new LinkedHashMap<>();
+    private boolean stale;
 
     /** The widget of each bar across the branches, by the line it is for. */
     private final Map<String, Widget> syncBars = new LinkedHashMap<>();
@@ -698,10 +708,71 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param joining whether joining is what a drag means now
      */
     void setJoining(boolean joining) {
+        joining = joining && !readOnly;
         this.joining = joining;
         if (!joining) {
             forgetJoinSource();
         }
+    }
+
+    /** Makes the chart a picture rather than something the pointer can edit. */
+    public void setReadOnly(boolean readOnly) {
+        this.readOnly = readOnly;
+        if (readOnly) {
+            setJoining(false);
+            if (!selection.isEmpty()) {
+                pickNow(Set.of());
+            }
+        }
+    }
+
+    /** Marks each node with how its step is doing in the run, without changing the recipe. */
+    public void setExecution(Map<String, ExecState> byNodeId,
+                             Set<String> firedTransitions, boolean stale) {
+        execution.clear();
+        if (byNodeId != null) {
+            execution.putAll(byNodeId);
+        }
+        this.firedTransitions.clear();
+        if (firedTransitions != null) {
+            this.firedTransitions.addAll(firedTransitions);
+        }
+        this.stale = stale;
+        repaintNodes();
+    }
+
+    /** Writes a short piece of text under the given nodes. */
+    public void setBadges(Map<String, String> textByNodeId) {
+        badges.clear();
+        if (textByNodeId != null) {
+            badges.putAll(textByNodeId);
+        }
+        repaintNodes();
+    }
+
+    private void repaintNodes() {
+        for (String id : nodes.keySet()) {
+            Widget widget = findWidget(id);
+            if (widget != null) {
+                widget.repaint();
+            }
+        }
+    }
+
+    ExecState executionOf(String node) {
+        return execution.getOrDefault(node, ExecState.NONE);
+    }
+
+    boolean wasFired(String node) {
+        return firedTransitions.contains(node);
+    }
+
+    boolean isStale() {
+        return stale;
+    }
+
+    String badgeOf(String node) {
+        return badges.get(node);
     }
 
     /** Whether a drag from one node to another joins them, which is off until it is asked for. */
@@ -742,7 +813,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     /** Which node the buttons on the toolbar will act on first, {@code null} when nothing is picked. */
-    String selected() {
+    public String selected() {
         return selected;
     }
 
@@ -943,7 +1014,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param point where the pointer is, in the coordinates of that component
      * @return the name of the node, or {@code null} when the point is on empty chart
      */
-    String nodeAtInView(JComponent view, Point point) {
+    public String nodeAtInView(JComponent view, Point point) {
         return nodeAt(convertViewToScene(point));
     }
 
@@ -965,6 +1036,9 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param add   whether to keep the nodes already picked
      */
     void pickAtInView(JComponent view, Point point, boolean add) {
+        if (readOnly) {
+            return;
+        }
         pickAt(convertViewToScene(point), add);
     }
 
@@ -1168,6 +1242,47 @@ public final class RecipeChartScene extends GraphScene<String, String> {
                 g.setColor(new Color(0, 120, 0));
                 g.setStroke(new BasicStroke(2f));
                 g.drawRect(0, 0, bounds.width - 2, bounds.height - 2);
+            }
+            paintExecution(g, bounds);
+        }
+
+        private void paintExecution(Graphics2D g, Rectangle bounds) {
+            ExecState state = chart.executionOf(id);
+            if (state != ExecState.NONE) {
+                Color color = switch (state) {
+                    case ACTIVE -> new Color(0x2F, 0x6F, 0x8F);
+                    case PAUSED, HELD -> new Color(210, 140, 0);
+                    case DONE -> new Color(100, 100, 100);
+                    case FAULT -> new Color(190, 30, 30);
+                    case NONE -> null;
+                };
+                if (color != null) {
+                    g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 45));
+                    g.fill(bounds);
+                    g.setColor(color);
+                    g.setStroke(new BasicStroke(3f));
+                    g.drawRect(1, 1, bounds.width - 3, bounds.height - 3);
+                    if (state == ExecState.DONE) {
+                        g.drawString("✓", bounds.width - 14, 14);
+                    }
+                }
+            }
+            if (chart.wasFired(id)) {
+                g.setColor(new Color(0, 110, 190));
+                g.setStroke(new BasicStroke(2.5f));
+                g.drawRect(1, 1, bounds.width - 3, bounds.height - 3);
+            }
+            if (chart.isStale()) {
+                g.setColor(new Color(120, 120, 120));
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT,
+                        BasicStroke.JOIN_MITER, 10f, new float[]{4f, 3f}, 0f));
+                g.drawRect(2, 2, bounds.width - 5, bounds.height - 5);
+            }
+            String badge = chart.badgeOf(id);
+            if (badge != null && !badge.isBlank()) {
+                g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
+                g.setColor(new Color(0x2F, 0x5B, 0x70));
+                g.drawString(badge, 4, bounds.height - 4);
             }
         }
     }

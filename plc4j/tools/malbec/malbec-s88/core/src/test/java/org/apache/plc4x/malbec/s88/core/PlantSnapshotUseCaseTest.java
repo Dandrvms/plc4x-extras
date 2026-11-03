@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -150,6 +151,26 @@ class PlantSnapshotUseCaseTest {
                         .noneMatch(S88PlantModel::isEnumerationClass),
                 "and nothing that offers classes to choose from offers an enumeration as one of"
                         + " them");
+    }
+
+    @Test
+    void theCopyKeepsTheUidOfEveryElement() {
+        S88PlantModel plant = modelOf();
+        String rootUid = plant.getRoot().getUid();
+        String heaterUid = plant.findById("CALENTAMIENTO_1").orElseThrow().getUid();
+
+        S88PlantSnapshot copy = PlantSnapshotUseCase.of(plant);
+        S88PlantSnapshot copiedAgain = PlantSnapshotUseCase.of(copy.getPlant());
+
+        assertEquals(rootUid, copy.getPlant().getRoot().getUid());
+        assertEquals(heaterUid, copy.findById("CALENTAMIENTO_1").orElseThrow().getUid());
+        assertEquals(rootUid, copiedAgain.getPlant().getRoot().getUid(),
+                "a recipe keeps naming the same plant after a restart");
+        assertEquals(heaterUid, copiedAgain.findById("CALENTAMIENTO_1").orElseThrow().getUid(),
+                "a recipe keeps naming the same equipment after a restart");
+        assertFalse(copy.findById("CALENTAMIENTO_1").orElseThrow().getProperties()
+                .containsKey(S88Element.UID_PROPERTY),
+                "the uid stays an identity and is not copied as a variable property");
     }
 
     @Test
