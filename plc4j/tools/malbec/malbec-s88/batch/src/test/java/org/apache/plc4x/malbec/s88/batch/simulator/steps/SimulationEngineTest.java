@@ -139,6 +139,24 @@ class SimulationEngineTest {
     }
 
     @Test
+    void holdsAndRestartsTheRun() {
+        SimulationEngine engine = engine(DemoFixtures.request("BATCH-HOLD"));
+
+        assertTrue(engine.command(BatchCommand.START).accepted());
+        tick(engine, 5);
+        assertTrue(engine.command(BatchCommand.HOLD).accepted());
+        engine.tick();
+
+        assertEquals(ModuleState.HELD, engine.batchState());
+        assertEquals(ModuleState.HELD, engine.moduleStates().get("BOMBA_1"));
+
+        assertTrue(engine.command(BatchCommand.RESTART).accepted());
+        engine.tick();
+        assertEquals(ModuleState.RUNNING, engine.batchState());
+        assertEquals(ModuleState.RUNNING, engine.moduleStates().get("BOMBA_1"));
+    }
+
+    @Test
     void abortsStopsAndResetsTheRun() {
         SimulationEngine engine = engine(DemoFixtures.request("BATCH-ABORT"));
 

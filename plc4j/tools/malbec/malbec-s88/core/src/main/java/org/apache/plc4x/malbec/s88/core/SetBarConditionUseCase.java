@@ -20,24 +20,18 @@ package org.apache.plc4x.malbec.s88.core;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
-import org.apache.plc4x.malbec.s88.api.S88IdRef;
-import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
@@ -46,9 +40,9 @@ import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
  * What a bar between two steps waits on.
  * <p>
  * A bar waits on a value read off a piece of equipment, and the two kinds of recipe name that
- * equipment in different words. A recipe written by class names a base name, which something will be
- * resolved against equipment later, so there is no equipment to name and none is written. A recipe
- * written for particular equipment names the equipment it reads off.
+ * equipment in different words. A recipe written by class names the class of equipment it reads
+ * from, together with a base name the class publishes. A recipe written for particular equipment
+ * names the equipment it reads off.
  * <p>
  * The value is checked against the type the plant declares.
  */
@@ -76,19 +70,21 @@ public final class SetBarConditionUseCase {
     /**
      * Makes a bar wait until a value read off equipment is as the operator says.
      *
-     * @param recipe      recipe being edited, may be {@code null} when no change event is wanted
-     * @param step        step whose chart is being drawn on, {@code null} for the chart of the recipe
-     * @param barId       bar of the chart that waits on the value
-     * @param plant       the plant the recipe is written against
-     * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
-     * @param reportName  report to read, which is a base name in a recipe by class
-     * @param operator    how the value is compared, such as {@code >}
-     * @param literal     the value it is compared against
-     * @throws IllegalArgumentException when there is no bar, no plant, no such report, or a value
-     *                                  the report can never hold
+     * @param recipe        recipe being edited, may be {@code null} when no change event is wanted
+     * @param step          step whose chart is being drawn on, {@code null} for the chart of the
+     *                      recipe
+     * @param barId         bar of the chart that waits on the value
+     * @param plant         the plant the recipe is written against
+     * @param equipmentOrClass equipment the report is read off, or the class it is read from in a
+     *                      recipe by class
+     * @param reportName    report to read, which is a base name in a recipe by class
+     * @param operator      how the value is compared, such as {@code >}
+     * @param literal       the value it is compared against
+     * @throws IllegalArgumentException when there is no bar, no plant, no class or equipment, no
+     *                                  such report, or a value the report can never hold
      */
     public static void waitUntil(S88MasterRecipe recipe, S88RecipeElement step, String barId,
-                                 S88PlantSnapshot plant, String equipmentId, String reportName,
+                                 S88PlantSnapshot plant, String equipmentOrClass, String reportName,
                                  String operator, String literal) {
         S88ProcedureLogic chart = chartOf(recipe, step, plant);
         S88ProcedureTransition bar = chart.findTransition(barId)
@@ -101,14 +97,13 @@ public final class SetBarConditionUseCase {
         }
 
         boolean byClass = recipe.addressesByClass();
-        checkValue(recipe, step, barId, plant, byClass ? null : equipmentId, reportName, literal);
+        checkValue(recipe, step, barId, plant, equipmentOrClass, reportName, literal);
 
         S88VariableAddress address = byClass
                 ? S88VariableAddress.parse(REPORTS + "/" + reportName)
                 : S88VariableAddress.of(null, reportName);
         EditProcedureLogicUseCase.setCondition(recipe, step, barId,
-                S88ConditionExpression.on(byClass ? null : equipmentId, address, how, literal)
-                        .toText());
+                S88ConditionExpression.on(equipmentOrClass, address, how, literal).toText());
     }
 
     /**
@@ -117,51 +112,54 @@ public final class SetBarConditionUseCase {
      * A dialog asks this before it closes, so that a value the report can never hold is refused where
      * the operator wrote it rather than by the edit that writes the bar.
      *
-     * @param recipe      recipe being edited, to find the class a report is read from
-     * @param owner       step whose chart holds the bar, {@code null} for the chart of the recipe
-     * @param barId       bar of that chart that waits on the report
-     * @param plant       the plant the recipe is written against
-     * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
-     * @param reportName  report the bar waits on
-     * @param literal     the value it is compared against
+     * @param recipe            recipe being edited, to find the class a report is read from
+     * @param owner             step whose chart holds the bar, {@code null} for the chart of the
+     *                          recipe
+     * @param barId             bar of that chart that waits on the report
+     * @param plant             the plant the recipe is written against
+     * @param equipmentOrClass  equipment the report is read off, or the class it is read from in a
+     *                          recipe by class
+     * @param reportName        report the bar waits on
+     * @param literal           the value it is compared against
      * @throws IllegalArgumentException when there is no such report, or a value it can never hold
      */
     public static void checkValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
-                                  S88PlantSnapshot plant, String equipmentId, String reportName,
-                                  String literal) {
-        checkLiteral(plant, reportReadable(recipe, owner, barId, plant, equipmentId, reportName),
-                literal);
+                                  S88PlantSnapshot plant, String equipmentOrClass,
+                                  String reportName, String literal) {
+        checkLiteral(plant,
+                reportReadable(recipe, plant, equipmentOrClass, reportName), literal);
     }
 
     /**
-     * The report a bar of this chart reads, settled by the recipe kind and the steps into the bar.
+     * The report a bar of this chart reads, settled by the kind of recipe.
      */
-    private static DeclaredReport reportReadable(S88MasterRecipe recipe, S88RecipeElement owner,
-                                                String barId, S88PlantSnapshot plant,
-                                                String equipmentId, String reportName) {
+    private static DeclaredReport reportReadable(S88MasterRecipe recipe, S88PlantSnapshot plant,
+                                                String equipmentOrClass, String reportName) {
         return recipe != null && recipe.addressesByClass()
-                ? reportOfAClassThisBarCanRead(recipe, owner, barId, plant, reportName)
-                : reportOf(plant, equipmentId, reportName);
+                ? reportOfClass(plant, equipmentOrClass, reportName)
+                : reportOf(plant, equipmentOrClass, reportName);
     }
 
     /**
      * The values a bar waiting on this report has to be given, or nothing when the report is not an
      * enumeration and takes whatever a person writes.
      *
-     * @param plant       the plant the recipe is written against
-     * @param recipe      recipe being edited, to find the class a report is read from
-     * @param owner       step whose chart holds the bar, {@code null} for the chart of the recipe
-     * @param barId       bar of that chart that waits on the report
-     * @param equipmentId equipment the report is read off, {@code null} for a recipe by class
-     * @param reportName  report the bar waits on
+     * @param plant             the plant the recipe is written against
+     * @param recipe            recipe being edited, to find the class a report is read from
+     * @param owner             step whose chart holds the bar, {@code null} for the chart of the
+     *                          recipe
+     * @param barId             bar of that chart that waits on the report
+     * @param equipmentOrClass  equipment the report is read off, or the class it is read from in a
+     *                          recipe by class
+     * @param reportName        report the bar waits on
      * @return the values it allows, empty when there are none to offer
      */
     public static List<String> allowedValues(S88MasterRecipe recipe, S88RecipeElement owner,
-                                             String barId, S88PlantSnapshot plant, String equipmentId,
-                                             String reportName) {
+                                             String barId, S88PlantSnapshot plant,
+                                             String equipmentOrClass, String reportName) {
         DeclaredReport report;
         try {
-            report = reportReadable(recipe, owner, barId, plant, equipmentId, reportName);
+            report = reportReadable(recipe, plant, equipmentOrClass, reportName);
         } catch (IllegalArgumentException notThere) {
             return List.of();
         }
@@ -206,6 +204,32 @@ public final class SetBarConditionUseCase {
     }
 
     /**
+     * The classes of equipment a bar of a chart can wait on, in the order the plant declares them.
+     * <p>
+     * Only the classes of the level the steps of that chart work on, and only those that publish
+     * something, because a class with no report cannot be waited on.
+     *
+     * @param plant the plant the recipe is written against
+     * @param owner step whose chart holds the bar, {@code null} for the chart of the recipe
+     * @return the names of the classes that publish reports
+     */
+    public static List<String> classesWithReports(S88PlantSnapshot plant, S88RecipeElement owner) {
+        S88Level level = RecipeLevels.boundTo(owner);
+        if (plant == null || level == null) {
+            return List.of();
+        }
+        List<String> found = new ArrayList<>();
+        for (S88ElementClass elementClass : plant.getClassesForChildLevel(level)) {
+            if (elementClass != null && elementClass.getName() != null
+                    && !reports(elementClass.getProperties()).isEmpty()
+                    && !found.contains(elementClass.getName())) {
+                found.add(elementClass.getName());
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    /**
      * The reports a class of equipment publishes, which are the base names a recipe by class waits on.
      *
      * @param plant     the plant the recipe is written against
@@ -229,87 +253,19 @@ public final class SetBarConditionUseCase {
         return List.copyOf(equipmentOf(plant, equipmentId).reports().keySet());
     }
 
-    /**
-     * The base names a recipe by class can wait on, gathered from the classes of equipment its steps
-     * stand for.
-     * <p>
-     * The classes of the steps leading into the bar come first, because those are the ones the bar
-     * most likely reads. The rest of the recipe follows, so that a bar can be pointed at a piece of
-     * equipment somewhere else on purpose.
-     *
-     * @param recipe recipe being edited
-     * @param owner  step whose chart holds the bar, {@code null} for the chart of the recipe
-     * @param barId  bar of that chart that waits on the report
-     * @param plant  the plant the recipe is written against
-     * @return the base names, in the order the classes declare them
-     */
-    public static List<String> reportsToWaitOn(S88MasterRecipe recipe, S88RecipeElement owner,
-                                               String barId, S88PlantSnapshot plant) {
-        Map<String, DeclaredReport> byName = new LinkedHashMap<>();
-        for (String className : classesBefore(recipe, owner, barId)) {
-            byName.putAll(classOf(plant, className).reports());
+    private static DeclaredReport reportOfClass(S88PlantSnapshot plant, String className,
+                                                String reportName) {
+        if (className == null || className.isBlank()) {
+            throw new IllegalArgumentException("A recipe written by class has to say which class of"
+                    + " equipment the transition reads from, because two of them can publish a"
+                    + " report of the same name.");
         }
-        for (String className : classesUsedBy(recipe)) {
-            byName.putAll(classOf(plant, className).reports());
+        DeclaredReport report = classOf(plant, className).reports().get(reportName);
+        if (report == null) {
+            throw new IllegalArgumentException(className + " does not publish a report called '"
+                    + reportName + "'.");
         }
-        return List.copyOf(byName.keySet());
-    }
-
-    /**
-     * A report a bar of a recipe by class reads, taken off the classes of the steps leading into it.
-     * <p>
-     * Two classes of the recipe can publish a report of the same name and not of the same type, so
-     * the class the bar reads from decides which of the two is meant. The classes leading into the
-     * bar settle that; only when none of them publishes the name is the rest of the recipe looked
-     * through, which keeps a bar pointed at another piece of equipment working.
-     */
-    private static DeclaredReport reportOfAClassThisBarCanRead(S88MasterRecipe recipe,
-                                                               S88RecipeElement owner, String barId,
-                                                               S88PlantSnapshot plant,
-                                                               String reportName) {
-        for (String className : classesBefore(recipe, owner, barId)) {
-            DeclaredReport report = classOf(plant, className).reports().get(reportName);
-            if (report != null) {
-                return report;
-            }
-        }
-        for (String className : classesUsedBy(recipe)) {
-            DeclaredReport report = classOf(plant, className).reports().get(reportName);
-            if (report != null) {
-                return report;
-            }
-        }
-        throw new IllegalArgumentException(reportName + " is not a report published by any class of"
-                + " equipment this recipe uses, so there is nothing to wait on called that.");
-    }
-
-    /**
-     * The classes of equipment the steps leading into a bar stand for, in the order they appear.
-     * <p>
-     * A step is read off the chart, and the class it stands for off the element the chart names. A
-     * step that names no class contributes nothing, which is the case for the start and the stop.
-     */
-    private static Set<String> classesBefore(S88MasterRecipe recipe, S88RecipeElement owner,
-                                             String barId) {
-        Set<String> names = new LinkedHashSet<>();
-        S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, owner);
-        if (recipe == null || chart == null || barId == null) {
-            return names;
-        }
-        for (S88ProcedureLink link : chart.linksTouching(S88IdRef.transition(barId))) {
-            for (S88IdRef ref : link.getFrom()) {
-                if (ref.getType() != S88IdRefType.STEP || !ref.isInternal()) {
-                    continue;
-                }
-                S88ProcedureStep step = chart.findStep(ref.getValue()).orElse(null);
-                S88RecipeElement element = step == null ? null
-                        : recipe.findElement(step.getRecipeElementId()).orElse(null);
-                if (element != null && element.getEquipmentClassId() != null) {
-                    names.add(element.getEquipmentClassId());
-                }
-            }
-        }
-        return names;
+        return report;
     }
 
     private static DeclaredReport reportOf(S88PlantSnapshot plant, String equipmentId,
@@ -352,22 +308,6 @@ public final class SetBarConditionUseCase {
 
     /** What the plant says about one report: its type, and its unit or the name of its enumeration. */
     private record DeclaredReport(String type, String unitsOrEnum) {
-    }
-
-    /**
-     * The classes of equipment the steps of a recipe stand for, in the order they first appear.
-     */
-    private static Set<String> classesUsedBy(S88MasterRecipe recipe) {
-        Set<String> names = new LinkedHashSet<>();
-        if (recipe == null) {
-            return names;
-        }
-        for (S88RecipeElement element : recipe.getAllElements()) {
-            if (element.getEquipmentClassId() != null) {
-                names.add(element.getEquipmentClassId());
-            }
-        }
-        return names;
     }
 
     /**

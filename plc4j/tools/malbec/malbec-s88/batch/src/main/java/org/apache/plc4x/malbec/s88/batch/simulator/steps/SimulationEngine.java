@@ -82,6 +82,8 @@ public final class SimulationEngine {
     private boolean sequenceComplete;
     private boolean abortRequested;
     private boolean stopRequested;
+    private boolean pauseRequested;
+    private boolean holdRequested;
     private boolean loaded;
 
     public SimulationEngine(BatchPayload payload, SimulationProfile profile) {
@@ -152,9 +154,8 @@ public final class SimulationEngine {
         }
         detectExternalFailures();
         emitModuleStateChanges(before);
-        ModuleState beforeSequence = BatchStateDeriver.derive(started, sequenceComplete,
-                abortRequested, stopRequested, before.values());
-        sequence.tick(simTime, beforeSequence == ModuleState.RUNNING);
+        sequence.tick(simTime, batchState == ModuleState.RUNNING
+                && !pauseRequested && !holdRequested);
         if (sequence.abortRequested() && !abortRequested) {
             abortRequested = true;
             decisions.clear();
@@ -164,7 +165,7 @@ public final class SimulationEngine {
                 && sequence.root().isComplete();
         ModuleState after = BatchStateDeriver.derive(started, sequenceComplete, abortRequested,
                 stopRequested, moduleStates().values());
-        transitionTo(after);
+        transitionTo(requestedState(after));
     }
 
     public CommandResult command(BatchCommand command) {
@@ -188,6 +189,8 @@ public final class SimulationEngine {
                 sequenceComplete = false;
                 abortRequested = false;
                 stopRequested = false;
+                pauseRequested = false;
+                holdRequested = false;
                 sequence.start();
                 transitionTo(ModuleState.RUNNING);
                 emit(EventType.BATCH_STARTED, "batch", payload.batchId(), "RUNNING",
@@ -199,6 +202,8 @@ public final class SimulationEngine {
                     return reject("The batch has not started.");
                 }
                 sendToActiveModules(BatchCommand.RESUME, simTime);
+                pauseRequested = false;
+                holdRequested = false;
                 transitionTo(ModuleState.RUNNING);
                 result = new CommandResult(true, null, batchState);
             }
@@ -207,6 +212,8 @@ public final class SimulationEngine {
                     return reject("The batch has not started.");
                 }
                 sendToActiveModules(BatchCommand.PAUSE, simTime);
+                pauseRequested = true;
+                holdRequested = false;
                 transitionTo(ModuleState.PAUSING);
                 result = new CommandResult(true, null, batchState);
             }
@@ -215,6 +222,8 @@ public final class SimulationEngine {
                     return reject("The batch has not started.");
                 }
                 sendToActiveModules(BatchCommand.HOLD, simTime);
+                pauseRequested = false;
+                holdRequested = true;
                 transitionTo(ModuleState.HOLDING);
                 result = new CommandResult(true, null, batchState);
             }
@@ -224,6 +233,8 @@ public final class SimulationEngine {
                 }
                 abortRequested = true;
                 stopRequested = false;
+                pauseRequested = false;
+                holdRequested = false;
                 decisions.clear();
                 sendToActiveModules(BatchCommand.ABORT, simTime);
                 transitionTo(ModuleState.ABORTING);
@@ -234,6 +245,8 @@ public final class SimulationEngine {
                     return reject("The batch has not started.");
                 }
                 stopRequested = true;
+                pauseRequested = false;
+                holdRequested = false;
                 decisions.clear();
                 sendToActiveModules(BatchCommand.STOP, simTime);
                 transitionTo(ModuleState.STOPPING);
@@ -244,6 +257,7 @@ public final class SimulationEngine {
                     return reject("The batch has not started.");
                 }
                 sendToActiveModules(BatchCommand.RESTART, simTime);
+                holdRequested = false;
                 transitionTo(ModuleState.RESTARTING);
                 result = new CommandResult(true, null, batchState);
             }
@@ -398,6 +412,8 @@ public final class SimulationEngine {
         sequenceComplete = false;
         abortRequested = false;
         stopRequested = false;
+        pauseRequested = false;
+        holdRequested = false;
         loaded = true;
     }
 
@@ -419,6 +435,8 @@ public final class SimulationEngine {
         sequenceComplete = false;
         abortRequested = false;
         stopRequested = false;
+        pauseRequested = false;
+        holdRequested = false;
         batchState = ModuleState.IDLE;
         if (old != ModuleState.IDLE) {
             emit(EventType.STATE_CHANGED, "batch", payload.batchId(), "IDLE", old.name(),
@@ -470,6 +488,23 @@ public final class SimulationEngine {
                         "Module '" + entry.getKey() + "' changed state.");
             }
         }
+    }
+
+    private ModuleState requestedState(ModuleState derived) {
+        if (derived == ModuleState.COMPLETE || derived == ModuleState.ABORTING
+                || derived == ModuleState.ABORTED || derived == ModuleState.STOPPING
+                || derived == ModuleState.STOPPED) {
+            return derived;
+        }
+        if (pauseRequested) {
+            return moduleStates().values().stream().anyMatch(state -> state == ModuleState.PAUSING)
+                    ? ModuleState.PAUSING : ModuleState.PAUSED;
+        }
+        if (holdRequested) {
+            return moduleStates().values().stream().anyMatch(state -> state == ModuleState.HOLDING)
+                    ? ModuleState.HOLDING : ModuleState.HELD;
+        }
+        return derived;
     }
 
     private void transitionTo(ModuleState next) {

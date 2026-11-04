@@ -30,7 +30,9 @@ import org.apache.plc4x.malbec.s88.batch.model.BatchCommand;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
+import org.apache.plc4x.malbec.s88.batch.model.TimeUnits;
 import org.apache.plc4x.malbec.s88.batch.simulator.values.FollowRuleHeuristic;
+import org.apache.plc4x.malbec.s88.batch.simulator.values.ProcessVariable;
 import org.apache.plc4x.malbec.s88.batch.simulator.values.VariableStore;
 import org.apache.plc4x.malbec.s88.core.BaseNameResolver;
 
@@ -255,10 +257,15 @@ public final class SimulatedModule {
             Double value = store.numeric(name);
             if (value != null && value > 0) {
                 durationExplicit = true;
-                return value;
+                return durationSeconds(name, value);
             }
         }
         return profile.defaultPhaseSeconds();
+    }
+
+    private double durationSeconds(String name, double value) {
+        ProcessVariable variable = store.get(name);
+        return TimeUnits.toSeconds(value, variable == null ? null : variable.unit());
     }
 
     private String resolve(String container, String baseName) {
@@ -301,5 +308,12 @@ public final class SimulatedModule {
                 (double) stepIndex, simTime);
         store.setIfPresent(PlatformVariable.STEP_COUNT.publishedName(moduleId),
                 (double) stepCount, simTime);
+        String elapsedName = resolve(S88PlantModel.REPORTS, "TIEMPO_TRANSCURRIDO");
+        if (elapsedName != null) {
+            ProcessVariable elapsedVariable = store.get(elapsedName);
+            double value = TimeUnits.fromSeconds(elapsed,
+                    elapsedVariable == null ? null : elapsedVariable.unit());
+            store.setIfPresent(elapsedName, value, simTime);
+        }
     }
 }

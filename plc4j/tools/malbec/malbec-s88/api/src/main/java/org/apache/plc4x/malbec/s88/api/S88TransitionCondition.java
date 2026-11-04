@@ -37,6 +37,8 @@ public final class S88TransitionCondition {
         COMPARISON,
         /** A wait for a number of seconds, and nothing else. */
         WAIT,
+        /** Wait for the steps before this transition to complete. */
+        STEP_COMPLETE,
         /** Every operand has to hold. */
         AND,
         /** At least one operand has to hold. */
@@ -112,6 +114,11 @@ public final class S88TransitionCondition {
         return new S88TransitionCondition(Kind.WAIT, null, List.of(), seconds);
     }
 
+    /** A condition that waits for the previous step or steps to complete. */
+    public static S88TransitionCondition stepComplete() {
+        return new S88TransitionCondition(Kind.STEP_COMPLETE, null, List.of(), 0);
+    }
+
     /**
      * Reads a condition out of the text a recipe carries.
      *
@@ -130,6 +137,9 @@ public final class S88TransitionCondition {
             List<S88TransitionCondition> operands =
                     parseOperands(trimmed.substring(open, trimmed.length() - 1));
             return operands == null ? null : joining(joinsWithAnd ? Kind.AND : Kind.OR, operands);
+        }
+        if ("STEP_COMPLETE".equalsIgnoreCase(trimmed)) {
+            return stepComplete();
         }
         Integer waited = secondsOf(trimmed);
         if (waited != null) {
@@ -224,6 +234,7 @@ public final class S88TransitionCondition {
         return switch (kind) {
             case COMPARISON -> comparison.toText();
             case WAIT -> "WAIT(" + seconds + ")";
+            case STEP_COMPLETE -> "STEP_COMPLETE";
             case AND -> "AND(" + joinedText() + ")";
             case OR -> "OR(" + joinedText() + ")";
         };
@@ -246,6 +257,7 @@ public final class S88TransitionCondition {
         return switch (kind) {
             case COMPARISON -> comparison.toDisplay();
             case WAIT -> "WAIT " + seconds + " s";
+            case STEP_COMPLETE -> "STEP COMPLETE";
             case AND -> joinedDisplay(" AND ");
             case OR -> joinedDisplay(" OR ");
         };

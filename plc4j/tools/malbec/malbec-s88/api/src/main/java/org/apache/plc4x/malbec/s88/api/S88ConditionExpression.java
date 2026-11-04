@@ -32,11 +32,10 @@ package org.apache.plc4x.malbec.s88.api;
  * <b>Only one comparison.</b> Two things that have to happen at once are two bars and a join, not two
  * comparisons joined by an "and" inside one bar.
  * <p>
- * <b>The equipment is written in front of the address, and only a recipe for particular equipment
- * writes one.</b> A recipe written by class names base names, which some piece of equipment is
- * resolved against later, and there is nothing to name yet. A recipe written for particular equipment
- * reads a particular piece of equipment, so the text says which one: two of them can publish a
- * variable of the same name, and reading the one off the other is a recipe that does the wrong thing.
+ * <b>The equipment or class is written in front of the address.</b> A recipe written by class names
+ * the class that publishes the variable, and the equipment of that class is chosen when the batch
+ * runs. A recipe written for particular equipment names the equipment it reads, because two of them
+ * can publish a variable of the same name.
  */
 public final class S88ConditionExpression {
 
@@ -72,8 +71,8 @@ public final class S88ConditionExpression {
     /**
      * A comparison of one variable of one piece of equipment against a literal.
      *
-     * @param equipment the equipment the variable is read off, {@code null} or empty for a base name
-     *                  that will be resolved against equipment later
+     * @param equipment the equipment the variable is read off, or the class it is read from in a
+     *                  recipe by class, {@code null} or empty for no equipment or class
      * @param variable  what to read, may not be {@code null}
      * @param operator  how to compare, may not be {@code null}
      * @param literal   what to compare it against, may not be {@code null}
@@ -153,8 +152,7 @@ public final class S88ConditionExpression {
     }
 
     /**
-     * The equipment the variable is read off, {@code null} for a base name that will be resolved
-     * against equipment later.
+     * The equipment the variable is read off, or the class it is read from in a recipe by class.
      */
     public String getEquipment() {
         return equipment;

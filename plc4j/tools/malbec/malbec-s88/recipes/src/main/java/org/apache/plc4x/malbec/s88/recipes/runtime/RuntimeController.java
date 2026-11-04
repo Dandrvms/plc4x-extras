@@ -80,6 +80,10 @@ final class RuntimeController implements AutoCloseable {
         }
     }
 
+    void stop() {
+        timer.stop();
+    }
+
     @Override
     public void close() {
         timer.stop();

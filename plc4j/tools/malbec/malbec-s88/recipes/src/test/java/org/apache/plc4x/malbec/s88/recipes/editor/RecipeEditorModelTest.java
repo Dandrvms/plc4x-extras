@@ -325,8 +325,8 @@ class RecipeEditorModelTest {
         model.editChartOf(model.getRecipe().findElement("TRAMO").orElseThrow());
 
         model.edit("Condition of T1", () -> SetBarConditionUseCase.waitUntil(
-                model.getRecipe(), model.currentStep(), "T1", plantWithAReport(), null,
-                "TEMPERATURA_ACTUAL", ">", "80"));
+                model.getRecipe(), model.currentStep(), "T1", plantWithAReport(),
+                "CALENTAMIENTO", "TEMPERATURA_ACTUAL", ">", "80"));
 
         assertNull(conditionOf(model.getRecipe().getProcedureLogic(), "T1"),
                 "and the bar of the same name in the chart of the recipe is left alone");

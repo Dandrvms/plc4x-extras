@@ -30,6 +30,7 @@ import org.apache.plc4x.malbec.s88.api.PlatformVariables;
 import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88IdRefType;
@@ -49,6 +50,7 @@ import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
 import org.apache.plc4x.malbec.s88.batch.model.PreparedCondition;
+import org.apache.plc4x.malbec.s88.batch.model.TimeUnits;
 import org.apache.plc4x.malbec.s88.batch.model.PreparedSetpoint;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
 import org.apache.plc4x.malbec.s88.core.BaseNameResolver;
@@ -267,6 +269,7 @@ public final class PayloadValidator {
                                              EquipmentAllocator.Allocation allocation,
                                              List<String> errors) {
         return switch (condition.getKind()) {
+            case STEP_COMPLETE -> new PreparedCondition.StepComplete();
             case WAIT -> {
                 if (condition.getSeconds() < 0) {
                     errors.add("Transition '" + transitionId + "' in chart " + label(ref.path())
@@ -311,24 +314,33 @@ public final class PayloadValidator {
                     + " compares with an operator this builder does not understand.");
             return null;
         }
-        String moduleId = expression.getEquipment();
-        if (moduleId != null && !moduleId.isBlank()) {
-            moduleId = moduleId.trim();
-            S88Element equipment = plant.findById(moduleId).orElse(null);
-            if (equipment == null) {
-                errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
-                        + "' reads is not in the plant.");
-                return null;
-            }
-            if (equipment.getLevel() != S88Level.EQUIPMENTMODULE) {
-                errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
-                        + "' reads is not an equipment module.");
+        String moduleId;
+        if (recipe.addressesByClass()) {
+            moduleId = selectedEquipmentForClass(plant, allocation, expression.getEquipment(),
+                    ref, transitionId, errors);
+            if (moduleId == null) {
                 return null;
             }
         } else {
-            moduleId = predecessorModule(recipe, plant, ref, transitionId, allocation, errors);
-            if (moduleId == null) {
-                return null;
+            moduleId = expression.getEquipment();
+            if (moduleId != null && !moduleId.isBlank()) {
+                moduleId = moduleId.trim();
+                S88Element equipment = plant.findById(moduleId).orElse(null);
+                if (equipment == null) {
+                    errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
+                            + "' reads is not in the plant.");
+                    return null;
+                }
+                if (equipment.getLevel() != S88Level.EQUIPMENTMODULE) {
+                    errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
+                            + "' reads is not an equipment module.");
+                    return null;
+                }
+            } else {
+                moduleId = predecessorModule(recipe, plant, ref, transitionId, allocation, errors);
+                if (moduleId == null) {
+                    return null;
+                }
             }
         }
         S88VariableAddress address = expression.getVariable();
@@ -348,6 +360,11 @@ public final class PayloadValidator {
         if (module == null) {
             errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
                     + "' reads is not in the plant.");
+            return null;
+        }
+        if (module.getLevel() != S88Level.EQUIPMENTMODULE) {
+            errors.add("The equipment '" + moduleId + "' that transition '" + transitionId
+                    + "' reads is not an equipment module.");
             return null;
         }
         String variable;
@@ -448,16 +465,72 @@ public final class PayloadValidator {
             enumerationValues = List.copyOf(enumeration.getValues().keySet());
         }
         String literal = value.getFirstValueString();
+        String unit = value.getUnitOfMeasure() != null
+                ? value.getUnitOfMeasure()
+                : (dataType == DataType.ENUMERATION ? null : text(definition, UNITS_OR_ENUM));
+        String targetUnit = text(definition, UNITS_OR_ENUM);
+        if ((dataType == DataType.INTEGER || dataType == DataType.REAL)
+                && TimeUnits.isTime(value.getUnitOfMeasure())
+                && TimeUnits.isTime(targetUnit)) {
+            literal = normalizedTimeLiteral(literal, value.getUnitOfMeasure(), targetUnit, dataType);
+            unit = targetUnit;
+        }
         if (!literalFits(dataType, literal, enumerationValues)) {
             errors.add("The value '" + literal + "' cannot be held by parameter '" + baseName
                     + "' of '" + elementId + "'.");
             return null;
         }
-        String unit = value.getUnitOfMeasure() != null
-                ? value.getUnitOfMeasure()
-                : (dataType == DataType.ENUMERATION ? null : text(definition, UNITS_OR_ENUM));
         return new PreparedSetpoint(elementId, variable, dataType, literal, unit,
                 enumerationValues);
+    }
+
+    private static String selectedEquipmentForClass(S88PlantSnapshot plant,
+                                                    EquipmentAllocator.Allocation allocation,
+                                                    String className, ChartRef ref,
+                                                    String transitionId, List<String> errors) {
+        if (className == null || className.isBlank()) {
+            errors.add("Transition '" + transitionId + "' in chart " + label(ref.path())
+                    + " has to say which class of equipment it reads.");
+            return null;
+        }
+        String wanted = className.trim();
+        if (plant.findClass(wanted) == null) {
+            errors.add("The class '" + wanted + "' that transition '" + transitionId
+                    + "' reads is not in the plant.");
+            return null;
+        }
+        Set<String> selected = new LinkedHashSet<>();
+        collectSelectedOfClass(plant, allocation.moduleOfStep().values(), wanted, selected);
+        collectSelectedOfClass(plant, allocation.unitOfStep().values(), wanted, selected);
+        if (selected.isEmpty()) {
+            errors.add("Transition '" + transitionId + "' in chart " + label(ref.path())
+                    + " reads class '" + wanted + "', but no equipment of that class is selected.");
+            return null;
+        }
+        if (selected.size() > 1) {
+            errors.add("Transition '" + transitionId + "' in chart " + label(ref.path())
+                    + " reads class '" + wanted + "', but more than one equipment of that class is"
+                    + " selected (" + String.join(", ", selected) + "), so the report it reads is"
+                    + " ambiguous.");
+            return null;
+        }
+        return selected.iterator().next();
+    }
+
+    private static void collectSelectedOfClass(S88PlantSnapshot plant, Iterable<String> equipmentIds,
+                                               String className, Set<String> found) {
+        for (String equipmentId : equipmentIds) {
+            S88Element equipment = plant.findById(equipmentId).orElse(null);
+            if (equipment != null && equipment.getLevel() == S88Level.EQUIPMENTMODULE
+                    && isOfClass(equipment, className)) {
+                found.add(equipment.getId());
+            }
+        }
+    }
+
+    private static boolean isOfClass(S88Element element, String className) {
+        S88ElementClass direct = element.getElementClass();
+        return direct != null && className.equals(direct.getName());
     }
 
     private static String predecessorModule(S88MasterRecipe recipe, S88PlantSnapshot plant,
@@ -593,6 +666,20 @@ public final class PayloadValidator {
 
     private static String label(String path) {
         return path == null || path.isBlank() ? "the recipe" : "'" + path + "'";
+    }
+
+    private static String normalizedTimeLiteral(String literal, String sourceUnit,
+                                                 String targetUnit, DataType dataType) {
+        try {
+            double seconds = TimeUnits.toSeconds(Double.parseDouble(literal.trim()), sourceUnit);
+            double value = TimeUnits.fromSeconds(seconds, targetUnit);
+            if (dataType == DataType.INTEGER && value == Math.rint(value)) {
+                return Long.toString((long) value);
+            }
+            return Double.toString(value);
+        } catch (NumberFormatException notANumber) {
+            return literal;
+        }
     }
 
     private static boolean publishedIn(S88Element element, String container, String name) {

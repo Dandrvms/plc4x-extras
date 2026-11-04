@@ -30,13 +30,17 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import javax.swing.*;
 
+import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
+import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartBranchingUseCase;
 import org.apache.plc4x.malbec.s88.core.ChartCapabilities;
@@ -44,6 +48,7 @@ import org.apache.plc4x.malbec.s88.core.ChartCapabilities.ChartOp;
 import org.apache.plc4x.malbec.s88.core.ChartGraph;
 import org.apache.plc4x.malbec.s88.core.CreateChartUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
+import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 import org.apache.plc4x.malbec.s88.core.StructureQueries;
 
@@ -75,6 +80,7 @@ final class RecipeChartToolbar {
     private static final String ADD_PARALLEL = "addParallel";
     private static final String ADD_BRANCH = "addBranch";
     private static final String ADD_OPTIONAL = "addOptional";
+    private static final String HOLD = "hold";
     private static final String PARALLEL_HERE = "parallelHere";
     private static final String SELECTIVE_HERE = "selectiveHere";
     private static final String CHART = "chart";
@@ -148,6 +154,9 @@ final class RecipeChartToolbar {
                 "Put a step beside the one that is picked, with a transition of its own so it can"
                         + " wait on something of its own. Press it again for one more.",
                 this::canAddStep, () -> branch(this::addAlternativeBranch, "branch"));
+        act(HOLD, "Add hold step",
+                "Add a phase after the picked phase that keeps the same setpoint for a time.",
+                this::canAddHold, this::addHold);
         act(ADD_OPTIONAL, "Add optional branch",
                 "Put a transition beside the one before the picked step, so the step can be skipped.",
                 this::canAddOptionalBranch, this::addOptionalBranch);
@@ -303,6 +312,7 @@ final class RecipeChartToolbar {
         bar.add(actions.get(ADD_PARALLEL));
         bar.add(actions.get(ADD_BRANCH));
         bar.add(actions.get(ADD_OPTIONAL));
+        bar.add(actions.get(HOLD));
         bar.addSeparator();
         bar.add(actions.get(INSERT_BEFORE));
         bar.add(actions.get(INSERT_AFTER));
@@ -332,6 +342,7 @@ final class RecipeChartToolbar {
         menu.add(actions.get(ADD_PARALLEL));
         menu.add(actions.get(ADD_BRANCH));
         menu.add(actions.get(ADD_OPTIONAL));
+        menu.add(actions.get(HOLD));
         menu.addSeparator();
         menu.add(actions.get(INSERT_BEFORE));
         menu.add(actions.get(INSERT_AFTER));
@@ -545,6 +556,80 @@ final class RecipeChartToolbar {
      * <p>
      * A step is a piece of equipment, and the equipment is chosen on the box itself.
      */
+    private boolean canAddHold() {
+        S88RecipeElement step = pickedStep();
+        return pickedBox() != null && step != null
+                && step.getKind() == S88RecipeElementKind.PHASE;
+    }
+
+    private void addHold() {
+        S88RecipeElement source = pickedStep();
+        String after = pickedBox();
+        if (source == null || after == null) {
+            return;
+        }
+        Window owner = view == null ? null : SwingUtilities.getWindowAncestor(view);
+        Integer seconds = new HoldStepDialog(owner).showDialog();
+        if (seconds == null) {
+            return;
+        }
+        model().edit("Add hold step", () -> insertHoldStep(source, after, seconds));
+    }
+
+    private void insertHoldStep(S88RecipeElement source, String after, int seconds) {
+        S88MasterRecipe recipe = model().getRecipe();
+        S88ProcedureLogic chart = model().chartBeingEdited();
+        String id = uniqueName(recipe, chart, "MANTENER");
+        String bar = "T_" + id;
+        int suffix = 1;
+        while (chart.findTransition(bar).isPresent()) {
+            id = "MANTENER_" + suffix++;
+            bar = "T_" + id;
+        }
+        S88RecipeElement made = EditProcedureLogicUseCase.insertStepAfter(recipe,
+                actionStep(), after, id, id, bar, source.getEquipmentClassId());
+        S88RecipeElement copy = RecipeDeepCopy.copyElement(source);
+        made.setKind(copy.getKind());
+        made.setEquipmentClassId(copy.getEquipmentClassId());
+        made.setEquipmentUid(copy.getEquipmentUid());
+        copy.getActualEquipmentIds().forEach(made::addActualEquipmentId);
+
+        boolean duration = false;
+        for (S88RecipeParameter parameter : copy.getParameters()) {
+            if (isDuration(parameter.getId()) && parameter.getFirstValue() != null) {
+                parameter.getFirstValue().setValueStrings(List.of(Integer.toString(seconds)));
+                parameter.getFirstValue().setUnitOfMeasure("s");
+                duration = true;
+            }
+            made.addParameter(parameter);
+        }
+        if (!duration) {
+            String name = recipe.addressesByClass() || source.getActualEquipmentIds().isEmpty()
+                    ? "TIEMPO" : "TIEMPO_" + source.getActualEquipmentIds().getFirst();
+            made.addParameter(S88RecipeParameter.of(name, Integer.toString(seconds),
+                    DataType.INTEGER, "s"));
+        }
+    }
+
+    private static boolean isDuration(String name) {
+        if (name == null) {
+            return false;
+        }
+        String upper = name.trim().toUpperCase(java.util.Locale.ROOT);
+        return upper.equals("DURACION") || upper.startsWith("DURACION_")
+                || upper.equals("DURATION") || upper.startsWith("DURATION_")
+                || upper.equals("TIEMPO") || upper.startsWith("TIEMPO_");
+    }
+
+    private static String uniqueName(S88MasterRecipe recipe, S88ProcedureLogic chart, String stem) {
+        String candidate = stem;
+        int suffix = 1;
+        while (recipe.findElement(candidate).isPresent() || chart.findStep(candidate).isPresent()) {
+            candidate = stem + "_" + suffix++;
+        }
+        return candidate;
+    }
+
     private void addStepAfterSelection() {
         String after = pickedBox();
         if (after == null) {

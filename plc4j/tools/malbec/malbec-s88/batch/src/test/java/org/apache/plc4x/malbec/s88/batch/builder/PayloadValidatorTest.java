@@ -18,24 +18,24 @@
  */
 package org.apache.plc4x.malbec.s88.batch.builder;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
-import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.batch.DemoFixtures;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
+import org.apache.plc4x.malbec.s88.batch.model.PreparedCondition;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
-import org.apache.plc4x.malbec.s88.core.CreateRecipeElementUseCase;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.apache.plc4x.malbec.s88.core.UpdateRecipeParameterUseCase;
-import org.apache.plc4x.malbec.s88.api.DataType;
 import org.junit.jupiter.api.Test;
 
 class PayloadValidatorTest {
@@ -89,7 +89,7 @@ class PayloadValidatorTest {
     void reportsAReportTheModuleDoesNotPublish() {
         S88PlantSnapshot plant = DemoFixtures.plant();
         S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
-        transition(recipe, "T_MANTENER").setCondition("Reports/NO_SUCH#=#1");
+        transition(recipe, "T_MANTENER").setCondition("CALENTADOR_TIPO#Reports/NO_SUCH#=#1");
 
         PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
                 recipe, plant, "BATCH-NO-REPORT", Map.of(), null));
@@ -103,7 +103,8 @@ class PayloadValidatorTest {
     void reportsALiteralTheReportCannotHold() {
         S88PlantSnapshot plant = DemoFixtures.plant();
         S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
-        transition(recipe, "T_MANTENER").setCondition("Reports/TEMPERATURA_ACTUAL#>=#hot");
+        transition(recipe, "T_MANTENER")
+                .setCondition("CALENTADOR_TIPO#Reports/TEMPERATURA_ACTUAL#>=#hot");
 
         PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
                 recipe, plant, "BATCH-BAD-LITERAL", Map.of(), null));
@@ -113,21 +114,67 @@ class PayloadValidatorTest {
     }
 
     @Test
-    void reportsAnAmbiguousPredecessor() {
+    void reportsAClassWithMoreThanOneSelectedEquipment() {
         S88PlantSnapshot plant = DemoFixtures.plant();
         S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
-        S88RecipeElement unit = recipe.findElement("UP_REACTOR").orElseThrow();
-        CreateRecipeElementUseCase.forEquipmentClass(recipe, unit, "OTRO",
-                S88RecipeElementKind.PHASE, "BOMBA_TIPO");
-        EditProcedureLogicUseCase.addStep(recipe, unit, "OTRO", "OTRO");
-        EditProcedureLogicUseCase.addLink(recipe, unit, "OTRO_TO_T_MANTENER",
-                List.of("OTRO"), List.of("T_MANTENER"), null);
 
         PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
-                recipe, plant, "BATCH-AMBIGUOUS", Map.of(), null));
+                recipe, plant, "BATCH-AMBIGUOUS",
+                Map.of("CALENTAR", "CALENTADOR_1", "MANTENER", "CALENTADOR_2"), null));
 
         assertNull(result.payload());
         assertTrue(hasError(result, "ambiguous"));
+        assertTrue(hasError(result, "CALENTADOR_1"));
+        assertTrue(hasError(result, "CALENTADOR_2"));
+    }
+
+    @Test
+    void reportsAClassConditionWithNoClass() {
+        S88PlantSnapshot plant = DemoFixtures.plant();
+        S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
+        transition(recipe, "T_MANTENER").setCondition("Reports/TEMPERATURA_ACTUAL#>=#72");
+
+        PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
+                recipe, plant, "BATCH-NO-CLASS", Map.of(), null));
+
+        assertNull(result.payload());
+        assertTrue(hasError(result, "which class"));
+    }
+
+    @Test
+    void readsAClassConditionFromTheEquipmentSelectedForThatClass() {
+        S88PlantSnapshot plant = DemoFixtures.plant();
+        S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
+
+        PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
+                recipe, plant, "BATCH-CLASS-EQUIPMENT",
+                Map.of("CALENTAR", "CALENTADOR_2", "MANTENER", "CALENTADOR_2"), null));
+
+        assertNotNull(result.payload(), () -> String.join("\n", result.errors()));
+        PreparedCondition condition = result.payload().conditions()
+                .get("UP_REACTOR/T_MANTENER");
+        assertTrue(condition instanceof PreparedCondition.Comparison,
+                () -> String.valueOf(condition));
+        PreparedCondition.Comparison comparison = (PreparedCondition.Comparison) condition;
+        assertEquals("CALENTADOR_2", comparison.moduleId());
+        assertEquals("TEMPERATURA_ACTUAL", comparison.variable());
+    }
+
+    @Test
+    void aUnitWithChildClassHintsIsNotAnInstanceOfThoseClasses() {
+        S88PlantSnapshot plant = DemoFixtures.plant();
+        plant.findById("REACTOR_1").orElseThrow()
+                .addElementClass(plant.findClass("CALENTADOR_TIPO"));
+        S88MasterRecipe recipe = DemoFixtures.demoRecipe(plant);
+
+        PrepareResult result = BatchPayloadFactory.prepare(new BatchRequest(
+                recipe, plant, "BATCH-CLASS-HINTS", Map.of(), null));
+
+        assertNotNull(result.payload(), () -> String.join("\n", result.errors()));
+        PreparedCondition condition = result.payload().conditions()
+                .get("UP_REACTOR/T_MANTENER");
+        PreparedCondition.Comparison comparison = (PreparedCondition.Comparison) condition;
+        assertEquals("CALENTADOR_1", comparison.moduleId());
     }
 
     @Test

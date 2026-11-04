@@ -48,9 +48,10 @@ import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 /**
  * What one bar of a chart waits on: clauses joined with and/or, or a wait.
  * <p>
- * A recipe by class names a base name instead of a piece of equipment, so there is nothing to pick
- * there, and the value box offers the members of an enumeration when the report has one. The dialog
- * only gathers and checks what is chosen; writing the bar is the business of whoever opened it.
+ * A recipe by class names the class of equipment it reads from, and the base names that class
+ * publishes. A recipe for particular equipment names the equipment itself. The value box offers the
+ * members of an enumeration when the report has one. The dialog only gathers and checks what is
+ * chosen; writing the bar is the business of whoever opened it.
  */
 final class TransitionConditionDialog extends JDialog {
 
@@ -66,6 +67,7 @@ final class TransitionConditionDialog extends JDialog {
     private final boolean byClass;
 
     private final JComboBox<String> equipmentBox = new JComboBox<>();
+    private final JComboBox<String> classBox = new JComboBox<>();
     private final JComboBox<String> reportBox = new JComboBox<>();
     private final JComboBox<String> operatorBox = new JComboBox<>();
     private final JComboBox<String> valueBox = new JComboBox<>();
@@ -107,6 +109,11 @@ final class TransitionConditionDialog extends JDialog {
                 reload();
             }
         });
+        classBox.addActionListener(event -> {
+            if (!reloading) {
+                reloadReports();
+            }
+        });
         reportBox.addActionListener(event -> {
             if (!reloading) {
                 reloadValues();
@@ -122,7 +129,10 @@ final class TransitionConditionDialog extends JDialog {
     private JPanel one() {
         JPanel panel = new JPanel(new GridLayout(0, 2, 6, 4));
         panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        if (!byClass) {
+        if (byClass) {
+            panel.add(new JLabel("Class to read from", SwingConstants.RIGHT));
+            panel.add(classBox);
+        } else {
             panel.add(new JLabel("Equipment to read from", SwingConstants.RIGHT));
             panel.add(equipmentBox);
         }
@@ -161,6 +171,9 @@ final class TransitionConditionDialog extends JDialog {
         JButton addWait = new JButton("Add this wait");
         addWait.addActionListener(event -> addWait());
         waiting.add(addWait);
+        JButton addComplete = new JButton("Wait for step complete");
+        addComplete.addActionListener(event -> addStepComplete());
+        waiting.add(addComplete);
         south.add(waiting, BorderLayout.SOUTH);
         panel.add(south, BorderLayout.SOUTH);
         return panel;
@@ -193,7 +206,8 @@ final class TransitionConditionDialog extends JDialog {
             return;
         }
         if (existing.getKind() == S88TransitionCondition.Kind.COMPARISON
-                || existing.getKind() == S88TransitionCondition.Kind.WAIT) {
+                || existing.getKind() == S88TransitionCondition.Kind.WAIT
+                || existing.getKind() == S88TransitionCondition.Kind.STEP_COMPLETE) {
             clauses.add(existing);
             clauseLabels.addElement(existing.toDisplay());
             return;
@@ -211,7 +225,16 @@ final class TransitionConditionDialog extends JDialog {
     private void reload() {
         reloading = true;
         try {
-            if (!byClass) {
+            if (byClass) {
+                String picked = (String) classBox.getSelectedItem();
+                classBox.removeAllItems();
+                for (String className : SetBarConditionUseCase.classesWithReports(plant, owner)) {
+                    classBox.addItem(className);
+                }
+                if (picked != null) {
+                    classBox.setSelectedItem(picked);
+                }
+            } else {
                 String picked = (String) equipmentBox.getSelectedItem();
                 equipmentBox.removeAllItems();
                 for (String equipment : SetBarConditionUseCase.equipmentWithReports(plant, owner)) {
@@ -246,13 +269,22 @@ final class TransitionConditionDialog extends JDialog {
     }
 
     private List<String> reportsToOffer() {
-        if (byClass) {
-            return SetBarConditionUseCase.reportsToWaitOn(recipe, owner, barId, plant);
+        String readFrom = selectedReadFrom();
+        if (readFrom == null) {
+            return List.of();
         }
-        String equipment = (String) equipmentBox.getSelectedItem();
-        return equipment == null
-                ? List.of()
-                : SetBarConditionUseCase.reportsOf(plant, equipment);
+        try {
+            return byClass
+                    ? SetBarConditionUseCase.reportsOfTheClass(plant, readFrom)
+                    : SetBarConditionUseCase.reportsOf(plant, readFrom);
+        } catch (IllegalArgumentException unknown) {
+            return List.of();
+        }
+    }
+
+    private String selectedReadFrom() {
+        Object selected = byClass ? classBox.getSelectedItem() : equipmentBox.getSelectedItem();
+        return selected == null ? null : selected.toString();
     }
 
     /** Offers the members of the report's enumeration, or lets the value be typed. */
@@ -262,7 +294,7 @@ final class TransitionConditionDialog extends JDialog {
             Object typed = valueBox.isEditable() ? valueBox.getEditor().getItem() : null;
             valueBox.removeAllItems();
             List<String> offered = SetBarConditionUseCase.allowedValues(recipe, owner, barId, plant,
-                    (String) equipmentBox.getSelectedItem(), (String) reportBox.getSelectedItem());
+                    selectedReadFrom(), (String) reportBox.getSelectedItem());
             for (String value : offered) {
                 valueBox.addItem(value);
             }
@@ -280,16 +312,19 @@ final class TransitionConditionDialog extends JDialog {
 
     /** Checks the boxes as one comparison and adds it to the list. */
     void addCondition() {
-        String equipment = byClass ? null : (String) equipmentBox.getSelectedItem();
+        String readFrom = selectedReadFrom();
         String report = (String) reportBox.getSelectedItem();
         String operator = (String) operatorBox.getSelectedItem();
         String value = typedValue();
-        if (report == null || operator == null || value == null || value.isBlank()) {
-            status.setText("A condition needs a report, a comparison and a value.");
+        if (readFrom == null || report == null || operator == null || value == null
+                || value.isBlank()) {
+            status.setText(byClass
+                    ? "A condition needs a class, a report, a comparison and a value."
+                    : "A condition needs an equipment, a report, a comparison and a value.");
             return;
         }
         try {
-            SetBarConditionUseCase.checkValue(recipe, owner, barId, plant, equipment, report, value);
+            SetBarConditionUseCase.checkValue(recipe, owner, barId, plant, readFrom, report, value);
         } catch (IllegalArgumentException refused) {
             status.setText(refused.getMessage());
             return;
@@ -299,8 +334,16 @@ final class TransitionConditionDialog extends JDialog {
                 ? S88VariableAddress.parse("Reports/" + report)
                 : S88VariableAddress.of(null, report);
         clauses.add(S88TransitionCondition.comparison(
-                S88ConditionExpression.on(equipment, address, how, value)));
+                S88ConditionExpression.on(readFrom, address, how, value)));
         clauseLabels.addElement(clauses.get(clauses.size() - 1).toDisplay());
+        status.setText(" ");
+    }
+
+    /** Adds a clause that waits for the previous step(s) to complete. */
+    void addStepComplete() {
+        S88TransitionCondition complete = S88TransitionCondition.stepComplete();
+        clauses.add(complete);
+        clauseLabels.addElement(complete.toDisplay());
         status.setText(" ");
     }
 
@@ -310,7 +353,8 @@ final class TransitionConditionDialog extends JDialog {
         S88TransitionCondition wait = S88TransitionCondition.wait(seconds);
         clauses.add(wait);
         clauseLabels.addElement(wait.toDisplay());
-        status.setText(" ");
+        String warning = holdWarning();
+        status.setText(warning == null ? " " : warning);
     }
 
     private void removePicked() {
@@ -343,6 +387,22 @@ final class TransitionConditionDialog extends JDialog {
         }
         accepted = true;
         dispose();
+    }
+
+    static boolean isHoldPattern(List<S88TransitionCondition> clauses, String joining) {
+        boolean comparison = false;
+        boolean wait = false;
+        for (S88TransitionCondition clause : clauses) {
+            comparison |= clause.getKind() == S88TransitionCondition.Kind.COMPARISON;
+            wait |= clause.getKind() == S88TransitionCondition.Kind.WAIT;
+        }
+        return comparison && wait && AND.equals(joining);
+    }
+
+    private String holdWarning() {
+        return isHoldPattern(clauses, String.valueOf(joiningBox.getSelectedItem()))
+                ? "Warning: WAIT starts when the transition is evaluated. Use a separate MANTENER step for a temperature hold."
+                : null;
     }
 
     private S88TransitionCondition build() {
@@ -401,6 +461,11 @@ final class TransitionConditionDialog extends JDialog {
     /** Picks the equipment a bar reads from, for a test that drives the boxes without a window. */
     void useEquipment(String equipment) {
         equipmentBox.setSelectedItem(equipment);
+    }
+
+    /** Picks the class a bar reads from, for a test that drives the boxes without a window. */
+    void useClass(String className) {
+        classBox.setSelectedItem(className);
     }
 
     /** Says how the clauses are joined, for a test that drives the boxes without a window. */

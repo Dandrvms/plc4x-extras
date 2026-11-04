@@ -72,6 +72,8 @@ public class PlantSnapshotUseCase {
         copy.setId(source.getId());
         copy.setLevel(source.getLevel());
         copy.setParent(parent);
+        copy.setClass(source.getElementClass() == null ? null
+                : copyClass(source.getElementClass()));
         copy.setCheck(source.isCheck());
         for (S88ElementClass elementClass : source.getElementClasses()) {
             copy.addElementClass(copyClass(elementClass));

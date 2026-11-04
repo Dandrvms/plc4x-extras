@@ -154,6 +154,18 @@ class PlantSnapshotUseCaseTest {
     }
 
     @Test
+    void theCopyKeepsTheClassOfEachElement() {
+        S88PlantModel plant = modelOf();
+        plant.findById("CALENTAMIENTO_1").orElseThrow().setClass(plant.findClass("CALENTAMIENTO"));
+
+        S88PlantSnapshot copy = PlantSnapshotUseCase.of(plant);
+
+        S88ElementClass copied = copy.findById("CALENTAMIENTO_1").orElseThrow().getElementClass();
+        assertNotNull(copied, "a recipe by class needs the class of the equipment in the snapshot");
+        assertEquals("CALENTAMIENTO", copied.getName());
+    }
+
+    @Test
     void theCopyKeepsTheUidOfEveryElement() {
         S88PlantModel plant = modelOf();
         String rootUid = plant.getRoot().getUid();

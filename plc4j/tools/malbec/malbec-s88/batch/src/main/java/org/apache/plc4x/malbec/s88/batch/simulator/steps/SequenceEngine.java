@@ -132,7 +132,7 @@ public final class SequenceEngine {
     }
 
     public void tick(double simTime, boolean evaluate) {
-        if (root == null) {
+        if (root == null || !evaluate) {
             return;
         }
         int guard = 0;

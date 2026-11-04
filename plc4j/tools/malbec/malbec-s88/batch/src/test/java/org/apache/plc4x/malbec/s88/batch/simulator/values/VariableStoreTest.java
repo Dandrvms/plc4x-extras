@@ -100,6 +100,16 @@ class VariableStoreTest {
         assertEquals(0.5, rule.tolerance(), 1e-9);
     }
 
+    @Test
+    void infersASetpointThatNamesTheValueWithoutASuffix() {
+        List<FollowRule> rules = FollowRuleHeuristic.infer("CALENTAR_TANQUE",
+                List.of("TEMPERATURA_ACTUAL"), List.of("TEMPERATURA"));
+
+        assertEquals(1, rules.size());
+        assertEquals("TEMPERATURA_ACTUAL", rules.get(0).reportBase());
+        assertEquals("TEMPERATURA", rules.get(0).setpointBase());
+    }
+
     private static VariableStore store() {
         List<String> warnings = new ArrayList<>();
         VariableStore store = VariableStore.of(DemoFixtures.plant(), List.of("CALENTADOR_1"),

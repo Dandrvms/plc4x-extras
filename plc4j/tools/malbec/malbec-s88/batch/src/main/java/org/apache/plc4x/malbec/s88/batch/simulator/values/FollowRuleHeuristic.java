@@ -67,7 +67,10 @@ public final class FollowRuleHeuristic {
         if (setpointBases != null) {
             for (String setpoint : setpointBases) {
                 String prefix = prefixOf(setpoint, SETPOINT_SUFFIXES);
-                if (prefix == null || !used.add(prefix)) {
+                if (prefix == null && setpoint != null) {
+                    prefix = setpoint.trim().toUpperCase(Locale.ROOT);
+                }
+                if (prefix == null || prefix.isEmpty() || !used.add(prefix)) {
                     continue;
                 }
                 String report = reportsByPrefix.get(prefix);

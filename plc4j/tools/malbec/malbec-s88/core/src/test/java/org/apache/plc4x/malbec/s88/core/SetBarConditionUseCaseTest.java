@@ -34,7 +34,6 @@ import org.apache.plc4x.malbec.s88.api.S88VariableAddress;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,18 +93,32 @@ class SetBarConditionUseCaseTest {
     }
 
     @Test
-    void aRecipeByClassNamesTheBaseNameAndNoEquipment() {
+    void aRecipeByClassNamesTheClassAndTheBaseName() {
         S88PlantSnapshot plant = plant();
         S88MasterRecipe recipe = recipeOf(S88RecipeKind.CLASS);
 
-        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null, "TEMPERATURA_ACTUAL", ">", "80");
+        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, "CALENTAMIENTO",
+                "TEMPERATURA_ACTUAL", ">", "80");
 
         S88ProcedureTransition bar = recipe.getProcedureLogic().findTransition("T1").orElseThrow();
-        assertEquals("Reports/TEMPERATURA_ACTUAL#>#80", bar.getCondition(),
-                "because there is no equipment to name yet, and the base name is what something"
-                        + " will be resolved against later");
-        assertNull(bar.expression().getEquipment(),
-                "and the text says so, rather than leaving a piece of equipment behind from before");
+        assertEquals("CALENTAMIENTO#Reports/TEMPERATURA_ACTUAL#>#80", bar.getCondition(),
+                "because the class publishes the base name, and the equipment is chosen at run"
+                        + " time");
+        assertEquals("CALENTAMIENTO", bar.expression().getEquipment(),
+                "and the text says which class the report is read from");
+    }
+
+    @Test
+    void aRecipeByClassHasToSayWhichClassItReads() {
+        S88PlantSnapshot plant = plant();
+        S88MasterRecipe recipe = recipeOf(S88RecipeKind.CLASS);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null,
+                        "TEMPERATURA_ACTUAL", ">", "80"));
+
+        assertTrue(failure.getMessage().contains("which class"),
+                "because the report name alone does not say which class publishes it");
     }
 
     @Test
@@ -161,6 +174,19 @@ class SetBarConditionUseCaseTest {
         assertTrue(SetBarConditionUseCase.reportsOfTheClass(plant, "CALENTAMIENTO")
                         .contains("TEMPERATURA_ACTUAL"),
                 "because a recipe by class reads base names, which are the ones the class declares");
+    }
+
+    @Test
+    void theClassesOfferedAreOfTheLevelTheChartWorksOn() {
+        S88PlantSnapshot plant = plant();
+        S88MasterRecipe recipe = recipeOf(S88RecipeKind.CLASS);
+
+        assertTrue(SetBarConditionUseCase.classesWithReports(plant,
+                        Levels.owner(recipe, "PASO")).contains("CALENTAMIENTO"),
+                "because the steps of the chart of an operation are phases, so a bar there reads a"
+                        + " module class");
+        assertTrue(SetBarConditionUseCase.classesWithReports(plant, null).isEmpty(),
+                "and a module class is not offered where the bar reads a unit class");
     }
 
     @Test
@@ -353,33 +379,33 @@ class SetBarConditionUseCaseTest {
     }
 
     @Test
-    void aReportOfTwoOfTheRecipeClassesIsReadOffTheOneBeforeTheBar() {
+    void aReportOfTwoClassesIsReadOffTheClassTheBarNames() {
         S88PlantSnapshot plant = plantWithTwoUnitClasses();
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         Levels.unitProcedure(recipe, "OTRO", "TANQUE_B");
         S88RecipeElement step = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
         BindRecipeStepUseCase.bindToClass(recipe, null, step.getId(), "TANQUE_A", plant);
 
-        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null, "ESTADO", "=", "COMPLETE");
+        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, "TANQUE_A",
+                "ESTADO", "=", "COMPLETE");
 
-        assertEquals("Reports/ESTADO#=#COMPLETE",
+        assertEquals("TANQUE_A#Reports/ESTADO#=#COMPLETE",
                 recipe.getProcedureLogic().findTransition("T1").orElseThrow().getCondition(),
-                "because the class of the step before the bar decides which of two reports of the"
-                        + " same name is meant, and only that one lets the value be a member of its"
-                        + " enumeration rather than a number");
+                "because the class the bar names decides which of two reports of the same name is"
+                        + " meant");
     }
 
     @Test
-    void aReportOnlySomeOtherClassOfTheRecipePublishesIsStillReadable() {
+    void aBarCanReadAReportOfAnotherClassOfTheRecipe() {
         S88PlantSnapshot plant = plantWithTwoUnitClasses();
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         Levels.unitProcedure(recipe, "OTRO", "TANQUE_B");
 
-        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, null, "ESTADO", "=", "7");
+        SetBarConditionUseCase.waitUntil(recipe, null, "T1", plant, "TANQUE_B",
+                "ESTADO", "=", "7");
 
-        assertEquals("Reports/ESTADO#=#7",
+        assertEquals("TANQUE_B#Reports/ESTADO#=#7",
                 recipe.getProcedureLogic().findTransition("T1").orElseThrow().getCondition(),
-                "because a bar can be pointed at a piece of equipment elsewhere in the recipe on"
-                        + " purpose, and there the integer report is the one that is meant");
+                "because a bar can be pointed at a class somewhere else in the recipe on purpose");
     }
 }

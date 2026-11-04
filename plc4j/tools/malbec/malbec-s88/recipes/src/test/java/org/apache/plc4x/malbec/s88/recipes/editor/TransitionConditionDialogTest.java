@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.apache.plc4x.malbec.s88.api.PlatformEnumerations;
+import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
@@ -31,6 +32,7 @@ import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
+import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
 import org.apache.plc4x.malbec.s88.core.CreateMasterRecipeUseCase;
 import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
@@ -100,6 +102,7 @@ class TransitionConditionDialogTest {
         onSwingThread(() -> {
             TransitionConditionDialog dialog = dialogOf(recipeByClass(), null);
 
+            dialog.useClass("TANQUE_A");
             dialog.useReport("ESTADO");
 
             assertTrue(dialog.valuesOffered().contains("COMPLETE"),
@@ -112,6 +115,7 @@ class TransitionConditionDialogTest {
         onSwingThread(() -> {
             TransitionConditionDialog dialog = dialogOf(recipeByClass(), null);
 
+            dialog.useClass("TANQUE_A");
             dialog.useReport("ESTADO");
             dialog.useOperator("=");
             dialog.useValue("COMPLETE");
@@ -121,8 +125,8 @@ class TransitionConditionDialogTest {
 
             dialog.accept();
             assertTrue(dialog.wasAccepted());
-            assertEquals("Reports/ESTADO#=#COMPLETE", dialog.conditionText(),
-                    "because a recipe by class names a base name and no equipment");
+            assertEquals("TANQUE_A#Reports/ESTADO#=#COMPLETE", dialog.conditionText(),
+                    "because a recipe by class names the class the report is read from");
         });
     }
 
@@ -131,6 +135,7 @@ class TransitionConditionDialogTest {
         onSwingThread(() -> {
             TransitionConditionDialog dialog = dialogOf(recipeByClass(), null);
 
+            dialog.useClass("TANQUE_A");
             dialog.useReport("ESTADO");
             dialog.useOperator("=");
             dialog.useValue("COMPLETE");
@@ -140,7 +145,8 @@ class TransitionConditionDialogTest {
             dialog.joinWith("OR");
 
             dialog.accept();
-            assertEquals("OR([Reports/ESTADO#=#COMPLETE];[Reports/ESTADO#=#IDLE])",
+            assertEquals("OR([TANQUE_A#Reports/ESTADO#=#COMPLETE];"
+                            + "[TANQUE_A#Reports/ESTADO#=#IDLE])",
                     dialog.conditionText());
         });
     }
@@ -150,6 +156,7 @@ class TransitionConditionDialogTest {
         onSwingThread(() -> {
             TransitionConditionDialog dialog = dialogOf(recipeByClass(), null);
 
+            dialog.useClass("TANQUE_A");
             dialog.useReport("ESTADO");
             dialog.useOperator("=");
             dialog.useValue("COMPLETE");
@@ -159,7 +166,8 @@ class TransitionConditionDialogTest {
             dialog.joinWith("and");
 
             dialog.accept();
-            assertEquals("AND([Reports/ESTADO#=#COMPLETE];WAIT(30))", dialog.conditionText());
+            assertEquals("AND([TANQUE_A#Reports/ESTADO#=#COMPLETE];WAIT(30))",
+                    dialog.conditionText());
         });
     }
 
@@ -220,6 +228,18 @@ class TransitionConditionDialogTest {
             assertTrue(dialog.wasAccepted());
             assertNull(dialog.conditionText());
         });
+    }
+
+    @Test
+    void aWaitWithAnAnalogueComparisonIsFlaggedAsAHoldPattern() {
+        List<S88TransitionCondition> clauses = List.of(
+                S88TransitionCondition.comparison(
+                        S88ConditionExpression.parse("Reports/ESTADO#=#COMPLETE")),
+                S88TransitionCondition.wait(30));
+
+        assertTrue(TransitionConditionDialog.isHoldPattern(clauses, "AND"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                TransitionConditionDialog.isHoldPattern(clauses, "OR"));
     }
 
     private static void onSwingThread(Runnable what) {

@@ -39,6 +39,10 @@ public sealed interface PreparedCondition {
     record Wait(int seconds) implements PreparedCondition {
     }
 
+    /** Wait until the steps before the transition have completed. */
+    record StepComplete() implements PreparedCondition {
+    }
+
     /** Every operand has to hold. */
     record All(List<PreparedCondition> operands) implements PreparedCondition {
 

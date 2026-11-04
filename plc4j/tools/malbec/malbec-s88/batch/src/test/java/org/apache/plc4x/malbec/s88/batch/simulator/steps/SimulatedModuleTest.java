@@ -169,6 +169,31 @@ class SimulatedModuleTest {
     }
 
     @Test
+    void elapsedTimeIsPublishedInTheUnitOfItsReport() {
+        Fixture fixture = fixture("BOMBA_1");
+        fixture.store().define("TIEMPO_TRANSCURRIDO", DataType.INTEGER, "MIN", List.of(), 0.0, 0.0);
+        SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
+                SimulationProfile.defaults(), fixture.store());
+        module.command(BatchCommand.START, 0.0);
+
+        module.tick(60.0, 60.0);
+
+        assertEquals(1.0, fixture.store().numeric("TIEMPO_TRANSCURRIDO"), 1e-9);
+    }
+
+    @Test
+    void aDurationInMinutesIsConvertedToSeconds() {
+        Fixture fixture = fixture("BOMBA_1");
+        fixture.store().define("DURACION", DataType.INTEGER, "MIN", List.of(), 1.0, 0.0);
+        SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
+                SimulationProfile.defaults(), fixture.store());
+
+        module.command(BatchCommand.START, 0.0);
+
+        assertEquals(60.0, module.durationSeconds(), 1e-9);
+    }
+
+    @Test
     void transientStatesSettleAfterTheirTicks() {
         Fixture fixture = fixture("BOMBA_1");
         SimulationProfile profile = new SimulationProfile(10.0, 3, 0.1, List.of());

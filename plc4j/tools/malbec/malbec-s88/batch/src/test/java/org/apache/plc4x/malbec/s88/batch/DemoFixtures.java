@@ -125,9 +125,9 @@ public final class DemoFixtures {
                 "CALENTAR", "CALENTAR", "T_CALENTAR", "CALENTADOR_TIPO");
         S88RecipeElement hold = EditProcedureLogicUseCase.insertStepAfter(recipe, unit, "CALENTAR",
                 "MANTENER", "MANTENER", "T_MANTENER", "CALENTADOR_TIPO");
-        SetBarConditionUseCase.waitUntil(recipe, unit, "T_CALENTAR", plant, null,
+        SetBarConditionUseCase.waitUntil(recipe, unit, "T_CALENTAR", plant, "BOMBA_TIPO",
                 "STATE", "=", "COMPLETE");
-        SetBarConditionUseCase.waitUntil(recipe, unit, "T_MANTENER", plant, null,
+        SetBarConditionUseCase.waitUntil(recipe, unit, "T_MANTENER", plant, "CALENTADOR_TIPO",
                 "TEMPERATURA_ACTUAL", ">=", "72");
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Parameters/TEMPERATURA_SP",
                 "72", DataType.REAL, null);

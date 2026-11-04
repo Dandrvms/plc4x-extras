@@ -30,6 +30,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +53,7 @@ import javax.swing.JTextArea;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
@@ -65,9 +67,11 @@ import org.apache.plc4x.malbec.s88.batch.model.CommandResult;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
 import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
 import org.apache.plc4x.malbec.s88.batch.runtime.BatchRuntimeService;
+import org.apache.plc4x.malbec.s88.batch.runtime.report.RunFolder;
 import org.apache.plc4x.malbec.s88.recipes.editor.RecipeChartScene;
 import org.openide.util.NbBundle;
 import org.openide.windows.TopComponent;
+import org.openide.windows.Workspace;
 import org.openide.windows.WindowManager;
 
 /** A read-only runtime view of one simulated batch. */
@@ -115,6 +119,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private final JTable variableTable = new JTable(variables);
     private final Map<BatchCommand, JButton> commandButtons = new LinkedHashMap<>();
     private final Deque<String> recentEvents = new ArrayDeque<>();
+    private final List<BatchEvent> eventHistory = new ArrayList<>();
 
     private BatchPayload payload;
     private S88MasterRecipe recipe;
@@ -124,6 +129,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private RuntimeViewModel viewModel;
     private S88RecipeElement owner;
     private BatchSnapshot lastSnapshot;
+    private boolean finished;
 
     public BatchRuntimeTopComponent() {
         initUi();
@@ -392,6 +398,9 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         updateVariables(snapshot);
         updateCommands(snapshot);
         appendEvents(snapshot.newEvents());
+        if (snapshot.batchState().kind() == ModuleState.Kind.FINAL) {
+            finished(snapshot);
+        }
         repaint();
     }
 
@@ -462,6 +471,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
             return;
         }
         for (BatchEvent event : events) {
+            eventHistory.add(event);
             recentEvents.addLast(String.format("%7.2f  %-20s %s  %s", event.simTime(),
                     event.type(), event.elementId() == null ? "" : event.elementId(),
                     event.details() == null ? "" : event.details()));
@@ -499,9 +509,45 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     }
 
     @Override
+    public boolean canClose() {
+        ModuleState state = lastSnapshot == null ? null : lastSnapshot.batchState();
+        if (!needsCloseConfirmation(state)) {
+            return true;
+        }
+        return JOptionPane.showConfirmDialog(this,
+                "The simulated batch is still active. Closing this window will stop it and mark the run as INTERRUPTED. Close anyway?",
+                "Close runtime", JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+    }
+
+    @Override
+    public boolean canClose(Workspace workspace, boolean last) {
+        return canClose();
+    }
+
+    static boolean needsCloseConfirmation(ModuleState state) {
+        return state != null && state.isActive();
+    }
+
+    @Override
     public void componentClosed() {
         cleanup();
         super.componentClosed();
+    }
+
+    private void finished(BatchSnapshot snapshot) {
+        if (finished) {
+            return;
+        }
+        finished = true;
+        if (controller != null) {
+            controller.stop();
+        }
+        RunFolder folder = service == null ? null : service.currentRunFolder();
+        new BatchFinishedDialog(SwingUtilities.getWindowAncestor(this), snapshot,
+                folder == null ? null : folder.reportFile(),
+                folder == null ? null : folder.directory(),
+                eventHistory).setVisible(true);
     }
 
     private void cleanup() {

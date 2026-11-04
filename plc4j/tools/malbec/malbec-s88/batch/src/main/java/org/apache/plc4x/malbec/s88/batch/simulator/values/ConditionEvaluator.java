@@ -37,6 +37,9 @@ public final class ConditionEvaluator {
         if (condition instanceof PreparedCondition.Wait wait) {
             return !Double.isNaN(enabledSince) && simTime - enabledSince >= wait.seconds();
         }
+        if (condition instanceof PreparedCondition.StepComplete) {
+            return true;
+        }
         if (condition instanceof PreparedCondition.All all) {
             for (PreparedCondition operand : all.operands()) {
                 if (!eval(operand, store, simTime, enabledSince)) {
