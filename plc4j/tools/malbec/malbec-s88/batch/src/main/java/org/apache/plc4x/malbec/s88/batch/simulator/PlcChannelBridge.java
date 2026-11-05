@@ -132,6 +132,15 @@ public final class PlcChannelBridge implements AutoCloseable {
         write(BatchContract.commandAck(batchId), DataType.STRING, lastCommandAck, true);
     }
 
+    /** Keeps the link visibly alive while the simulated clock is paused. */
+    public void publishKeepAlive(BatchSnapshot snapshot) {
+        write(BatchContract.state(batchId), DataType.STRING, snapshot.batchState().name(), true);
+        write(BatchContract.run(batchId), DataType.REAL, (double) snapshot.run(), true);
+        write(BatchContract.simTime(batchId), DataType.REAL, snapshot.simTime(), true);
+        write(BatchContract.heartbeat(batchId), DataType.REAL, (double) ++heartbeat, true);
+        write(BatchContract.commandAck(batchId), DataType.STRING, lastCommandAck, true);
+    }
+
     @Override
     public void close() {
         for (AutoCloseable subscription : subscriptions) {

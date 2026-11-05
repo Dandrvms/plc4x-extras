@@ -32,6 +32,9 @@ import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
  * <p>The chart of the recipe is a procedure and holds unit procedures. The chart of a unit
  * procedure holds phases. A phase is the last level and has no chart of its own.
  *
+ * <p>The operation level, that should go under unit procedure, is left out for now for
+ * simplicity.
+ *
  * <p>An operation is still read where an older recipe carries one, and its chart still holds
  * phases, but it is no longer the level a unit procedure holds.
  */

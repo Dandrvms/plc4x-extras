@@ -531,6 +531,7 @@ public final class SequenceEngine {
             ModuleState state;
             double progress;
             String moduleId = null;
+            List<StepStatus> childStatuses = new ArrayList<>();
             if (element != null && element.getKind() == S88RecipeElementKind.PHASE) {
                 moduleId = payload.moduleOfStep().get(stepKey);
                 if (moduleId == null) {
@@ -546,20 +547,28 @@ public final class SequenceEngine {
                 }
             } else if (element != null && element.getProcedureLogic() != null) {
                 ChartRun child = run.childFor(stepId);
+                if (child != null) {
+                    collectStatuses(child, childStatuses);
+                }
                 boolean complete = active.completed() || (child != null && child.isComplete());
                 state = complete ? ModuleState.COMPLETE : ModuleState.RUNNING;
-                progress = complete ? 1.0 : (child == null ? 0.0 : child.progress());
+                progress = complete ? 1.0 : progressOf(child, childStatuses);
             } else {
                 state = active.completed() ? ModuleState.COMPLETE : ModuleState.RUNNING;
                 progress = active.completed() ? 1.0 : 0.0;
             }
             statuses.add(new StepStatus(run.chartPath(), stepId, element == null ? null
                     : element.getId(), moduleId, state, progress));
-            ChartRun child = run.childFor(stepId);
-            if (child != null) {
-                collectStatuses(child, statuses);
-            }
+            statuses.addAll(childStatuses);
         }
+    }
+
+    private static double progressOf(ChartRun child, List<StepStatus> childStatuses) {
+        double progress = child == null ? 0.0 : child.progress();
+        for (StepStatus status : childStatuses) {
+            progress = Math.max(progress, status.progress());
+        }
+        return Math.max(0.0, Math.min(1.0, progress));
     }
 
     private void collectCompleted(ChartRun run, Set<String> keys) {

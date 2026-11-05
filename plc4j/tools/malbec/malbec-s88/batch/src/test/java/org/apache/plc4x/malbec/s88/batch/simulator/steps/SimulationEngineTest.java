@@ -40,6 +40,7 @@ import org.apache.plc4x.malbec.s88.batch.model.EventType;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
+import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -62,6 +63,26 @@ class SimulationEngineTest {
 
         assertEquals(ModuleState.COMPLETE, engine.batchState(), () -> engine.snapshot() + "\n"
                 + engine.drainEvents() + "\n" + engine.warnings());
+    }
+
+    @Test
+    void anActivePhaseReportsProgressToItsUnitProcedure() {
+        SimulationEngine engine = engine(DemoFixtures.request("BATCH-PROGRESS"));
+
+        assertTrue(engine.command(BatchCommand.START).accepted());
+        tick(engine, 5);
+
+        List<StepStatus> statuses = engine.snapshot().activeSteps();
+        StepStatus unit = statuses.stream()
+                .filter(step -> "UP_REACTOR".equals(step.stepId()))
+                .findFirst().orElseThrow();
+        StepStatus phase = statuses.stream()
+                .filter(step -> "CARGAR".equals(step.stepId()))
+                .findFirst().orElseThrow();
+
+        assertTrue(phase.progress() > 0, () -> statuses.toString());
+        assertTrue(unit.progress() >= phase.progress(),
+                () -> "the unit procedure should carry the progress of its phase: " + statuses);
     }
 
     @Test

@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -124,6 +125,45 @@ class LinkBatchClientTest {
             session.control().setLinkUp(true);
             await(() -> client.lastSnapshot().connected(), "The link did not come back");
             await(() -> hasEvent(events, EventType.CONNECTION_RESTORED), events.toString());
+        }
+    }
+
+    @Test
+    void pausingTheClockKeepsTheLinkAlive() {
+        BatchPayload payload = payload("BATCH-LINK-PAUSED");
+        try (SimulatedSession session = SimulatedSession.create(payload,
+                SessionOptions.defaults().withClockRunning(false))) {
+            BatchClient client = session.client();
+            AtomicInteger updates = new AtomicInteger();
+            client.addListener(snapshot -> updates.incrementAndGet());
+            await(() -> client.lastSnapshot() != null && client.lastSnapshot().connected(),
+                    "The link did not connect");
+            int before = updates.get();
+
+            session.control().pauseClock();
+
+            await(() -> updates.get() > before + 2,
+                    "The paused plant stopped sending its heartbeat");
+        }
+    }
+
+    @Test
+    void simulationControlWritesAVariableIntoThePlant() {
+        BatchPayload payload = payload("BATCH-LINK-SET");
+        try (SimulatedSession session = SimulatedSession.create(payload,
+                SessionOptions.defaults().withSpeed(600))) {
+            BatchClient client = session.client();
+            await(() -> client.lastSnapshot() != null && client.lastSnapshot().connected(),
+                    "The link did not connect");
+
+            session.control().setVariable("TEMPERATURA_ACTUAL", 99.0);
+
+            await(() -> {
+                org.apache.plc4x.malbec.s88.batch.model.VariableSample sample =
+                        client.lastSnapshot().variables().get("TEMPERATURA_ACTUAL");
+                return sample != null && sample.value() instanceof Number number
+                        && number.doubleValue() == 99.0;
+            }, "The injected value did not reach the link");
         }
     }
 

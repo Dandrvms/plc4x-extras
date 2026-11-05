@@ -70,6 +70,21 @@ class RuntimeViewModelTest {
     }
 
     @Test
+    void theFollowTargetIsTheDeepestActiveChart() {
+        RuntimeViewModel model = new RuntimeViewModel(recipe(), null);
+        BatchSnapshot snapshot = new BatchSnapshot("BATCH", 1, BatchMode.SIMULATED,
+                ModuleState.RUNNING, true, 1.0, 1.0,
+                List.of(new StepStatus("", "UP_REACTOR", "UP_REACTOR", null,
+                                ModuleState.RUNNING, 0.2),
+                        new StepStatus("UP_REACTOR", "CARGAR", "CARGAR", "BOMBA_1",
+                                ModuleState.RUNNING, 0.6)),
+                Set.of(), Set.of(), Map.of(), List.of(), PendingDecision.NONE);
+
+        assertEquals("UP_REACTOR", model.activeChartPath(snapshot),
+                "because the phase below the unit procedure is the one to follow");
+    }
+
+    @Test
     void theCommandsAreTheOnesTheObservedStateAccepts() {
         RuntimeViewModel model = new RuntimeViewModel(recipe(), null);
 

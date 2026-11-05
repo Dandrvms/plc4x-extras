@@ -104,6 +104,8 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private final JLabel statusLabel = label(" ");
     private final JLabel breadcrumb = label("Procedure");
     private final JPanel activeList = new JPanel();
+    private final JButton outputButton = new JButton("Output");
+    private final JButton controlButton = new JButton("Simulation control");
     private final JTextArea footer = area(4);
     private final JTextField moduleFilter = new JTextField(16);
     private final JCheckBox followActive = new JCheckBox("Follow active phase");
@@ -120,6 +122,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private final Map<BatchCommand, JButton> commandButtons = new LinkedHashMap<>();
     private final Deque<String> recentEvents = new ArrayDeque<>();
     private final List<BatchEvent> eventHistory = new ArrayList<>();
+    private final Set<String> seenEvents = new java.util.LinkedHashSet<>();
 
     private BatchPayload payload;
     private S88MasterRecipe recipe;
@@ -127,9 +130,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private BatchRuntimeService service;
     private RuntimeController controller;
     private RuntimeViewModel viewModel;
+    private SimulationControlDialog controlDialog;
     private S88RecipeElement owner;
     private BatchSnapshot lastSnapshot;
-    private boolean finished;
+    private int finishedRun = -1;
 
     public BatchRuntimeTopComponent() {
         initUi();
@@ -150,6 +154,8 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         try {
             session = SimulatedSession.create(payload,
                     SessionOptions.defaults().withSpeed(speed));
+            outputButton.setEnabled(true);
+            controlButton.setEnabled(true);
             service = new BatchRuntimeService(session.client(), outputRoot, payload);
             service.start();
             controller = new RuntimeController(session.client(), this::applySnapshot);
@@ -202,6 +208,12 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         header.add(stateLabel);
         header.add(connectionLabel);
         header.add(simulated);
+        header.add(outputButton);
+        header.add(controlButton);
+        outputButton.setEnabled(false);
+        controlButton.setEnabled(false);
+        outputButton.addActionListener(event -> BatchOutputTopComponent.showFor(this));
+        controlButton.addActionListener(event -> openControlDialog());
         add(header, BorderLayout.NORTH);
 
         JPanel left = panel("Execution");
@@ -397,18 +409,31 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         updateChart(snapshot);
         updateVariables(snapshot);
         updateCommands(snapshot);
-        appendEvents(snapshot.newEvents());
+        BatchOutputTopComponent.publish(this, appendEvents(snapshot.newEvents()));
+        if (controlDialog != null && controlDialog.isDisplayable()) {
+            controlDialog.update(snapshot);
+        }
         if (snapshot.batchState().kind() == ModuleState.Kind.FINAL) {
             finished(snapshot);
         }
         repaint();
     }
 
+    private void openControlDialog() {
+        if (session == null || payload == null || viewModel == null) {
+            return;
+        }
+        if (controlDialog == null || !controlDialog.isDisplayable()) {
+            controlDialog = new SimulationControlDialog(SwingUtilities.getWindowAncestor(this),
+                    session.control(), payload, viewModel, lastSnapshot);
+        }
+        controlDialog.setVisible(true);
+        controlDialog.toFront();
+    }
+
     private void follow(BatchSnapshot snapshot) {
-        StepStatus first = snapshot.activeSteps().stream().findFirst().orElse(null);
-        String path = first == null ? "" : first.chartPath();
-        S88RecipeElement wanted = path == null || path.isBlank() ? null
-                : recipe.findElement(path).orElse(null);
+        String path = viewModel == null ? "" : viewModel.activeChartPath(snapshot);
+        S88RecipeElement wanted = path.isBlank() ? null : recipe.findElement(path).orElse(null);
         if (wanted != owner) {
             showChart(wanted);
         }
@@ -466,11 +491,16 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         statusLabel.setForeground(result.accepted() ? NORMAL : ALARM);
     }
 
-    private void appendEvents(List<BatchEvent> events) {
+    private List<BatchEvent> appendEvents(List<BatchEvent> events) {
+        List<BatchEvent> added = new ArrayList<>();
         if (events == null || events.isEmpty()) {
-            return;
+            return added;
         }
         for (BatchEvent event : events) {
+            if (!seenEvents.add(event.run() + ":" + event.seq())) {
+                continue;
+            }
+            added.add(event);
             eventHistory.add(event);
             recentEvents.addLast(String.format("%7.2f  %-20s %s  %s", event.simTime(),
                     event.type(), event.elementId() == null ? "" : event.elementId(),
@@ -480,6 +510,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
             recentEvents.removeFirst();
         }
         footer.setText(String.join("\n", recentEvents));
+        return added;
     }
 
     private String units(BatchSnapshot snapshot) {
@@ -536,13 +567,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     }
 
     private void finished(BatchSnapshot snapshot) {
-        if (finished) {
+        if (finishedRun == snapshot.run()) {
             return;
         }
-        finished = true;
-        if (controller != null) {
-            controller.stop();
-        }
+        finishedRun = snapshot.run();
         RunFolder folder = service == null ? null : service.currentRunFolder();
         new BatchFinishedDialog(SwingUtilities.getWindowAncestor(this), snapshot,
                 folder == null ? null : folder.reportFile(),
@@ -550,7 +578,29 @@ public final class BatchRuntimeTopComponent extends TopComponent {
                 eventHistory).setVisible(true);
     }
 
+    String outputBatchId() {
+        return batchId();
+    }
+
+    List<BatchEvent> outputEvents() {
+        return List.copyOf(eventHistory);
+    }
+
+    Path reportFile() {
+        RunFolder folder = service == null ? null : service.currentRunFolder();
+        return folder == null ? null : folder.reportFile();
+    }
+
+    Path runFolder() {
+        RunFolder folder = service == null ? null : service.currentRunFolder();
+        return folder == null ? null : folder.directory();
+    }
+
     private void cleanup() {
+        if (controlDialog != null) {
+            controlDialog.dispose();
+            controlDialog = null;
+        }
         if (controller != null) {
             controller.close();
             controller = null;

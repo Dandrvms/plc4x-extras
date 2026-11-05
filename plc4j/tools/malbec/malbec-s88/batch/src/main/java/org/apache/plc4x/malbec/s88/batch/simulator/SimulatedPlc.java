@@ -193,6 +193,8 @@ public final class SimulatedPlc implements AutoCloseable {
             }
             if (ticked || input) {
                 bridge.publish(engine.snapshot(), false);
+            } else {
+                bridge.publishKeepAlive(engine.snapshot());
             }
         } catch (RuntimeException error) {
             failure = error;

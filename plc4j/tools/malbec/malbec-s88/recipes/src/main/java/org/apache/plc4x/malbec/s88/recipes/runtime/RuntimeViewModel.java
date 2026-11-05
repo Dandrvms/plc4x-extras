@@ -57,6 +57,37 @@ public final class RuntimeViewModel {
         return owner == null ? "" : owner.getId();
     }
 
+    /** The deepest chart that has an active step, or the procedure chart when none has one. */
+    public String activeChartPath(BatchSnapshot snapshot) {
+        if (snapshot == null) {
+            return "";
+        }
+        String deepest = "";
+        int depth = -1;
+        for (StepStatus step : snapshot.activeSteps()) {
+            String path = step.chartPath();
+            if (path == null || path.isBlank()) {
+                continue;
+            }
+            int candidate = depthOf(path);
+            if (candidate > depth) {
+                depth = candidate;
+                deepest = path;
+            }
+        }
+        return deepest;
+    }
+
+    private int depthOf(String path) {
+        S88RecipeElement element = recipe == null ? null : recipe.findElement(path).orElse(null);
+        int depth = 0;
+        while (element != null) {
+            depth++;
+            element = element.getParent();
+        }
+        return depth;
+    }
+
     /** What the chart of the given step should show for this snapshot. */
     public ChartState chartState(S88RecipeElement owner, BatchSnapshot snapshot) {
         String path = chartPathOf(owner);
