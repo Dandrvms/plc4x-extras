@@ -88,6 +88,9 @@ public final class SimulatedModule {
     }
 
     public double progress() {
+        if (machine.state() == ModuleState.COMPLETE) {
+            return 1.0;
+        }
         if (durationSeconds <= 0) {
             return 1.0;
         }
@@ -110,12 +113,13 @@ public final class SimulatedModule {
         return lastCommand;
     }
 
-    public void setStepCount(int stepCount) {
-        if (stepCount < 0) {
-            throw new IllegalArgumentException("A phase cannot have a negative number of steps.");
+    public void setActiveStep(int stepIndex, int stepCount, double simTime) {
+        if (stepIndex < 0 || stepCount < 0 || stepIndex > stepCount) {
+            throw new IllegalArgumentException("A step has to sit inside its chart.");
         }
+        this.stepIndex = stepIndex;
         this.stepCount = stepCount;
-        updateStepIndex();
+        publish(simTime);
     }
 
     public ModuleStateMachine.CommandOutcome command(BatchCommand command, double simTime) {
@@ -124,10 +128,12 @@ public final class SimulatedModule {
             if (command == BatchCommand.START) {
                 elapsed = 0;
                 stepIndex = 0;
+                stepCount = 0;
                 durationSeconds = resolveDuration();
             } else if (command == BatchCommand.RESET) {
                 elapsed = 0;
                 stepIndex = 0;
+                stepCount = 0;
                 durationSeconds = profile.defaultPhaseSeconds();
                 durationExplicit = false;
             }
@@ -145,7 +151,6 @@ public final class SimulatedModule {
         if (machine.state() == ModuleState.RUNNING) {
             elapsed += dt;
             applyFollowRules(dt, simTime);
-            updateStepIndex();
             if (complete()) {
                 machine.complete();
             }
@@ -159,6 +164,7 @@ public final class SimulatedModule {
         machine.reset();
         elapsed = 0;
         stepIndex = 0;
+        stepCount = 0;
         durationSeconds = profile.defaultPhaseSeconds();
         durationExplicit = false;
         publish(simTime);
@@ -282,17 +288,6 @@ public final class SimulatedModule {
         return store.contains(baseName) ? baseName : null;
     }
 
-    private void updateStepIndex() {
-        if (stepCount <= 0) {
-            stepIndex = 0;
-            return;
-        }
-        stepIndex = (int) Math.floor(progress() * stepCount);
-        if (stepIndex > stepCount) {
-            stepIndex = stepCount;
-        }
-    }
-
     private void applyFailure() {
         Double failure = store.numeric(PlatformVariable.FAILURE.publishedName(moduleId));
         if (failure != null && failure != 0 && machine.state().isActive()
@@ -308,6 +303,8 @@ public final class SimulatedModule {
                 (double) stepIndex, simTime);
         store.setIfPresent(PlatformVariable.STEP_COUNT.publishedName(moduleId),
                 (double) stepCount, simTime);
+        store.setIfPresent(PlatformVariable.PROGRESS.publishedName(moduleId),
+                progress(), simTime);
         String elapsedName = resolve(S88PlantModel.REPORTS, "TIEMPO_TRANSCURRIDO");
         if (elapsedName != null) {
             ProcessVariable elapsedVariable = store.get(elapsedName);

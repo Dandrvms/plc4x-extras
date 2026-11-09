@@ -21,8 +21,10 @@ package org.apache.plc4x.malbec.s88.batch.model;
 /**
  * The state of one active step.
  *
- * @param progress a fraction from 0 to 1
+ * @param progress  a fraction from 0 to 1
+ * @param stepIndex the active step number in the chart, 0 when unknown
+ * @param stepCount the number of steps in the chart, 0 when unknown
  */
 public record StepStatus(String chartPath, String stepId, String elementId, String moduleId,
-                         ModuleState state, double progress) {
+                         ModuleState state, double progress, int stepIndex, int stepCount) {
 }

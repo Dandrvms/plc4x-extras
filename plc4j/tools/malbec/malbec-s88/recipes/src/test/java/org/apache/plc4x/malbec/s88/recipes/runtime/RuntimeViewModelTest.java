@@ -49,7 +49,7 @@ class RuntimeViewModelTest {
 
     private static BatchSnapshot snapshot() {
         StepStatus active = new StepStatus("", "BEGIN", "BEGIN", null,
-                ModuleState.RUNNING, 0.45);
+                ModuleState.RUNNING, 0.45, 0, 0);
         VariableSample temperature = new VariableSample("TEMPERATURA_ACTUAL", 72.0,
                 DataType.REAL, "C", Instant.now(), Quality.GOOD, "plc");
         return new BatchSnapshot("BATCH", 1, BatchMode.SIMULATED, ModuleState.RUNNING, true,
@@ -75,13 +75,14 @@ class RuntimeViewModelTest {
         BatchSnapshot snapshot = new BatchSnapshot("BATCH", 1, BatchMode.SIMULATED,
                 ModuleState.RUNNING, true, 1.0, 1.0,
                 List.of(new StepStatus("", "UP_REACTOR", "UP_REACTOR", null,
-                                ModuleState.RUNNING, 0.2),
-                        new StepStatus("UP_REACTOR", "CARGAR", "CARGAR", "BOMBA_1",
-                                ModuleState.RUNNING, 0.6)),
+                                ModuleState.RUNNING, 0.2, 0, 0),
+                        new StepStatus("UP_REACTOR", "CARGAR", "BOMBA_1", "BOMBA_1",
+                                ModuleState.RUNNING, 0.6, 2, 5)),
                 Set.of(), Set.of(), Map.of(), List.of(), PendingDecision.NONE);
 
         assertEquals("UP_REACTOR", model.activeChartPath(snapshot),
                 "because the phase below the unit procedure is the one to follow");
+        assertEquals("CARGAR (2/5)", model.activeStepLabel(snapshot));
     }
 
     @Test

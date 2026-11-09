@@ -154,18 +154,38 @@ class SimulatedModuleTest {
         fixture.store().set("DURACION", 2.5, 0.0);
         SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
                 SimulationProfile.defaults(), fixture.store());
-        module.setStepCount(2);
 
         module.command(BatchCommand.START, 0.0);
+        module.setActiveStep(2, 2, 0.0);
         assertEquals(2.5, module.durationSeconds(), 1e-9);
         module.tick(1.0, 1.0);
         assertEquals(ModuleState.RUNNING, module.state());
-        assertEquals(0, module.stepIndex());
+        assertEquals(2, module.stepIndex());
+        assertEquals(2, module.stepCount());
+        assertEquals(0.4, fixture.store().numeric("PROGRESS_BOMBA_1"), 1e-9);
 
         module.tick(1.5, 2.5);
         assertEquals(ModuleState.COMPLETE, module.state());
         assertEquals(2, module.stepIndex());
         assertEquals(2.0, fixture.store().numeric("STEP_INDEX_BOMBA_1"), 1e-9);
+        assertEquals(2.0, fixture.store().numeric("STEP_COUNT_BOMBA_1"), 1e-9);
+        assertEquals(1.0, fixture.store().numeric("PROGRESS_BOMBA_1"), 1e-9);
+    }
+
+    @Test
+    void resetClearsTheActiveStep() {
+        Fixture fixture = fixture("BOMBA_1");
+        SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
+                SimulationProfile.defaults(), fixture.store());
+        module.command(BatchCommand.START, 0.0);
+        module.setActiveStep(2, 5, 0.0);
+
+        module.reset(1.0);
+
+        assertEquals(0, module.stepIndex());
+        assertEquals(0, module.stepCount());
+        assertEquals(0.0, fixture.store().numeric("STEP_INDEX_BOMBA_1"), 1e-9);
+        assertEquals(0.0, fixture.store().numeric("STEP_COUNT_BOMBA_1"), 1e-9);
     }
 
     @Test

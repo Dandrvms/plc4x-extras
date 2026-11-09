@@ -38,6 +38,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.plc4x.malbec.s88.api.DataType;
+import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
 import org.apache.plc4x.malbec.s88.batch.link.BatchContract;
 import org.apache.plc4x.malbec.s88.batch.link.LinkStatus;
@@ -596,6 +597,7 @@ public final class LinkBatchClient implements BatchClient {
         for (String key : activeKeys) {
             steps.add(stepStatus(key));
         }
+        steps = withChildProgress(steps);
         double wallElapsed = Math.max(0,
                 Duration.between(wallStart.get(), Instant.now()).toMillis() / 1000.0);
         lastSnapshot = new BatchSnapshot(batchId, run, BatchMode.SIMULATED, batchState,
@@ -612,7 +614,51 @@ public final class LinkBatchClient implements BatchClient {
         if (moduleId == null && payload != null) {
             moduleId = payload.unitOfStep().get(key);
         }
-        return new StepStatus(chartPath, stepId, moduleId, moduleId, ModuleState.RUNNING, 0);
+        int stepIndex = integer(PlatformVariable.STEP_INDEX.publishedName(moduleId));
+        int stepCount = integer(PlatformVariable.STEP_COUNT.publishedName(moduleId));
+        double progress = number(PlatformVariable.PROGRESS.publishedName(moduleId));
+        return new StepStatus(chartPath, stepId, moduleId, moduleId, ModuleState.RUNNING,
+                progress, stepIndex, stepCount);
+    }
+
+    private static List<StepStatus> withChildProgress(List<StepStatus> steps) {
+        List<StepStatus> result = new ArrayList<>(steps);
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int at = 0; at < result.size(); at++) {
+                StepStatus parent = result.get(at);
+                if (parent.progress() > 0) {
+                    continue;
+                }
+                double progress = 0;
+                for (StepStatus child : result) {
+                    if (parent.stepId().equals(child.chartPath())) {
+                        progress = Math.max(progress, child.progress());
+                    }
+                }
+                if (progress > 0) {
+                    result.set(at, new StepStatus(parent.chartPath(), parent.stepId(),
+                            parent.elementId(), parent.moduleId(), parent.state(), progress,
+                            parent.stepIndex(), parent.stepCount()));
+                    changed = true;
+                }
+            }
+        }
+        return result;
+    }
+
+    private int integer(String name) {
+        return (int) number(name);
+    }
+
+    private double number(String name) {
+        if (name == null) {
+            return 0.0;
+        }
+        VariableSample sample = variables.get(name);
+        return sample != null && sample.value() instanceof Number number
+                ? number.doubleValue() : 0.0;
     }
 
     private void markVariablesStaleLocked() {

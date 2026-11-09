@@ -100,6 +100,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     private final JLabel unitsLabel = label("Units: —");
     private final JLabel stateLabel = label("State: —");
     private final JLabel connectionLabel = label("Connection: OFFLINE");
+    private final JLabel activeStepLabel = label("Active step: —");
     private final JLabel simulated = new JLabel("SIMULATED", SwingConstants.CENTER);
     private final JLabel statusLabel = label(" ");
     private final JLabel breadcrumb = label("Procedure");
@@ -207,6 +208,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         header.add(unitsLabel);
         header.add(stateLabel);
         header.add(connectionLabel);
+        header.add(activeStepLabel);
         header.add(simulated);
         header.add(outputButton);
         header.add(controlButton);
@@ -393,6 +395,8 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         batchLabel.setText("Batch: " + snapshot.batchId());
         recipeLabel.setText("Recipe: " + (recipe == null ? "—" : recipe.getId()));
         unitsLabel.setText("Units: " + units(snapshot));
+        activeStepLabel.setText("Active step: " + (viewModel == null
+                ? "—" : viewModel.activeStepLabel(snapshot)));
         stateLabel.setText("State: " + snapshot.batchState());
         stateLabel.setForeground(snapshot.batchState() == ModuleState.COMPLETE ? NORMAL
                 : snapshot.batchState() == ModuleState.ABORTED

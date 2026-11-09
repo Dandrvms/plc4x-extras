@@ -86,6 +86,22 @@ class SimulationEngineTest {
     }
 
     @Test
+    void reportsTheActiveStepAndTheNumberOfSteps() {
+        SimulationEngine engine = engine(DemoFixtures.request("BATCH-STEP-INDEX"));
+
+        assertTrue(engine.command(BatchCommand.START).accepted());
+        tick(engine, 5);
+
+        StepStatus phase = engine.snapshot().activeSteps().stream()
+                .filter(step -> "CARGAR".equals(step.stepId()))
+                .findFirst().orElseThrow();
+        assertEquals(1, phase.stepIndex());
+        assertEquals(3, phase.stepCount());
+        assertEquals(1.0, value(engine, "STEP_INDEX_BOMBA_1"), 1e-9);
+        assertEquals(3.0, value(engine, "STEP_COUNT_BOMBA_1"), 1e-9);
+    }
+
+    @Test
     void takesTheBranchAnOperatorChose() {
         SimulationEngine engine = engine(alternative(), DecisionMode.MANUAL, 1000.0);
 

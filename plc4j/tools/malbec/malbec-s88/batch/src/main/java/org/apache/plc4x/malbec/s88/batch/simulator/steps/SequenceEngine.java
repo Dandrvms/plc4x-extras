@@ -263,14 +263,38 @@ public final class SequenceEngine {
             module.command(BatchCommand.RESET, simTime);
             module.tick(0, simTime);
         }
-        module.setStepCount(1);
         download(stepKey, moduleId, simTime);
         module.command(BatchCommand.START, simTime);
+        module.setActiveStep(stepNumber(run, stepId), stepCount(run), simTime);
         ModuleStateMachine.CommandOutcome outcome = module.lastCommand();
         if (outcome != null && !outcome.accepted()) {
             warnOnce("start:" + moduleId, "The module '" + moduleId + "' did not start for step '"
                     + stepId + "': " + outcome.reason());
         }
+    }
+
+    private int stepNumber(ChartRun run, String stepId) {
+        int number = 0;
+        for (S88ProcedureStep step : run.chart().getSteps()) {
+            if (isTerminal(step.getId())) {
+                continue;
+            }
+            number++;
+            if (stepId.equals(step.getId())) {
+                return number;
+            }
+        }
+        return 0;
+    }
+
+    private int stepCount(ChartRun run) {
+        int count = 0;
+        for (S88ProcedureStep step : run.chart().getSteps()) {
+            if (!isTerminal(step.getId())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void download(String stepKey, String moduleId, double simTime) {
@@ -558,7 +582,8 @@ public final class SequenceEngine {
                 progress = active.completed() ? 1.0 : 0.0;
             }
             statuses.add(new StepStatus(run.chartPath(), stepId, element == null ? null
-                    : element.getId(), moduleId, state, progress));
+                    : element.getId(), moduleId, state, progress, stepNumber(run, stepId),
+                    stepCount(run)));
             statuses.addAll(childStatuses);
         }
     }

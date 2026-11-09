@@ -207,12 +207,17 @@ class LinkBatchClientTest {
         link.emit(BatchContract.run(payload.batchId()), 1.0);
         link.emit(BatchContract.simTime(payload.batchId()), 2.5);
         link.emit(BatchContract.activeSteps(payload.batchId()), "UP_REACTOR/CALENTAR");
+        link.emit("STEP_INDEX_CALENTADOR_1", 2.0);
+        link.emit("STEP_COUNT_CALENTADOR_1", 5.0);
+        link.emit("PROGRESS_CALENTADOR_1", 0.6);
         link.emit(BatchContract.heartbeat(payload.batchId()), 1.0);
 
         await(() -> client.lastSnapshot().batchState() == ModuleState.RUNNING,
                 "The snapshot did not follow the fake link");
         assertTrue(client.lastSnapshot().activeSteps().stream()
-                .anyMatch(step -> "CALENTAR".equals(step.stepId())));
+                .anyMatch(step -> "CALENTAR".equals(step.stepId())
+                        && step.stepIndex() == 2 && step.stepCount() == 5
+                        && Math.abs(step.progress() - 0.6) < 1e-9));
         assertTrue(hasSnapshotEvent(snapshots, EventType.STEP_ACTIVATED));
         client.disconnect();
     }

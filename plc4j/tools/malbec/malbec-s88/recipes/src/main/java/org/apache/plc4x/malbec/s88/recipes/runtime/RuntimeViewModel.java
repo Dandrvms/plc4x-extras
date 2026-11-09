@@ -59,10 +59,28 @@ public final class RuntimeViewModel {
 
     /** The deepest chart that has an active step, or the procedure chart when none has one. */
     public String activeChartPath(BatchSnapshot snapshot) {
-        if (snapshot == null) {
-            return "";
+        StepStatus active = deepestActiveStep(snapshot);
+        return active == null || active.chartPath() == null ? "" : active.chartPath();
+    }
+
+    /** The active step as it is shown to the operator. */
+    public String activeStepLabel(BatchSnapshot snapshot) {
+        StepStatus active = deepestActiveStep(snapshot);
+        if (active == null) {
+            return "No active step";
         }
-        String deepest = "";
+        String name = active.stepId();
+        if (active.stepIndex() > 0 && active.stepCount() > 0) {
+            return name + " (" + active.stepIndex() + "/" + active.stepCount() + ")";
+        }
+        return name;
+    }
+
+    private StepStatus deepestActiveStep(BatchSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        StepStatus deepest = null;
         int depth = -1;
         for (StepStatus step : snapshot.activeSteps()) {
             String path = step.chartPath();
@@ -72,7 +90,7 @@ public final class RuntimeViewModel {
             int candidate = depthOf(path);
             if (candidate > depth) {
                 depth = candidate;
-                deepest = path;
+                deepest = step;
             }
         }
         return deepest;

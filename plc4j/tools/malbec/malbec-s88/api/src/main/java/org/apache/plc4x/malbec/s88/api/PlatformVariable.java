@@ -48,11 +48,14 @@ public enum PlatformVariable {
     /** A request from the module asking the operator for something while the phase is running. */
     REQUEST("REQUEST", S88PlantModel.REPORTS, DataType.INTEGER, null, "0"),
 
-    /** The step the module is on inside its phase. Only the recipe cares, and only while it runs. */
+    /** The active step in the chart of the phase, 1-based. */
     STEP_INDEX("STEP_INDEX", S88PlantModel.REPORTS, DataType.INTEGER, null, "0"),
 
-    /** How many steps the phase has. Together with {@code STEP_INDEX} it names the current step. */
+    /** How many non-terminal steps the chart of the phase has. */
     STEP_COUNT("STEP_COUNT", S88PlantModel.REPORTS, DataType.INTEGER, null, "0"),
+
+    /** How much of the current phase has run, from 0 to 1. */
+    PROGRESS("PROGRESS", S88PlantModel.REPORTS, DataType.REAL, null, "0"),
 
     /**
      * The order the batch gives the module. {@code NONE} is the value a module reads when no order
