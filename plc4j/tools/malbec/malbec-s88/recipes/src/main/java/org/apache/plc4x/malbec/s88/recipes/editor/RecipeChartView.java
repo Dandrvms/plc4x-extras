@@ -178,16 +178,15 @@ public final class RecipeChartView extends AbstractRecipeView {
     private static void zoomWithControlAndWheel(JComponent target, RecipeChartScene chart) {
         double step = 1.1;
         target.addMouseWheelListener(event -> {
-            if (!event.isControlDown()) {
-                return;
+            if (event.isControlDown()) {
+                double zoom = chart.getZoomFactor();
+                if (event.getWheelRotation() < 0) {
+                    zoom *= step;
+                } else {
+                    zoom /= step;
+                }
+                chart.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
             }
-            double zoom = chart.getZoomFactor();
-            if (event.getWheelRotation() < 0) {
-                zoom *= step;
-            } else {
-                zoom /= step;
-            }
-            chart.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
             event.consume();
         });
     }

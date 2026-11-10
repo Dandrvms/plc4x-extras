@@ -16,24 +16,26 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.batch.client.sim;
+package org.apache.plc4x.malbec.s88.batch.simulator;
 
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
 import org.apache.plc4x.malbec.s88.batch.client.BatchClient;
 import org.apache.plc4x.malbec.s88.batch.client.LinkBatchClient;
-import org.apache.plc4x.malbec.s88.batch.client.SessionOptions;
-import org.apache.plc4x.malbec.s88.batch.client.SimulationControl;
+
+
 import org.apache.plc4x.malbec.s88.batch.link.ProcessLink;
 import org.apache.plc4x.malbec.s88.batch.link.gpclient.GpClientEndpoint;
 import org.apache.plc4x.malbec.s88.batch.link.gpclient.GpClientLinkConfig;
 import org.apache.plc4x.malbec.s88.batch.link.gpclient.GpClientProcessLink;
+import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
 import org.apache.plc4x.malbec.s88.batch.model.SimulationProfile;
-import org.apache.plc4x.malbec.s88.batch.simulator.SimulatedPlc;
+
 import org.apache.plc4x.malbec.s88.batch.simulator.steps.ExitPolicy;
 
 /**
@@ -91,6 +93,18 @@ public final class SimulatedSession implements AutoCloseable {
         return control;
     }
 
+    public BatchSnapshot snapshot() {
+        return plc.snapshot();
+    }
+
+    public void addSnapshotListener(Consumer<BatchSnapshot> listener) {
+        plc.addSnapshotListener(listener);
+    }
+
+    public void removeSnapshotListener(Consumer<BatchSnapshot> listener) {
+        plc.removeSnapshotListener(listener);
+    }
+
     @Override
     public void close() {
         batchClient.disconnect();
@@ -140,6 +154,16 @@ public final class SimulatedSession implements AutoCloseable {
         @Override
         public double speed() {
             return plc.speed();
+        }
+
+        @Override
+        public void setAutomatic(boolean automatic) {
+            plc.setAutomatic(automatic);
+        }
+
+        @Override
+        public void completeStep(String moduleId) {
+            plc.completePhase(moduleId);
         }
 
         @Override

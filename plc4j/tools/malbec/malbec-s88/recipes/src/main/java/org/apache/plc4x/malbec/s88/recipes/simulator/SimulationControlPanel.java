@@ -16,13 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.recipes.runtime;
+package org.apache.plc4x.malbec.s88.recipes.simulator;
 
 import java.awt.BorderLayout;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Window;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -42,14 +40,16 @@ import javax.swing.JTable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.table.DefaultTableModel;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
-import org.apache.plc4x.malbec.s88.batch.client.SimulationControl;
+import org.apache.plc4x.malbec.s88.batch.simulator.SimulationControl;
 import org.apache.plc4x.malbec.s88.batch.link.VariableCatalog;
 import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
+import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
 import org.apache.plc4x.malbec.s88.batch.model.VariableSample;
+import org.apache.plc4x.malbec.s88.recipes.runtime.RuntimeViewModel;
 
 /** Controls the clock, variables, failures and link of the simulated plant. */
-final class SimulationControlDialog extends JDialog {
+public final class SimulationControlPanel extends JPanel {
 
     private static final long serialVersionUID = 1L;
 
@@ -61,6 +61,7 @@ final class SimulationControlDialog extends JDialog {
     private final RuntimeViewModel viewModel;
     private final Map<String, VariableCatalog.Definition> definitions;
 
+    private final JCheckBox automatic = new JCheckBox("Automatic process");
     private final JButton clockButton = new JButton("Pause clock");
     private final JComboBox<String> speedBox = new JComboBox<>(SPEEDS);
     private final JComboBox<String> modeBox = new JComboBox<>(new String[]{TIMED, STEP_BY_STEP});
@@ -70,7 +71,9 @@ final class SimulationControlDialog extends JDialog {
     private final JComboBox<String> failureModule = new JComboBox<>();
     private final JSpinner failureCode = new JSpinner(new SpinnerNumberModel(1, 0, 9999, 1));
     private final JCheckBox linkUp = new JCheckBox("Link up", true);
-    private final JCheckBox alwaysOnTop = new JCheckBox("Always on top");
+    private final JComboBox<String> activeStepBox = new JComboBox<>();
+    private final List<String> activeModuleIds = new ArrayList<>();
+    private final JButton completeButton = new JButton("Complete step");
     private final JLabel status = new JLabel(" ");
     private final DefaultTableModel variableRows = new DefaultTableModel(
             new Object[]{"Module", "Variable", "Value", "Unit", "Type"}, 0) {
@@ -87,30 +90,32 @@ final class SimulationControlDialog extends JDialog {
                 return;
             }
             String text = value == null ? "" : value.toString();
-            if (SimulationControlDialog.this.applyVariable(variableNames.get(row), text)) {
+            if (SimulationControlPanel.this.applyVariable(variableNames.get(row), text)) {
                 super.setValueAt(text, row, column);
             }
         }
     };
     private final JTable variableTable = new JTable(variableRows);
     private final List<String> variableNames = new ArrayList<>();
+    private final Map<String, Integer> rowByVariable = new LinkedHashMap<>();
+    private final List<String> currentPhaseLabels = new ArrayList<>();
+    private final List<String> currentDecisionCandidates = new ArrayList<>();
 
     private boolean updating;
 
-    SimulationControlDialog(Window owner, SimulationControl control, BatchPayload payload,
-                            RuntimeViewModel viewModel, BatchSnapshot initial) {
-        this(owner, control, VariableCatalog.of(payload), modulesOf(payload), viewModel, initial);
+    SimulationControlPanel(SimulationControl control, BatchPayload payload,
+                           RuntimeViewModel viewModel, BatchSnapshot initial) {
+        this(control, VariableCatalog.of(payload), modulesOf(payload), viewModel, initial);
     }
 
-    SimulationControlDialog(Window owner, SimulationControl control,
-                            Map<String, VariableCatalog.Definition> definitions,
-                            List<String> modules, RuntimeViewModel viewModel,
-                            BatchSnapshot initial) {
-        super(owner, "Simulation control", ModalityType.MODELESS);
+    SimulationControlPanel(SimulationControl control,
+                           Map<String, VariableCatalog.Definition> definitions,
+                           List<String> modules, RuntimeViewModel viewModel,
+                           BatchSnapshot initial) {
+        super(new BorderLayout());
         this.control = control;
         this.viewModel = viewModel;
         this.definitions = definitions == null ? Map.of() : definitions;
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         JPanel body = new JPanel(new BorderLayout(8, 8));
         body.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
@@ -152,17 +157,36 @@ final class SimulationControlDialog extends JDialog {
                 status.setText("Decision sent: " + selected);
             }
         });
-        alwaysOnTop.addActionListener(event -> setAlwaysOnTop(alwaysOnTop.isSelected()));
+        completeButton.addActionListener(event -> {
+            int at = activeStepBox.getSelectedIndex();
+            if (at >= 0 && at < activeModuleIds.size()) {
+                control.completeStep(activeModuleIds.get(at));
+                if (!automatic.isSelected()) {
+                    control.stepTicks(1);
+                }
+                status.setText("Step completed: " + activeStepBox.getSelectedItem());
+            }
+        });
+        automatic.addActionListener(event -> {
+            control.setAutomatic(automatic.isSelected());
+            if (!automatic.isSelected()) {
+                control.pauseClock();
+            }
+            updateClock();
+            status.setText(automatic.isSelected() ? "Automatic process" : "Manual process");
+        });
         linkUp.addActionListener(event -> {
             control.setLinkUp(linkUp.isSelected());
             status.setText(linkUp.isSelected() ? "Link restored" : "Link down");
         });
 
         speedBox.setSelectedItem(labelOf(control.speed()));
+        control.setAutomatic(automatic.isSelected());
+        if (!automatic.isSelected()) {
+            control.pauseClock();
+        }
         updateClock();
         update(initial);
-        setSize(new Dimension(980, 620));
-        setLocationRelativeTo(owner);
     }
 
     private JPanel controls(List<String> modules) {
@@ -190,7 +214,7 @@ final class SimulationControlDialog extends JDialog {
         clock.add(speedBox);
         clock.add(new JLabel("Mode:"));
         clock.add(modeBox);
-        clock.add(alwaysOnTop);
+        clock.add(automatic);
         panel.add(clock);
 
         JPanel decision = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
@@ -205,6 +229,13 @@ final class SimulationControlDialog extends JDialog {
         decision.add(decisionBox);
         decision.add(decideButton);
         panel.add(decision);
+
+        JPanel phase = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
+        phase.setBorder(BorderFactory.createTitledBorder("Active phase"));
+        phase.add(new JLabel("Step:"));
+        phase.add(activeStepBox);
+        phase.add(completeButton);
+        panel.add(phase);
 
         JPanel plant = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         plant.setBorder(BorderFactory.createTitledBorder("Plant"));
@@ -251,7 +282,12 @@ final class SimulationControlDialog extends JDialog {
         updating = true;
         try {
             updateClock();
-            updateDecision(next);
+            if (!activeStepBox.isPopupVisible()) {
+                updatePhase(next);
+            }
+            if (!decisionBox.isPopupVisible()) {
+                updateDecision(next);
+            }
             if (!variableTable.isEditing()) {
                 updateVariables(next);
             }
@@ -261,11 +297,49 @@ final class SimulationControlDialog extends JDialog {
     }
 
     private void updateClock() {
-        clockButton.setText(control.isClockRunning() ? "Pause clock" : "Run clock");
+        String text = control.isClockRunning() ? "Pause clock" : "Run clock";
+        if (!text.equals(clockButton.getText())) {
+            clockButton.setText(text);
+        }
+    }
+
+    private void updatePhase(BatchSnapshot next) {
+        List<String> labels = new ArrayList<>();
+        List<String> modules = new ArrayList<>();
+        for (StepStatus step : next.activeSteps()) {
+            if (step.moduleId() == null || step.moduleId().isBlank()) {
+                continue;
+            }
+            labels.add(step.stepId() + " [" + step.moduleId() + "]");
+            modules.add(step.moduleId());
+        }
+        if (labels.equals(currentPhaseLabels)) {
+            return;
+        }
+        Object picked = activeStepBox.getSelectedItem();
+        currentPhaseLabels.clear();
+        currentPhaseLabels.addAll(labels);
+        activeModuleIds.clear();
+        activeModuleIds.addAll(modules);
+        activeStepBox.removeAllItems();
+        for (String label : labels) {
+            activeStepBox.addItem(label);
+        }
+        if (picked != null && labels.contains(picked.toString())) {
+            activeStepBox.setSelectedItem(picked);
+        }
+        boolean active = !activeModuleIds.isEmpty();
+        activeStepBox.setEnabled(active);
+        completeButton.setEnabled(active);
     }
 
     private void updateDecision(BatchSnapshot next) {
         List<String> candidates = next.pendingDecision().candidates();
+        if (candidates.equals(currentDecisionCandidates)) {
+            return;
+        }
+        currentDecisionCandidates.clear();
+        currentDecisionCandidates.addAll(candidates);
         Object picked = decisionBox.getSelectedItem();
         decisionBox.removeAllItems();
         for (String candidate : candidates) {
@@ -281,16 +355,44 @@ final class SimulationControlDialog extends JDialog {
     }
 
     private void updateVariables(BatchSnapshot next) {
-        variableRows.setRowCount(0);
-        variableNames.clear();
+        Map<String, Integer> nextRows = new LinkedHashMap<>();
         for (RuntimeViewModel.VariableRow row : rowsOf(next)) {
             VariableCatalog.Definition definition = definitions.get(row.variable());
             if (definition == null) {
                 continue;
             }
-            variableRows.addRow(new Object[]{row.module(), row.variable(), row.value(),
-                    row.unit() == null ? "" : row.unit(), definition.type().name()});
-            variableNames.add(row.variable());
+            String unit = row.unit() == null ? "" : row.unit();
+            Integer at = rowByVariable.get(row.variable());
+            if (at == null || at < 0 || at >= variableRows.getRowCount()) {
+                at = variableRows.getRowCount();
+                variableRows.addRow(new Object[]{row.module(), row.variable(), row.value(),
+                        unit, definition.type().name()});
+                variableNames.add(row.variable());
+            } else {
+                setIfChanged(at, 0, row.module());
+                setIfChanged(at, 2, row.value());
+                setIfChanged(at, 3, unit);
+                setIfChanged(at, 4, definition.type().name());
+            }
+            nextRows.put(row.variable(), at);
+        }
+        for (int at = variableRows.getRowCount() - 1; at >= 0; at--) {
+            String variable = variableNames.get(at);
+            if (!nextRows.containsKey(variable)) {
+                variableRows.removeRow(at);
+                variableNames.remove(at);
+            }
+        }
+        rowByVariable.clear();
+        for (int at = 0; at < variableNames.size(); at++) {
+            rowByVariable.put(variableNames.get(at), at);
+        }
+    }
+
+    private void setIfChanged(int row, int column, Object value) {
+        Object current = variableRows.getValueAt(row, column);
+        if (!java.util.Objects.equals(current, value)) {
+            variableRows.setValueAt(value, row, column);
         }
     }
 

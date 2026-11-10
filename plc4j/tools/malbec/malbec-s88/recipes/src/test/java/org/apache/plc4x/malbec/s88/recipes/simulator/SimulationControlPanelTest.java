@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.recipes.runtime;
+package org.apache.plc4x.malbec.s88.recipes.simulator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.apache.plc4x.malbec.s88.api.DataType;
-import org.apache.plc4x.malbec.s88.batch.client.SimulationControl;
+import org.apache.plc4x.malbec.s88.batch.simulator.SimulationControl;
 import org.apache.plc4x.malbec.s88.batch.link.Quality;
 import org.apache.plc4x.malbec.s88.batch.link.VariableCatalog;
 import org.apache.plc4x.malbec.s88.batch.model.BatchMode;
@@ -39,25 +39,25 @@ import org.apache.plc4x.malbec.s88.batch.model.PendingDecision;
 import org.apache.plc4x.malbec.s88.batch.model.VariableSample;
 import org.junit.jupiter.api.Test;
 
-class SimulationControlDialogTest {
+class SimulationControlPanelTest {
 
     @Test
     void writesNumericTextAndEnumerationValuesThroughTheControl() {
         onSwingThread(() -> {
             FakeControl control = new FakeControl();
-            SimulationControlDialog dialog = dialog(control);
+            SimulationControlPanel panel = panel(control);
 
-            assertTrue(dialog.applyVariable("TEMPERATURA_ACTUAL", "75.5"));
+            assertTrue(panel.applyVariable("TEMPERATURA_ACTUAL", "75.5"));
             assertEquals("TEMPERATURA_ACTUAL", control.name);
             assertEquals(75.5, control.value);
 
-            assertTrue(dialog.applyVariable("CANTIDAD", "12"));
+            assertTrue(panel.applyVariable("CANTIDAD", "12"));
             assertEquals(12L, control.value);
 
-            assertTrue(dialog.applyVariable("ESTADO", "RUNNING"));
+            assertTrue(panel.applyVariable("ESTADO", "RUNNING"));
             assertEquals("RUNNING", control.value);
 
-            dialog.dispose();
+
         });
     }
 
@@ -65,17 +65,17 @@ class SimulationControlDialogTest {
     void refusesAValueTheVariableCannotHold() {
         onSwingThread(() -> {
             FakeControl control = new FakeControl();
-            SimulationControlDialog dialog = dialog(control);
+            SimulationControlPanel panel = panel(control);
 
-            assertFalse(dialog.applyVariable("TEMPERATURA_ACTUAL", "warm"));
-            assertFalse(dialog.applyVariable("CANTIDAD", "1.5"));
-            assertFalse(dialog.applyVariable("ESTADO", "missing"));
+            assertFalse(panel.applyVariable("TEMPERATURA_ACTUAL", "warm"));
+            assertFalse(panel.applyVariable("CANTIDAD", "1.5"));
+            assertFalse(panel.applyVariable("ESTADO", "missing"));
 
-            dialog.dispose();
+
         });
     }
 
-    private static SimulationControlDialog dialog(SimulationControl control) {
+    private static SimulationControlPanel panel(SimulationControl control) {
         Map<String, VariableCatalog.Definition> definitions = Map.of(
                 "TEMPERATURA_ACTUAL",
                 new VariableCatalog.Definition("TEMPERATURA_ACTUAL", DataType.REAL, "C", List.of()),
@@ -84,7 +84,7 @@ class SimulationControlDialogTest {
                 "ESTADO",
                 new VariableCatalog.Definition("ESTADO", DataType.ENUMERATION, null,
                         List.of("IDLE", "RUNNING", "COMPLETE")));
-        return new SimulationControlDialog(null, control, definitions, List.of(), null, snapshot());
+        return new SimulationControlPanel(control, definitions, List.of(), null, snapshot());
     }
 
     private static BatchSnapshot snapshot() {
@@ -149,6 +149,14 @@ class SimulationControlDialogTest {
         @Override
         public double speed() {
             return 1.0;
+        }
+
+        @Override
+        public void setAutomatic(boolean automatic) {
+        }
+
+        @Override
+        public void completeStep(String moduleId) {
         }
 
         @Override

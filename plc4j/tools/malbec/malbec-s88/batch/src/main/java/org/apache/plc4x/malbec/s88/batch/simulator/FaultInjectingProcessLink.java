@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.batch.client.sim;
+package org.apache.plc4x.malbec.s88.batch.simulator;
 
 import java.time.Duration;
 import java.time.Instant;

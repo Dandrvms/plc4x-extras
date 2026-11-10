@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.plc4x.malbec.s88.batch.client;
+package org.apache.plc4x.malbec.s88.batch.simulator;
 
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
 
@@ -40,6 +40,12 @@ public interface SimulationControl {
     boolean isClockRunning();
 
     double speed();
+
+    /** Enables or disables the automatic process rules; the clock is separate. */
+    void setAutomatic(boolean automatic);
+
+    /** Completes the phase running on the given module, as an operator confirmation. */
+    void completeStep(String moduleId);
 
     void setVariable(String publishedName, Object value);
 

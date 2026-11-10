@@ -84,6 +84,7 @@ public final class SimulationEngine {
     private boolean stopRequested;
     private boolean pauseRequested;
     private boolean holdRequested;
+    private boolean automatic = true;
     private boolean loaded;
 
     public SimulationEngine(BatchPayload payload, SimulationProfile profile) {
@@ -339,6 +340,24 @@ public final class SimulationEngine {
         decisions.setMode(mode);
     }
 
+    public void setAutomatic(boolean automatic) {
+        ensureLoaded();
+        this.automatic = automatic;
+        for (SimulatedModule module : modules.values()) {
+            module.setAutomatic(automatic);
+        }
+    }
+
+    public void completePhase(String moduleId) {
+        ensureLoaded();
+        SimulatedModule module = moduleId == null ? null : modules.get(moduleId);
+        if (module == null) {
+            throw new IllegalArgumentException("The plant has no simulated module '"
+                    + moduleId + "'.");
+        }
+        module.completeNow(simTime);
+    }
+
     public List<BatchEvent> drainEvents() {
         List<BatchEvent> drained = List.copyOf(events);
         events.clear();
@@ -394,7 +413,9 @@ public final class SimulationEngine {
         for (String moduleId : moduleIds) {
             S88Element element = payload.plant().findById(moduleId).orElse(null);
             if (element != null && element.getLevel() == S88Level.EQUIPMENTMODULE) {
-                modules.put(moduleId, new SimulatedModule(moduleId, element, profile, store));
+                SimulatedModule module = new SimulatedModule(moduleId, element, profile, store);
+                module.setAutomatic(automatic);
+                modules.put(moduleId, module);
             }
         }
         decisions = new EngineDecisionProvider(decisionMode);

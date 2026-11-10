@@ -51,6 +51,7 @@ public final class SimulatedModule {
     private double elapsed;
     private double durationSeconds;
     private boolean durationExplicit;
+    private boolean automatic = true;
     private int stepCount;
     private int stepIndex;
     private ModuleStateMachine.CommandOutcome lastCommand;
@@ -113,6 +114,17 @@ public final class SimulatedModule {
         return lastCommand;
     }
 
+    public void setAutomatic(boolean automatic) {
+        this.automatic = automatic;
+    }
+
+    public void completeNow(double simTime) {
+        if (machine.state() == ModuleState.RUNNING) {
+            machine.complete();
+            publish(simTime);
+        }
+    }
+
     public void setActiveStep(int stepIndex, int stepCount, double simTime) {
         if (stepIndex < 0 || stepCount < 0 || stepIndex > stepCount) {
             throw new IllegalArgumentException("A step has to sit inside its chart.");
@@ -150,7 +162,9 @@ public final class SimulatedModule {
         readCommand(simTime);
         if (machine.state() == ModuleState.RUNNING) {
             elapsed += dt;
-            applyFollowRules(dt, simTime);
+            if (automatic) {
+                applyFollowRules(dt, simTime);
+            }
             if (complete()) {
                 machine.complete();
             }
@@ -231,7 +245,10 @@ public final class SimulatedModule {
 
     private boolean complete() {
         if (followRules.isEmpty()) {
-            return elapsed >= durationSeconds;
+            if (durationExplicit) {
+                return elapsed >= durationSeconds;
+            }
+            return automatic && elapsed >= durationSeconds;
         }
         for (FollowRule rule : followRules) {
             if (!reached(rule)) {
@@ -255,13 +272,22 @@ public final class SimulatedModule {
 
     private double resolveDuration() {
         durationExplicit = false;
+        if (element == null) {
+            return profile.defaultPhaseSeconds();
+        }
         for (String baseName : DURATION_NAMES) {
-            String name = resolve(S88PlantModel.PARAMETERS, baseName);
+            String name;
+            try {
+                name = BaseNameResolver.resolveVariable(element, S88PlantModel.PARAMETERS, baseName)
+                        .orElse(null);
+            } catch (IllegalStateException ambiguous) {
+                name = null;
+            }
             if (name == null) {
                 continue;
             }
             Double value = store.numeric(name);
-            if (value != null && value > 0) {
+            if (value != null) {
                 durationExplicit = true;
                 return durationSeconds(name, value);
             }

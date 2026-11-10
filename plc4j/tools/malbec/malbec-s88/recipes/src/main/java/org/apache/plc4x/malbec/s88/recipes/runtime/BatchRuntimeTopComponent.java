@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -45,11 +44,9 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
-import javax.swing.JTextArea;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
@@ -58,14 +55,12 @@ import javax.swing.table.DefaultTableModel;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
-import org.apache.plc4x.malbec.s88.batch.client.SessionOptions;
-import org.apache.plc4x.malbec.s88.batch.client.sim.SimulatedSession;
+import org.apache.plc4x.malbec.s88.batch.client.BatchClient;
 import org.apache.plc4x.malbec.s88.batch.model.BatchCommand;
 import org.apache.plc4x.malbec.s88.batch.model.BatchEvent;
 import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
 import org.apache.plc4x.malbec.s88.batch.model.CommandResult;
 import org.apache.plc4x.malbec.s88.batch.model.ModuleState;
-import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
 import org.apache.plc4x.malbec.s88.batch.runtime.BatchRuntimeService;
 import org.apache.plc4x.malbec.s88.batch.runtime.report.RunFolder;
 import org.apache.plc4x.malbec.s88.recipes.editor.RecipeChartScene;
@@ -95,19 +90,16 @@ public final class BatchRuntimeTopComponent extends TopComponent {
 
     private final RecipeChartScene scene = new RecipeChartScene();
     private final JComponent sceneView = scene.createView();
-    private final JLabel batchLabel = label("Batch: —");
-    private final JLabel recipeLabel = label("Recipe: —");
-    private final JLabel unitsLabel = label("Units: —");
-    private final JLabel stateLabel = label("State: —");
+    private final JLabel batchLabel = label("Batch: â€”");
+    private final JLabel recipeLabel = label("Recipe: â€”");
+    private final JLabel unitsLabel = label("Units: â€”");
+    private final JLabel stateLabel = label("State: â€”");
     private final JLabel connectionLabel = label("Connection: OFFLINE");
-    private final JLabel activeStepLabel = label("Active step: —");
+    private final JLabel activeStepLabel = label("Active step: â€”");
     private final JLabel simulated = new JLabel("SIMULATED", SwingConstants.CENTER);
     private final JLabel statusLabel = label(" ");
     private final JLabel breadcrumb = label("Procedure");
-    private final JPanel activeList = new JPanel();
     private final JButton outputButton = new JButton("Output");
-    private final JButton controlButton = new JButton("Simulation control");
-    private final JTextArea footer = area(4);
     private final JTextField moduleFilter = new JTextField(16);
     private final JCheckBox followActive = new JCheckBox("Follow active phase");
     private final DefaultTableModel variables = new DefaultTableModel(
@@ -121,17 +113,14 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     };
     private final JTable variableTable = new JTable(variables);
     private final Map<BatchCommand, JButton> commandButtons = new LinkedHashMap<>();
-    private final Deque<String> recentEvents = new ArrayDeque<>();
     private final List<BatchEvent> eventHistory = new ArrayList<>();
     private final Set<String> seenEvents = new java.util.LinkedHashSet<>();
 
     private BatchPayload payload;
     private S88MasterRecipe recipe;
-    private SimulatedSession session;
     private BatchRuntimeService service;
     private RuntimeController controller;
     private RuntimeViewModel viewModel;
-    private SimulationControlDialog controlDialog;
     private S88RecipeElement owner;
     private BatchSnapshot lastSnapshot;
     private int finishedRun = -1;
@@ -143,7 +132,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         setToolTipText("Simulated batch runtime");
     }
 
-    private BatchRuntimeTopComponent(BatchPayload payload, Path outputRoot, double speed)
+    private BatchRuntimeTopComponent(BatchPayload payload, BatchClient client, Path outputRoot)
             throws Exception {
         initUi();
         this.payload = payload;
@@ -153,13 +142,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         setDisplayName("Runtime " + payload.batchId());
         setToolTipText("Simulated batch " + payload.batchId());
         try {
-            session = SimulatedSession.create(payload,
-                    SessionOptions.defaults().withSpeed(speed));
             outputButton.setEnabled(true);
-            controlButton.setEnabled(true);
-            service = new BatchRuntimeService(session.client(), outputRoot, payload);
+            service = new BatchRuntimeService(client, outputRoot, payload);
             service.start();
-            controller = new RuntimeController(session.client(), this::applySnapshot);
+            controller = new RuntimeController(client, this::applySnapshot);
             showChart(null);
             applySnapshot(service.lastSnapshot());
         } catch (Exception failure) {
@@ -169,7 +155,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     }
 
     /** Opens the only runtime window for this batch, or brings the existing one forward. */
-    public static void open(BatchPayload payload, Path outputRoot, double speed) {
+    public static void open(BatchPayload payload, BatchClient client, Path outputRoot) {
         for (TopComponent opened : WindowManager.getDefault().getRegistry().getOpened()) {
             if (opened instanceof BatchRuntimeTopComponent runtime
                     && payload.batchId().equals(runtime.batchId())) {
@@ -179,7 +165,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         }
         BatchRuntimeTopComponent runtime = null;
         try {
-            runtime = new BatchRuntimeTopComponent(payload, outputRoot, speed);
+            runtime = new BatchRuntimeTopComponent(payload, client, outputRoot);
             WindowManager.getDefault().findMode("editor").dockInto(runtime);
             runtime.open();
             runtime.requestActive();
@@ -211,17 +197,9 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         header.add(activeStepLabel);
         header.add(simulated);
         header.add(outputButton);
-        header.add(controlButton);
         outputButton.setEnabled(false);
-        controlButton.setEnabled(false);
         outputButton.addActionListener(event -> BatchOutputTopComponent.showFor(this));
-        controlButton.addActionListener(event -> openControlDialog());
         add(header, BorderLayout.NORTH);
-
-        JPanel left = panel("Execution");
-        activeList.setLayout(new BoxLayout(activeList, BoxLayout.Y_AXIS));
-        activeList.setOpaque(false);
-        left.add(new JScrollPane(activeList), BorderLayout.CENTER);
 
         JPanel centre = new JPanel(new BorderLayout(6, 6));
         centre.setOpaque(false);
@@ -291,10 +269,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         });
         right.add(new JScrollPane(variableTable), BorderLayout.CENTER);
 
-        JSplitPane leftCentre = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, centre);
-        leftCentre.setResizeWeight(0.17);
-        leftCentre.setDividerLocation(230);
-        JSplitPane all = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftCentre, right);
+        JSplitPane all = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, centre, right);
         all.setResizeWeight(0.75);
         all.setDividerLocation(760);
         add(all, BorderLayout.CENTER);
@@ -318,15 +293,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         statusLabel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
         commands.add(buttons, BorderLayout.WEST);
         commands.add(statusLabel, BorderLayout.CENTER);
-
-        footer.setEditable(false);
-        footer.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
-        footer.setBackground(PANEL);
-        JPanel south = new JPanel(new BorderLayout(4, 4));
-        south.setOpaque(false);
-        south.add(commands, BorderLayout.NORTH);
-        south.add(new JScrollPane(footer), BorderLayout.CENTER);
-        add(south, BorderLayout.SOUTH);
+        add(commands, BorderLayout.SOUTH);
     }
 
     private static JPanel panel(String title) {
@@ -347,13 +314,6 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         JLabel label = new JLabel(text);
         label.setForeground(INK);
         return label;
-    }
-
-    private static JTextArea area(int rows) {
-        JTextArea area = new JTextArea(rows, 20);
-        area.setLineWrap(true);
-        area.setWrapStyleWord(true);
-        return area;
     }
 
     private String batchId() {
@@ -393,10 +353,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         }
         lastSnapshot = snapshot;
         batchLabel.setText("Batch: " + snapshot.batchId());
-        recipeLabel.setText("Recipe: " + (recipe == null ? "—" : recipe.getId()));
+        recipeLabel.setText("Recipe: " + (recipe == null ? "â€”" : recipe.getId()));
         unitsLabel.setText("Units: " + units(snapshot));
         activeStepLabel.setText("Active step: " + (viewModel == null
-                ? "—" : viewModel.activeStepLabel(snapshot)));
+                ? "â€”" : viewModel.activeStepLabel(snapshot)));
         stateLabel.setText("State: " + snapshot.batchState());
         stateLabel.setForeground(snapshot.batchState() == ModuleState.COMPLETE ? NORMAL
                 : snapshot.batchState() == ModuleState.ABORTED
@@ -406,7 +366,6 @@ public final class BatchRuntimeTopComponent extends TopComponent {
                 + (stale ? " / SIN DATOS" : ""));
         connectionLabel.setForeground(!snapshot.connected() ? ALARM : stale ? WARNING : NORMAL);
 
-        updateActive(snapshot);
         if (followActive.isSelected()) {
             follow(snapshot);
         }
@@ -414,25 +373,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         updateVariables(snapshot);
         updateCommands(snapshot);
         BatchOutputTopComponent.publish(this, appendEvents(snapshot.newEvents()));
-        if (controlDialog != null && controlDialog.isDisplayable()) {
-            controlDialog.update(snapshot);
-        }
         if (snapshot.batchState().kind() == ModuleState.Kind.FINAL) {
             finished(snapshot);
         }
         repaint();
-    }
-
-    private void openControlDialog() {
-        if (session == null || payload == null || viewModel == null) {
-            return;
-        }
-        if (controlDialog == null || !controlDialog.isDisplayable()) {
-            controlDialog = new SimulationControlDialog(SwingUtilities.getWindowAncestor(this),
-                    session.control(), payload, viewModel, lastSnapshot);
-        }
-        controlDialog.setVisible(true);
-        controlDialog.toFront();
     }
 
     private void follow(BatchSnapshot snapshot) {
@@ -469,7 +413,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
 
     private static String age(RuntimeViewModel.VariableRow row, Instant now) {
         if (row.sourceTime() == null) {
-            return "—";
+            return "â€”";
         }
         long seconds = Math.max(0, Duration.between(row.sourceTime(), now).toSeconds());
         return seconds + " s";
@@ -506,41 +450,13 @@ public final class BatchRuntimeTopComponent extends TopComponent {
             }
             added.add(event);
             eventHistory.add(event);
-            recentEvents.addLast(String.format("%7.2f  %-20s %s  %s", event.simTime(),
-                    event.type(), event.elementId() == null ? "" : event.elementId(),
-                    event.details() == null ? "" : event.details()));
         }
-        while (recentEvents.size() > 5) {
-            recentEvents.removeFirst();
-        }
-        footer.setText(String.join("\n", recentEvents));
         return added;
     }
 
     private String units(BatchSnapshot snapshot) {
-        return payload == null || payload.unitOfStep().isEmpty() ? "—"
+        return payload == null || payload.unitOfStep().isEmpty() ? "â€”"
                 : String.join(", ", new java.util.LinkedHashSet<>(payload.unitOfStep().values()));
-    }
-
-    private void updateActive(BatchSnapshot snapshot) {
-        activeList.removeAll();
-        if (snapshot.activeSteps().isEmpty()) {
-            activeList.add(new JLabel("No active phase."));
-        } else {
-            for (StepStatus step : snapshot.activeSteps()) {
-                JPanel row = new JPanel(new BorderLayout(4, 2));
-                row.setOpaque(false);
-                JLabel name = new JLabel(step.stepId() + "  " + step.state());
-                row.add(name, BorderLayout.NORTH);
-                JProgressBar progress = new JProgressBar(0, 100);
-                progress.setValue((int) Math.round(step.progress() * 100));
-                progress.setStringPainted(true);
-                row.add(progress, BorderLayout.CENTER);
-                activeList.add(row);
-            }
-        }
-        activeList.revalidate();
-        activeList.repaint();
     }
 
     @Override
@@ -601,10 +517,6 @@ public final class BatchRuntimeTopComponent extends TopComponent {
     }
 
     private void cleanup() {
-        if (controlDialog != null) {
-            controlDialog.dispose();
-            controlDialog = null;
-        }
         if (controller != null) {
             controller.close();
             controller = null;
@@ -612,10 +524,6 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         if (service != null) {
             service.close();
             service = null;
-        }
-        if (session != null) {
-            session.close();
-            session = null;
         }
     }
 }

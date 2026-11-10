@@ -19,7 +19,9 @@
 package org.apache.plc4x.malbec.s88.batch.simulator.steps;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
@@ -150,6 +152,7 @@ class SimulatedModuleTest {
     @Test
     void durationComesFromTheDurationParameter() {
         Fixture fixture = fixture("BOMBA_1");
+        declareDuration(fixture.element(), null);
         fixture.store().define("DURACION", DataType.INTEGER, null, List.of(), 0.0, 0.0);
         fixture.store().set("DURACION", 2.5, 0.0);
         SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
@@ -170,6 +173,36 @@ class SimulatedModuleTest {
         assertEquals(2.0, fixture.store().numeric("STEP_INDEX_BOMBA_1"), 1e-9);
         assertEquals(2.0, fixture.store().numeric("STEP_COUNT_BOMBA_1"), 1e-9);
         assertEquals(1.0, fixture.store().numeric("PROGRESS_BOMBA_1"), 1e-9);
+    }
+
+    @Test
+    void aDeclaredZeroDurationCompletesWithoutWaiting() {
+        Fixture fixture = fixture("BOMBA_1");
+        declareDuration(fixture.element(), null);
+        fixture.store().define("DURACION", DataType.INTEGER, null, List.of(), 0.0, 0.0);
+        SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
+                SimulationProfile.defaults(), fixture.store());
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(0.1, 0.1);
+
+        assertEquals(ModuleState.COMPLETE, module.state());
+    }
+
+    @Test
+    void manualModeWaitsForTheOperatorToCompleteTheStep() {
+        Fixture fixture = fixture("BOMBA_1");
+        SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
+                SimulationProfile.defaults(), fixture.store());
+        module.setAutomatic(false);
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(1.0, 1.0);
+        assertEquals(ModuleState.RUNNING, module.state());
+
+        module.completeNow(1.0);
+
+        assertEquals(ModuleState.COMPLETE, module.state());
     }
 
     @Test
@@ -204,6 +237,7 @@ class SimulatedModuleTest {
     @Test
     void aDurationInMinutesIsConvertedToSeconds() {
         Fixture fixture = fixture("BOMBA_1");
+        declareDuration(fixture.element(), "MIN");
         fixture.store().define("DURACION", DataType.INTEGER, "MIN", List.of(), 1.0, 0.0);
         SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(),
                 SimulationProfile.defaults(), fixture.store());
@@ -267,6 +301,22 @@ class SimulatedModuleTest {
         assertEquals(ModuleState.ABORTING, module.state());
         module.tick(1.0, 3.0);
         assertEquals(ModuleState.ABORTED, module.state());
+    }
+
+    private static void declareDuration(S88Element element, String unit) {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        Object existing = element.getStructuredProperty("Parameters");
+        if (existing instanceof Map<?, ?> map) {
+            map.forEach((key, value) -> parameters.put(String.valueOf(key), value));
+        }
+        Map<String, Object> definition = new LinkedHashMap<>();
+        definition.put("Type", "INTEGER");
+        if (unit != null) {
+            definition.put("Eng_Units/Enum", unit);
+        }
+        definition.put("Default", "0");
+        parameters.put("DURACION", definition);
+        element.setProperty("Parameters", parameters);
     }
 
     private static Fixture fixture(String moduleId) {

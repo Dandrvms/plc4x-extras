@@ -153,6 +153,35 @@ class SimulationEngineTest {
     }
 
     @Test
+    void manualModeLeavesTheProcessValuesToTheOperator() {
+        SimulationEngine engine = engine(DemoFixtures.request("BATCH-MANUAL"));
+        engine.setAutomatic(false);
+
+        assertTrue(engine.command(BatchCommand.START).accepted());
+        tick(engine, 5);
+        engine.setVariable("TEMPERATURA_ACTUAL", 50.0);
+        tick(engine, 5);
+
+        assertEquals(50.0, value(engine, "TEMPERATURA_ACTUAL"), 1e-9,
+                "because automatic mode is off and no follow rule may overwrite it");
+    }
+
+    @Test
+    void anOperatorCanCompleteAPhaseWhileTheClockIsPaused() {
+        SimulationEngine engine = engine(DemoFixtures.request("BATCH-MANUAL-COMPLETE"));
+        engine.setAutomatic(false);
+        assertTrue(engine.command(BatchCommand.START).accepted());
+        tick(engine, 5);
+
+        engine.completePhase("BOMBA_1");
+        engine.tick();
+
+        assertTrue(engine.snapshot().completedStepKeys().stream()
+                        .anyMatch(key -> key.endsWith("/CARGAR")),
+                () -> engine.snapshot().toString());
+    }
+
+    @Test
     void pausesAndResumesTheRun() {
         SimulationEngine engine = engine(DemoFixtures.request("BATCH-PAUSE"));
 

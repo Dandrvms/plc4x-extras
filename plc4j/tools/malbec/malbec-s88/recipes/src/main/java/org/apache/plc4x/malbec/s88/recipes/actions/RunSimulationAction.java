@@ -30,11 +30,15 @@ import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayloadFactory;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchRequest;
 import org.apache.plc4x.malbec.s88.batch.builder.PrepareResult;
+import org.apache.plc4x.malbec.s88.batch.simulator.SessionOptions;
+import org.apache.plc4x.malbec.s88.batch.simulator.SimulatedSession;
 import org.apache.plc4x.malbec.s88.core.EquipmentUidMigration;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.recipes.data.RecipeDataObject;
 import org.apache.plc4x.malbec.s88.recipes.editor.RecipeEditorModel;
 import org.apache.plc4x.malbec.s88.recipes.runtime.BatchRuntimeTopComponent;
+import org.apache.plc4x.malbec.s88.recipes.runtime.RuntimeViewModel;
+import org.apache.plc4x.malbec.s88.recipes.simulator.SimulatorTopComponent;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
 import org.openide.awt.ActionID;
@@ -117,7 +121,16 @@ public final class RunSimulationAction extends AbstractAction implements Context
                     String.join("\n", prepared.errors()), NotifyDescriptor.ERROR_MESSAGE));
             return;
         }
-        BatchRuntimeTopComponent.open(prepared.payload(), details.outputRoot(), details.speed());
+        SimulatedSession session = SimulatedSession.create(prepared.payload(),
+                SessionOptions.defaults().withSpeed(details.speed()).withClockRunning(false));
+        try {
+            BatchRuntimeTopComponent.open(prepared.payload(), session.client(), details.outputRoot());
+            SimulatorTopComponent.open(session, prepared.payload(),
+                    new RuntimeViewModel(prepared.payload().control(), prepared.payload().plant()));
+        } catch (RuntimeException failure) {
+            session.close();
+            throw failure;
+        }
     }
 
     private static Path defaultOutput(RecipeEditorModel model) {

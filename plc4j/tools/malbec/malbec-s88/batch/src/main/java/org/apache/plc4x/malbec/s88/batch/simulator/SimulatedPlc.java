@@ -20,14 +20,16 @@ package org.apache.plc4x.malbec.s88.batch.simulator;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
-import org.apache.plc4x.malbec.s88.batch.client.SessionOptions;
+
 import org.apache.plc4x.malbec.s88.batch.link.ProcessLink;
 import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
@@ -46,6 +48,8 @@ public final class SimulatedPlc implements AutoCloseable {
     private final ScheduledExecutorService executor;
     private final Duration tickInterval;
     private final long stepPauseMillis;
+    private final CopyOnWriteArrayList<Consumer<BatchSnapshot>> snapshotListeners =
+            new CopyOnWriteArrayList<>();
 
     private volatile double speed;
     private volatile boolean clockRunning;
@@ -101,6 +105,32 @@ public final class SimulatedPlc implements AutoCloseable {
         return speed;
     }
 
+    public BatchSnapshot snapshot() {
+        return engine.snapshot();
+    }
+
+    public void addSnapshotListener(Consumer<BatchSnapshot> listener) {
+        if (listener != null) {
+            snapshotListeners.add(listener);
+        }
+    }
+
+    public void removeSnapshotListener(Consumer<BatchSnapshot> listener) {
+        snapshotListeners.remove(listener);
+    }
+
+    public void setAutomatic(boolean automatic) {
+        execute(() -> engine.setAutomatic(automatic));
+    }
+
+    public void completePhase(String moduleId) {
+        execute(() -> {
+            engine.completePhase(moduleId);
+            notifySnapshot(engine.snapshot());
+            bridge.publish(engine.snapshot(), false);
+        });
+    }
+
     public void stepTicks(int ticks) {
         if (ticks < 0) {
             throw new IllegalArgumentException("The tick count cannot be negative.");
@@ -113,6 +143,7 @@ public final class SimulatedPlc implements AutoCloseable {
                 bridge.publish(engine.snapshot(), false);
                 sleepQuietly(stepPauseMillis);
             }
+            notifySnapshot(engine.snapshot());
         });
     }
 
@@ -126,6 +157,7 @@ public final class SimulatedPlc implements AutoCloseable {
                 BatchSnapshot snapshot = engine.snapshot();
                 bridge.publish(snapshot, false);
                 if (!before.equals(fingerprint(snapshot))) {
+                    notifySnapshot(snapshot);
                     return;
                 }
             }
@@ -135,6 +167,7 @@ public final class SimulatedPlc implements AutoCloseable {
     public void setVariable(String publishedName, Object value) {
         execute(() -> {
             engine.setVariable(publishedName, value);
+            notifySnapshot(engine.snapshot());
             bridge.publish(engine.snapshot(), false);
         });
     }
@@ -142,6 +175,7 @@ public final class SimulatedPlc implements AutoCloseable {
     public void injectFailure(String moduleId, int code) {
         execute(() -> {
             engine.injectFailure(moduleId, code);
+            notifySnapshot(engine.snapshot());
             bridge.publish(engine.snapshot(), false);
         });
     }
@@ -149,6 +183,7 @@ public final class SimulatedPlc implements AutoCloseable {
     public void clearFailure(String moduleId) {
         execute(() -> {
             engine.clearFailure(moduleId);
+            notifySnapshot(engine.snapshot());
             bridge.publish(engine.snapshot(), false);
         });
     }
@@ -158,7 +193,10 @@ public final class SimulatedPlc implements AutoCloseable {
     }
 
     public void decide(String transitionId) {
-        execute(() -> engine.decide(transitionId));
+        execute(() -> {
+            engine.decide(transitionId);
+            notifySnapshot(engine.snapshot());
+        });
     }
 
     public RuntimeException failure() {
@@ -178,6 +216,16 @@ public final class SimulatedPlc implements AutoCloseable {
             Thread.currentThread().interrupt();
         }
         bridge.close();
+        snapshotListeners.clear();
+    }
+
+    private void notifySnapshot(BatchSnapshot snapshot) {
+        for (Consumer<BatchSnapshot> listener : snapshotListeners) {
+            try {
+                listener.accept(snapshot);
+            } catch (RuntimeException ignored) {
+            }
+        }
     }
 
     private void tickSafely() {
@@ -192,6 +240,7 @@ public final class SimulatedPlc implements AutoCloseable {
                 ticked = true;
             }
             if (ticked || input) {
+                notifySnapshot(engine.snapshot());
                 bridge.publish(engine.snapshot(), false);
             } else {
                 bridge.publishKeepAlive(engine.snapshot());
