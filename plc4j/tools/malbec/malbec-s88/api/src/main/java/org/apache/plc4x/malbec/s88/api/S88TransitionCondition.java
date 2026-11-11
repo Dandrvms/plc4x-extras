@@ -21,6 +21,7 @@ package org.apache.plc4x.malbec.s88.api;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * What a bar waits on as a whole: a comparison, several of them joined, or a wait for a time.
@@ -254,21 +255,34 @@ public final class S88TransitionCondition {
 
     /** The condition the way a person reads it, for showing on the chart. */
     public String toDisplay() {
+        return toDisplay(expression -> null);
+    }
+
+    /**
+     * The condition the way a person reads it, with each comparison's engineering unit.
+     *
+     * @param unitOf what unit a comparison's value is measured in, or {@code null} when none
+     * @return the condition as it is shown
+     */
+    public String toDisplay(Function<S88ConditionExpression, String> unitOf) {
+        Function<S88ConditionExpression, String> units =
+                unitOf == null ? expression -> null : unitOf;
         return switch (kind) {
-            case COMPARISON -> comparison.toDisplay();
+            case COMPARISON -> comparison.toDisplay(units.apply(comparison));
             case WAIT -> "WAIT " + seconds + " s";
             case STEP_COMPLETE -> "STEP COMPLETE";
-            case AND -> joinedDisplay(" AND ");
-            case OR -> joinedDisplay(" OR ");
+            case AND -> joinedDisplay(" AND ", units);
+            case OR -> joinedDisplay(" OR ", units);
         };
     }
 
-    private String joinedDisplay(String joiner) {
+    private String joinedDisplay(String joiner, Function<S88ConditionExpression, String> unitOf) {
         List<String> parts = new ArrayList<>(operands.size());
         for (S88TransitionCondition operand : operands) {
+            String shown = operand.toDisplay(unitOf);
             boolean needsBrackets = (operand.kind == Kind.AND || operand.kind == Kind.OR)
                     && operand.kind != kind;
-            parts.add(needsBrackets ? "(" + operand.toDisplay() + ")" : operand.toDisplay());
+            parts.add(needsBrackets ? "(" + shown + ")" : shown);
         }
         return String.join(joiner, parts);
     }

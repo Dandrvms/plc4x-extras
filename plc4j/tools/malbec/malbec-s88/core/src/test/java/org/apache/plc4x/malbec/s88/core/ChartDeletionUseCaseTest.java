@@ -23,6 +23,9 @@ import org.apache.plc4x.malbec.s88.api.S88LinkType;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +101,22 @@ class ChartDeletionUseCaseTest {
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP");
         ChartBranchingUseCase.addAlternativeBranch(recipe, null, "STEP_2");
         return recipe;
+    }
+
+    @Test
+    void anEditThatDropsAnUnreachableBoxDropsItsRecipeElementToo() {
+        S88MasterRecipe recipe = runOfTwoSteps();
+        recipe.addRecipeElement(new S88RecipeElement("ORPHAN",
+                S88RecipeElementKind.PHASE));
+        recipe.getProcedureLogic().addStep(new S88ProcedureStep("S_ORPHAN", "ORPHAN"));
+
+        ChartEditOps.loopStep(recipe, null, "STEP", "T_LOOP");
+
+        assertTrue(recipe.getProcedureLogic().findStep("S_ORPHAN").isEmpty(),
+                "the unreachable box is dropped when the chart is normalized");
+        assertFalse(recipe.findElement("ORPHAN").isPresent(),
+                "and its recipe element goes with it, rather than being left for the"
+                        + " conformance to report as a step no chart has");
     }
 
     @Test

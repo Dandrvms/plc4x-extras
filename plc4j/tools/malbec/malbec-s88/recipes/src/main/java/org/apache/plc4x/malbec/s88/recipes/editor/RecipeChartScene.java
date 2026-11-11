@@ -25,15 +25,20 @@ import java.util.*;
 import java.util.List;
 import java.util.function.BiConsumer;
 import javax.swing.JComponent;
+import org.apache.plc4x.malbec.s88.api.DataType;
+import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
+import org.apache.plc4x.malbec.s88.api.S88Element;
+import org.apache.plc4x.malbec.s88.api.S88ElementClass;
+import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
-import org.apache.plc4x.malbec.s88.api.PlatformVariable;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
-import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
-import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
+import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
+import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
 import org.apache.plc4x.malbec.s88.core.EditProcedureLogicUseCase;
 import org.netbeans.api.visual.action.ActionFactory;
 import org.netbeans.api.visual.action.WidgetAction;
@@ -137,7 +142,19 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
      */
     public void draw(S88MasterRecipe recipe, S88RecipeElement owner) {
-        Map<String, NodeSpec> what = nodesOf(recipe, owner);
+        draw(recipe, owner, null);
+    }
+
+    /**
+     * Reads a recipe in and draws the chart of the given step, with the plant its conditions are
+     * measured against.
+     *
+     * @param recipe the recipe to draw
+     * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
+     * @param plant  the plant the recipe is written against, {@code null} when there is none
+     */
+    public void draw(S88MasterRecipe recipe, S88RecipeElement owner, S88PlantSnapshot plant) {
+        Map<String, NodeSpec> what = nodesOf(recipe, owner, plant);
         this.empty = emptiesOf(recipe, owner);
         placeBoxes(what);
         SfcLayoutEngine.Placement at = new SfcLayoutEngine(
@@ -215,6 +232,11 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @return one entry per box and per bar, keyed by the name the chart knows them by
      */
     static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner) {
+        return nodesOf(recipe, owner, null);
+    }
+
+    static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner,
+                                         S88PlantSnapshot plant) {
         Map<String, NodeSpec> what = new LinkedHashMap<>();
         S88ProcedureLogic chart = EditProcedureLogicUseCase.existingChart(recipe, owner);
         if (chart == null) {
@@ -232,7 +254,8 @@ public final class RecipeChartScene extends GraphScene<String, String> {
         }
         for (S88ProcedureTransition transition : chart.getTransitions()) {
             what.put(transition.getId(), new NodeSpec(
-                    RecipeShapes.Shape.TRANSITION, conditionText(transition), transition.getId()));
+                    RecipeShapes.Shape.TRANSITION, conditionText(transition, recipe, plant),
+                    transition.getId()));
         }
         return what;
     }
@@ -372,16 +395,78 @@ public final class RecipeChartScene extends GraphScene<String, String> {
         return String.join("\n", lines);
     }
 
-    private static String conditionText(S88ProcedureTransition transition) {
+    private static String conditionText(S88ProcedureTransition transition, S88MasterRecipe recipe,
+                                        S88PlantSnapshot plant) {
         S88TransitionCondition condition = S88TransitionCondition.parse(transition.getCondition());
         if (condition != null) {
-            return condition.toDisplay();
+            return condition.toDisplay(
+                    expression -> conditionUnit(expression, recipe, plant));
         }
         String raw = transition.getCondition();
         if (raw == null || raw.isBlank()) {
             return "TRUE";
         }
         return raw;
+    }
+
+    private static String conditionUnit(S88ConditionExpression expression, S88MasterRecipe recipe,
+                                        S88PlantSnapshot plant) {
+        if (expression == null || plant == null) {
+            return null;
+        }
+        Map<String, Object> properties = conditionProperties(expression.getEquipment(), recipe, plant);
+        Map<String, Object> definition = conditionDefinition(properties, expression);
+        if (definition == null
+                || DataType.fromString(text(definition, "Type")) == DataType.ENUMERATION) {
+            return null;
+        }
+        return text(definition, "Eng_Units/Enum");
+    }
+
+    private static Map<String, Object> conditionProperties(String equipment, S88MasterRecipe recipe,
+                                                           S88PlantSnapshot plant) {
+        if (equipment == null || equipment.isBlank()) {
+            return null;
+        }
+        if (recipe != null && recipe.addressesByClass()) {
+            S88ElementClass equipmentClass = plant.findClass(equipment);
+            return equipmentClass == null ? null : equipmentClass.getProperties();
+        }
+        S88Element actual = plant.findById(equipment).orElse(null);
+        return actual == null ? null : actual.getProperties();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> conditionDefinition(Map<String, Object> properties,
+                                                            S88ConditionExpression expression) {
+        if (properties == null || expression == null) {
+            return null;
+        }
+        String container = expression.getVariable().getContainer();
+        if (container != null) {
+            Object declared = properties.get(container);
+            if (declared instanceof Map<?, ?> values
+                    && values.get(expression.getVariable().getName()) instanceof Map<?, ?> definition) {
+                return (Map<String, Object>) definition;
+            }
+            return null;
+        }
+        for (String key : List.of("Reports", "Parameters")) {
+            Object declared = properties.get(key);
+            if (declared instanceof Map<?, ?> values
+                    && values.get(expression.getVariable().getName()) instanceof Map<?, ?> definition) {
+                return (Map<String, Object>) definition;
+            }
+        }
+        return null;
+    }
+
+    private static String text(Map<String, Object> definition, String key) {
+        if (definition == null) {
+            return null;
+        }
+        Object value = definition.get(key);
+        return value == null ? null : value.toString();
     }
 
     private static Map<String, RecipeShapes.Shape> shapesOf(Map<String, NodeSpec> what) {

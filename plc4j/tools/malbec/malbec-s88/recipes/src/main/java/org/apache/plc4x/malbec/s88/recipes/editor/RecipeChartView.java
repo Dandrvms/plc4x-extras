@@ -220,7 +220,7 @@ public final class RecipeChartView extends AbstractRecipeView {
         if (pending != null) {
             scene.selectWhenDrawn(pending);
         }
-        scene.draw(model.getRecipe(), model.currentStep());
+        scene.draw(model.getRecipe(), model.currentStep(), model.plant());
         Graphics2D onScreen = (Graphics2D) view.getGraphics();
         if (onScreen != null) {
             try {

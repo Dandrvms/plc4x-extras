@@ -149,7 +149,7 @@ public final class ChartEditOps {
         ChartNormalizer.normalize(edited);
         refuseNewProblems(chart, edited, "Taking the skip from '" + fromId + "' to '" + toId
                 + "' off");
-        copyOnto(edited, chart);
+        copyOntoAndDropUnused(recipe, edited, chart);
         announce(recipe);
     }
 
@@ -172,7 +172,7 @@ public final class ChartEditOps {
         edited.findTransition(barId).ifPresent(edited::removeTransition);
         ChartNormalizer.normalize(edited);
         refuseNewProblems(chart, edited, "Taking the empty branch '" + barId + "' off");
-        copyOnto(edited, chart);
+        copyOntoAndDropUnused(recipe, edited, chart);
         announce(recipe);
     }
 
@@ -223,7 +223,7 @@ public final class ChartEditOps {
         edited.addLink(onwards);
         ChartNormalizer.normalize(edited);
         refuseNewProblems(chart, edited, "Joining the branches at '" + barId + "'");
-        copyOnto(edited, chart);
+        copyOntoAndDropUnused(recipe, edited, chart);
         announce(recipe);
         return chart.findTransition(barId).orElseThrow();
     }
@@ -273,7 +273,7 @@ public final class ChartEditOps {
         edited.addLink(back);
         ChartNormalizer.normalize(edited);
         refuseNewProblems(chart, edited, "Looping '" + stepId + "'");
-        copyOnto(edited, chart);
+        copyOntoAndDropUnused(recipe, edited, chart);
         announce(recipe);
         return chart.findTransition(barId).orElseThrow();
     }
@@ -555,6 +555,13 @@ public final class ChartEditOps {
     private static void copyLinksOnto(S88ProcedureLogic from, S88ProcedureLogic to) {
         new ArrayList<>(to.getLinks()).forEach(to::removeLink);
         from.getLinks().forEach(to::addLink);
+    }
+
+    private static void copyOntoAndDropUnused(S88Recipe recipe, S88ProcedureLogic from,
+                                               S88ProcedureLogic to) {
+        Set<String> before = ChartDeletionUseCase.drawnElementIds(to);
+        copyOnto(from, to);
+        ChartDeletionUseCase.dropElementsNoLongerDrawn(recipe, before, to);
     }
 
     private static void copyOnto(S88ProcedureLogic from, S88ProcedureLogic to) {

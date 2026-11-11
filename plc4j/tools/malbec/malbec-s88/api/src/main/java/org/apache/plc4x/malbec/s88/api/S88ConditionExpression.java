@@ -192,11 +192,23 @@ public final class S88ConditionExpression {
      * @return the comparison as it is shown
      */
     public String toDisplay() {
+        return toDisplay(null);
+    }
+
+    /**
+     * The comparison as a person reads it, with the engineering unit written after the value.
+     *
+     * @param unit unit the value is measured in, or {@code null} when it has none
+     * @return the comparison as it is shown
+     */
+    public String toDisplay(String unit) {
         if (operator == S88ConditionOperator.OTHER) {
             return toText();
         }
         String read = variable.getName();
-        return read + " " + operator.getSymbol() + " " + literal;
+        String suffix = unit == null || unit.isBlank() || "NONE".equalsIgnoreCase(unit.trim())
+                ? "" : " " + unit.trim();
+        return read + " " + operator.getSymbol() + " " + literal + suffix;
     }
 
     /**

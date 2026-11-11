@@ -319,7 +319,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         if (recipe == null) {
             return;
         }
-        scene.draw(recipe, owner);
+        scene.draw(recipe, owner, payload == null ? null : payload.plant());
         scene.setReadOnly(true);
         breadcrumb.setText(crumb());
         if (lastSnapshot != null) {

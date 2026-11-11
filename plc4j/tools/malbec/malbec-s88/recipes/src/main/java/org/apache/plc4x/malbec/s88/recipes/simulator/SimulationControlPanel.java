@@ -54,6 +54,7 @@ public final class SimulationControlPanel extends JPanel {
     private static final long serialVersionUID = 1L;
 
     private static final String[] SPEEDS = {"0.5x", "1x", "5x", "10x", "60x"};
+    private static final int VALUE_COLUMN = 1;
 
     private final SimulationControl control;
     private final RuntimeViewModel viewModel;
@@ -78,12 +79,16 @@ public final class SimulationControlPanel extends JPanel {
 
         @Override
         public boolean isCellEditable(int row, int column) {
-            return column == 2;
+            return column == VALUE_COLUMN;
         }
 
         @Override
         public void setValueAt(Object value, int row, int column) {
-            if (updating || column != 2 || row < 0 || row >= variableNames.size()) {
+            if (column != VALUE_COLUMN || row < 0 || row >= variableNames.size()) {
+                return;
+            }
+            if (updating) {
+                super.setValueAt(value, row, column);
                 return;
             }
             String text = value == null ? "" : value.toString();
@@ -369,7 +374,7 @@ public final class SimulationControlPanel extends JPanel {
                 variableNames.add(row.variable());
             } else {
 //                setIfChanged(at, 0, row.module());
-                setIfChanged(at, 0, row.value());
+                setIfChanged(at, VALUE_COLUMN, row.value());
 //                setIfChanged(at, 3, unit);
 //                setIfChanged(at, 4, definition.type().name());
             }

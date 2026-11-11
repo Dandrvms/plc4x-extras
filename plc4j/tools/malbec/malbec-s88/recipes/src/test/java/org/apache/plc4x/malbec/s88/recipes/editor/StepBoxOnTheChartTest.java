@@ -30,6 +30,7 @@ import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.core.BindRecipeStepUseCase;
@@ -92,6 +93,23 @@ class StepBoxOnTheChartTest {
         S88PlantModel model = new S88PlantModel(root);
         model.addChild(root, cell);
         model.addChild(cell, heater);
+        return PlantSnapshotUseCase.of(model);
+    }
+
+    private static S88PlantSnapshot plantWithConditionUnits() {
+        S88ElementClass heaters = new S88ElementClass();
+        heaters.setName("CALENTAMIENTO");
+        heaters.setTargetLevel(S88Level.UNIT);
+        heaters.setProperty("Reports", Map.of(
+                "TEMPERATURA", Map.of("Type", "REAL", "Eng_Units/Enum", "C"),
+                "ESTADO", Map.of("Type", "ENUMERATION", "Eng_Units/Enum", "STATE"),
+                "SIN_UNIDAD", Map.of("Type", "REAL", "Eng_Units/Enum", "NONE")));
+
+        S88Element root = new S88Element();
+        root.setId("PLANT");
+        root.setLevel(S88Level.AREA);
+        S88PlantModel model = new S88PlantModel(root);
+        model.registerClass(heaters);
         return PlantSnapshotUseCase.of(model);
     }
 
@@ -176,6 +194,28 @@ class StepBoxOnTheChartTest {
         assertEquals(List.of("CALENTAMIENTO_DE_TANQUE"), List.of(label.split("\\R")),
                 "because binding names the step after the class, so writing the class under it says"
                         + " the same word twice and reads as two different things");
+    }
+
+    @Test
+    void aConditionShowsTheEngineeringUnitOfTheValueItWaitsOn() {
+        S88PlantSnapshot plant = plantWithConditionUnits();
+        S88MasterRecipe recipe = withAnEmptyStep();
+        recipe.getProcedureLogic().addTransition(new S88ProcedureTransition("T_TEMP",
+                "CALENTAMIENTO#Reports/TEMPERATURA#>=#50"));
+        recipe.getProcedureLogic().addTransition(new S88ProcedureTransition("T_STATE",
+                "CALENTAMIENTO#Reports/ESTADO#=#COMPLETE"));
+        recipe.getProcedureLogic().addTransition(new S88ProcedureTransition("T_NONE",
+                "CALENTAMIENTO#Reports/SIN_UNIDAD#=#0"));
+
+        Map<String, RecipeChartScene.NodeSpec> nodes =
+                RecipeChartScene.nodesOf(recipe, null, plant);
+
+        assertEquals("TEMPERATURA >= 50 C", nodes.get("T_TEMP").label(),
+                "the number alone leaves the reader guessing which engineering unit it is in");
+        assertEquals("ESTADO = COMPLETE", nodes.get("T_STATE").label(),
+                "an enumeration has no unit to write");
+        assertEquals("SIN_UNIDAD = 0", nodes.get("T_NONE").label(),
+                "and NONE is not a unit either");
     }
 
     @Test

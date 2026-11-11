@@ -83,8 +83,7 @@ public final class ChartDeletionUseCase {
         refuseNewProblems("Taking '" + boxId + "' off the chart", before, joined);
 
         copyOnto(joined, chart);
-        recipe.findElement(elementId).ifPresent(recipe::removeRecipeElement);
-        drawnBefore.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
+        dropElementsNoLongerDrawn(recipe, drawnBefore, chart);
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
@@ -121,7 +120,7 @@ public final class ChartDeletionUseCase {
         refuseNewProblems("Taking '" + barId + "' off the chart", before, joined);
 
         copyOnto(joined, chart);
-        drawnBefore.forEach(id -> recipe.findElement(id).ifPresent(recipe::removeRecipeElement));
+        dropElementsNoLongerDrawn(recipe, drawnBefore, chart);
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
@@ -148,11 +147,13 @@ public final class ChartDeletionUseCase {
 
         List<String> before = ChartSoundness.check(chart);
         S88ProcedureLogic joined = RecipeDeepCopy.copyChart(chart);
+        Set<String> drawnBefore = drawnElementIds(joined);
         joined.findLink(lineId).ifPresent(joined::removeLink);
         ChartNormalizer.normalize(joined);
         refuseNewProblems("Taking line '" + lineId + "' off the chart", before, joined);
 
         copyOnto(joined, chart);
+        dropElementsNoLongerDrawn(recipe, drawnBefore, chart);
         recipe.fireChangeEvent(S88RecipeChangeEvent.chart());
     }
 
@@ -654,10 +655,26 @@ public final class ChartDeletionUseCase {
         }
     }
 
-    private static Set<String> drawnElementIds(S88ProcedureLogic chart) {
+    static Set<String> drawnElementIds(S88ProcedureLogic chart) {
         Set<String> ids = new LinkedHashSet<>();
         chart.getSteps().forEach(box -> ids.add(box.getRecipeElementId()));
         return ids;
+    }
+
+    static void dropElementsNoLongerDrawn(S88Recipe recipe, Set<String> before,
+                                          S88ProcedureLogic after) {
+        before.removeAll(drawnElementIds(after));
+        for (String id : before) {
+            S88RecipeElement element = recipe.findElement(id).orElse(null);
+            if (element == null) {
+                continue;
+            }
+            if (element.isTopLevel()) {
+                recipe.removeRecipeElement(element);
+            } else {
+                recipe.detachFrom(element.getParent(), element);
+            }
+        }
     }
 
     /** Puts the chart that was worked out in place of the one the recipe is holding. */
