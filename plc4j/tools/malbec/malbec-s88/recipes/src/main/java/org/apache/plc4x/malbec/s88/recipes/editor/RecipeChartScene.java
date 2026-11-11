@@ -275,13 +275,38 @@ public final class RecipeChartScene extends GraphScene<String, String> {
             return null;
         }
         List<String> lines = new ArrayList<>();
-        lines.add(step.getId());
         String equipment = equipmentOf(element);
-        if (equipment != null && !equipment.isBlank() && !equipment.trim().equals(step.getId())) {
+        lines.add(visibleName(step.getId(), equipment));
+        if (!equipmentAlreadyInName(step.getId(), equipment)) {
             lines.add(equipment.trim());
         }
         lines.addAll(parameterLines(element, MAX_LABEL_LINES - lines.size()));
         return String.join("\n", lines);
+    }
+
+    private static String visibleName(String stepId, String equipment) {
+        return numberedCopyOf(stepId, equipment) ? equipment.trim() : stepId;
+    }
+
+    private static boolean equipmentAlreadyInName(String stepId, String equipment) {
+        if (equipment == null || equipment.isBlank()) {
+            return true;
+        }
+        String id = stepId == null ? "" : stepId.trim();
+        return id.equals(equipment.trim()) || numberedCopyOf(id, equipment);
+    }
+
+    private static boolean numberedCopyOf(String stepId, String equipment) {
+        if (equipment == null || equipment.isBlank() || stepId == null) {
+            return false;
+        }
+        String id = stepId.trim();
+        String name = equipment.trim();
+        if (!id.startsWith(name + "_")) {
+            return false;
+        }
+        String suffix = id.substring(name.length() + 1);
+        return !suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit);
     }
 
     private static String equipmentOf(S88RecipeElement element) {
@@ -322,9 +347,13 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      */
     private static String stepTooltip(S88ProcedureStep step, S88RecipeElement element) {
         List<String> lines = new ArrayList<>();
-        lines.add(step.getId());
         String equipment = equipmentOf(element);
-        if (equipment != null && !equipment.isBlank() && !equipment.trim().equals(step.getId())) {
+        String shown = visibleName(step.getId(), equipment);
+        lines.add(shown);
+        if (!shown.equals(step.getId())) {
+            lines.add("ID: " + step.getId());
+        }
+        if (!equipmentAlreadyInName(step.getId(), equipment)) {
             lines.add(equipment.trim());
         }
         List<S88RecipeParameter> ordered = new ArrayList<>(element.getParameters());

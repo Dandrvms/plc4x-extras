@@ -53,6 +53,26 @@ class ConditionEvaluatorTest {
     }
 
     @Test
+    void greaterOrEqualAlsoHoldsWhenTheValueIsPastTheLiteral() {
+        VariableStore store = store();
+        store.set("TEMPERATURA_ACTUAL", 102.0, 0.0);
+
+        assertTrue(eval(comparison("TEMPERATURA_ACTUAL", DataType.REAL,
+                S88ConditionOperator.GREATER_OR_EQUAL, "100"), store));
+        assertFalse(eval(comparison("TEMPERATURA_ACTUAL", DataType.REAL,
+                S88ConditionOperator.LESS_OR_EQUAL, "100"), store));
+    }
+
+    @Test
+    void lessOrEqualAlsoHoldsWhenTheValueIsPastTheLiteral() {
+        VariableStore store = store();
+        store.set("TEMPERATURA_ACTUAL", 18.0, 0.0);
+
+        assertTrue(eval(comparison("TEMPERATURA_ACTUAL", DataType.REAL,
+                S88ConditionOperator.LESS_OR_EQUAL, "20"), store));
+    }
+
+    @Test
     void comparesIntegersEnumerationsAndText() {
         VariableStore store = store();
         store.set("DURACION", 30.0, 0.0);

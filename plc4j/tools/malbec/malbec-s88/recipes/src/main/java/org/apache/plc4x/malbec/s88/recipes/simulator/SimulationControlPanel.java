@@ -53,8 +53,6 @@ public final class SimulationControlPanel extends JPanel {
 
     private static final long serialVersionUID = 1L;
 
-    private static final String TIMED = "Timed";
-    private static final String STEP_BY_STEP = "Step by step";
     private static final String[] SPEEDS = {"0.5x", "1x", "5x", "10x", "60x"};
 
     private final SimulationControl control;
@@ -64,7 +62,6 @@ public final class SimulationControlPanel extends JPanel {
     private final JCheckBox automatic = new JCheckBox("Automatic process");
     private final JButton clockButton = new JButton("Pause clock");
     private final JComboBox<String> speedBox = new JComboBox<>(SPEEDS);
-    private final JComboBox<String> modeBox = new JComboBox<>(new String[]{TIMED, STEP_BY_STEP});
     private final JLabel decisionLabel = new JLabel("No pending decision");
     private final JComboBox<String> decisionBox = new JComboBox<>();
     private final JButton decideButton = new JButton("Decide");
@@ -76,7 +73,7 @@ public final class SimulationControlPanel extends JPanel {
     private final JButton completeButton = new JButton("Complete step");
     private final JLabel status = new JLabel(" ");
     private final DefaultTableModel variableRows = new DefaultTableModel(
-            new Object[]{"Module", "Variable", "Value", "Unit", "Type"}, 0) {
+            new Object[]{"Variable", "Value"}, 0) {
         private static final long serialVersionUID = 1L;
 
         @Override
@@ -140,16 +137,6 @@ public final class SimulationControlPanel extends JPanel {
                 status.setText("Speed " + speedBox.getSelectedItem());
             }
         });
-        modeBox.addActionListener(event -> {
-            if (!updating) {
-                if (STEP_BY_STEP.equals(modeBox.getSelectedItem())) {
-                    control.pauseClock();
-                } else {
-                    control.play();
-                }
-                updateClock();
-            }
-        });
         decideButton.addActionListener(event -> {
             Object selected = decisionBox.getSelectedItem();
             if (selected != null) {
@@ -169,11 +156,14 @@ public final class SimulationControlPanel extends JPanel {
         });
         automatic.addActionListener(event -> {
             control.setAutomatic(automatic.isSelected());
-            if (!automatic.isSelected()) {
+            if (automatic.isSelected()) {
+                control.play();
+            } else {
                 control.pauseClock();
             }
             updateClock();
-            status.setText(automatic.isSelected() ? "Automatic process" : "Manual process");
+            status.setText(automatic.isSelected()
+                    ? "Automatic process started" : "Manual process; clock paused");
         });
         linkUp.addActionListener(event -> {
             control.setLinkUp(linkUp.isSelected());
@@ -195,6 +185,8 @@ public final class SimulationControlPanel extends JPanel {
 
         JPanel clock = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         clock.setBorder(BorderFactory.createTitledBorder("Clock"));
+        automatic.setToolTipText(
+                "Applies follow rules and completes phases automatically. Starts the clock.");
         clock.add(clockButton);
         JButton step = new JButton("Step 1 tick");
         step.addActionListener(event -> {
@@ -204,26 +196,34 @@ public final class SimulationControlPanel extends JPanel {
         });
         clock.add(step);
         JButton next = new JButton("Next event");
+        next.setToolTipText("Advance until the next batch or process event.");
         next.addActionListener(event -> {
             control.pauseClock();
-            control.stepToNextEvent();
+            boolean reached = control.stepToNextEvent();
             updateClock();
+            status.setText(reached ? "Next event reached"
+                    : "No event reached; use Step 1 tick or Complete step");
         });
         clock.add(next);
         clock.add(new JLabel("Speed:"));
         clock.add(speedBox);
-        clock.add(new JLabel("Mode:"));
-        clock.add(modeBox);
         clock.add(automatic);
         panel.add(clock);
 
         JPanel decision = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         decision.setBorder(BorderFactory.createTitledBorder("Branch decision"));
-        decision.add(new JLabel("Mode:"));
-        JComboBox<String> decisionMode = new JComboBox<>(new String[]{"Automatic", "Manual"});
-        decisionMode.addActionListener(event -> control.setDecisionMode(
-                "Manual".equals(decisionMode.getSelectedItem())
-                        ? DecisionMode.MANUAL : DecisionMode.AUTO));
+        decision.add(new JLabel("When reached:"));
+        JComboBox<String> decisionMode = new JComboBox<>(
+                new String[]{"Continue automatically", "Wait for operator"});
+        decisionMode.setToolTipText(
+                "Select Wait for operator before reaching a branch with more than one way.");
+        decisionMode.addActionListener(event -> {
+            boolean manual = "Wait for operator".equals(decisionMode.getSelectedItem());
+            control.setDecisionMode(manual ? DecisionMode.MANUAL : DecisionMode.AUTO);
+            status.setText(manual ? "Branches wait for operator"
+                    : "Branches continue automatically");
+        });
+        decideButton.setToolTipText("Enabled when a branch is waiting for a decision.");
         decision.add(decisionMode);
         decision.add(decisionLabel);
         decision.add(decisionBox);
@@ -361,18 +361,17 @@ public final class SimulationControlPanel extends JPanel {
             if (definition == null) {
                 continue;
             }
-            String unit = row.unit() == null ? "" : row.unit();
+//            String unit = row.unit() == null ? "" : row.unit();
             Integer at = rowByVariable.get(row.variable());
             if (at == null || at < 0 || at >= variableRows.getRowCount()) {
                 at = variableRows.getRowCount();
-                variableRows.addRow(new Object[]{row.module(), row.variable(), row.value(),
-                        unit, definition.type().name()});
+                variableRows.addRow(new Object[]{row.variable(), row.value()});
                 variableNames.add(row.variable());
             } else {
-                setIfChanged(at, 0, row.module());
-                setIfChanged(at, 2, row.value());
-                setIfChanged(at, 3, unit);
-                setIfChanged(at, 4, definition.type().name());
+//                setIfChanged(at, 0, row.module());
+                setIfChanged(at, 0, row.value());
+//                setIfChanged(at, 3, unit);
+//                setIfChanged(at, 4, definition.type().name());
             }
             nextRows.put(row.variable(), at);
         }

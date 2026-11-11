@@ -44,6 +44,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
@@ -90,12 +91,12 @@ public final class BatchRuntimeTopComponent extends TopComponent {
 
     private final RecipeChartScene scene = new RecipeChartScene();
     private final JComponent sceneView = scene.createView();
-    private final JLabel batchLabel = label("Batch: â€”");
-    private final JLabel recipeLabel = label("Recipe: â€”");
-    private final JLabel unitsLabel = label("Units: â€”");
-    private final JLabel stateLabel = label("State: â€”");
+    private final JLabel batchLabel = label("Batch: ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â");
+    private final JLabel recipeLabel = label("Recipe: ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â");
+    private final JLabel unitsLabel = label("Units: ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â");
+    private final JLabel stateLabel = label("State: ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â");
     private final JLabel connectionLabel = label("Connection: OFFLINE");
-    private final JLabel activeStepLabel = label("Active step: â€”");
+    private final JLabel activeStepLabel = label("Active step: ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â");
     private final JLabel simulated = new JLabel("SIMULATED", SwingConstants.CENTER);
     private final JLabel statusLabel = label(" ");
     private final JLabel breadcrumb = label("Procedure");
@@ -211,7 +212,9 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         trail.add(breadcrumb, BorderLayout.CENTER);
         trail.add(followActive, BorderLayout.EAST);
         centre.add(trail, BorderLayout.NORTH);
-        centre.add(new JScrollPane(sceneView), BorderLayout.CENTER);
+        JScrollPane sceneScroll = new JScrollPane(sceneView);
+        installWheel(sceneView, scene, sceneScroll);
+        centre.add(sceneScroll, BorderLayout.CENTER);
         followActive.addActionListener(event -> {
             if (followActive.isSelected() && lastSnapshot != null) {
                 applySnapshot(lastSnapshot);
@@ -230,15 +233,6 @@ public final class BatchRuntimeTopComponent extends TopComponent {
                     showChart(element);
                 }
             }
-        });
-        sceneView.addMouseWheelListener(event -> {
-            if (!event.isControlDown()) {
-                return;
-            }
-            double zoom = scene.getZoomFactor();
-            zoom = event.getWheelRotation() < 0 ? zoom * 1.1 : zoom / 1.1;
-            scene.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
-            event.consume();
         });
 
         JPanel right = panel("Equipment / variables");
@@ -353,10 +347,10 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         }
         lastSnapshot = snapshot;
         batchLabel.setText("Batch: " + snapshot.batchId());
-        recipeLabel.setText("Recipe: " + (recipe == null ? "â€”" : recipe.getId()));
+        recipeLabel.setText("Recipe: " + (recipe == null ? "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â" : recipe.getId()));
         unitsLabel.setText("Units: " + units(snapshot));
         activeStepLabel.setText("Active step: " + (viewModel == null
-                ? "â€”" : viewModel.activeStepLabel(snapshot)));
+                ? "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â" : viewModel.activeStepLabel(snapshot)));
         stateLabel.setText("State: " + snapshot.batchState());
         stateLabel.setForeground(snapshot.batchState() == ModuleState.COMPLETE ? NORMAL
                 : snapshot.batchState() == ModuleState.ABORTED
@@ -413,7 +407,7 @@ public final class BatchRuntimeTopComponent extends TopComponent {
 
     private static String age(RuntimeViewModel.VariableRow row, Instant now) {
         if (row.sourceTime() == null) {
-            return "â€”";
+            return "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â";
         }
         long seconds = Math.max(0, Duration.between(row.sourceTime(), now).toSeconds());
         return seconds + " s";
@@ -454,8 +448,27 @@ public final class BatchRuntimeTopComponent extends TopComponent {
         return added;
     }
 
+    private static void installWheel(JComponent view, RecipeChartScene chart,
+                                     JScrollPane scroll) {
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+        view.addMouseWheelListener(event -> {
+            if (event.isControlDown()) {
+                double zoom = chart.getZoomFactor();
+                zoom = event.getWheelRotation() < 0 ? zoom * 1.1 : zoom / 1.1;
+                chart.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
+                event.consume();
+                return;
+            }
+            JScrollBar bar = event.isShiftDown()
+                    ? scroll.getHorizontalScrollBar() : scroll.getVerticalScrollBar();
+            bar.setValue(bar.getValue() + event.getUnitsToScroll() * bar.getUnitIncrement());
+            event.consume();
+        });
+    }
+
     private String units(BatchSnapshot snapshot) {
-        return payload == null || payload.unitOfStep().isEmpty() ? "â€”"
+        return payload == null || payload.unitOfStep().isEmpty() ? "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
                 : String.join(", ", new java.util.LinkedHashSet<>(payload.unitOfStep().values()));
     }
 

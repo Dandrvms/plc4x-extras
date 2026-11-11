@@ -19,12 +19,15 @@
 package org.apache.plc4x.malbec.s88.recipes.simulator;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.Window;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.swing.JButton;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
 import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
@@ -43,6 +46,8 @@ import org.openide.windows.WindowManager;
 public final class SimulatorTopComponent extends TopComponent {
 
     private static final long serialVersionUID = 1L;
+    private static final Dimension PREFERRED_SIZE = new Dimension(780, 620);
+    private static final Dimension MINIMUM_SIZE = new Dimension(780, 480);
     private static final Map<String, SimulatorTopComponent> OPEN = new LinkedHashMap<>();
     private static SimulatorTopComponent last;
 
@@ -60,6 +65,8 @@ public final class SimulatorTopComponent extends TopComponent {
         this.batchId = payload.batchId();
         this.panel = new SimulationControlPanel(session.control(), payload, viewModel,
                 session.snapshot());
+        setPreferredSize(PREFERRED_SIZE);
+        setMinimumSize(MINIMUM_SIZE);
         setLayout(new BorderLayout());
         add(panel, BorderLayout.CENTER);
         JPanel south = new JPanel(new BorderLayout());
@@ -82,9 +89,7 @@ public final class SimulatorTopComponent extends TopComponent {
                             RuntimeViewModel viewModel) {
         SimulatorTopComponent existing = OPEN.get(payload.batchId());
         if (existing != null) {
-            existing.open();
-            WindowManager.getDefault().setTopComponentFloating(existing, true);
-            existing.requestActive();
+            existing.showFloating();
             return;
         }
         SimulatorTopComponent simulator = new SimulatorTopComponent(session, payload, viewModel);
@@ -93,9 +98,7 @@ public final class SimulatorTopComponent extends TopComponent {
         if (WindowManager.getDefault().findMode("editor") != null) {
             WindowManager.getDefault().findMode("editor").dockInto(simulator);
         }
-        simulator.open();
-        WindowManager.getDefault().setTopComponentFloating(simulator, true);
-        simulator.requestActive();
+        simulator.showFloating();
     }
 
     public static void openLast() {
@@ -105,13 +108,33 @@ public final class SimulatorTopComponent extends TopComponent {
         if (last == null) {
             return;
         }
-        last.open();
-        WindowManager.getDefault().setTopComponentFloating(last, true);
-        last.requestActive();
+        last.showFloating();
     }
 
     public static boolean hasOpenable() {
         return !OPEN.isEmpty();
+    }
+
+    private void showFloating() {
+        open();
+        WindowManager.getDefault().setTopComponentFloating(this, true);
+        SwingUtilities.invokeLater(this::ensureUsableSize);
+        requestActive();
+    }
+
+    private void ensureUsableSize() {
+        Window window = SwingUtilities.getWindowAncestor(this);
+        if (window == null) {
+            return;
+        }
+        window.setMinimumSize(MINIMUM_SIZE);
+        Dimension size = window.getSize();
+        if (size.width >= MINIMUM_SIZE.width && size.height >= MINIMUM_SIZE.height) {
+            return;
+        }
+        window.setSize(Math.max(size.width, PREFERRED_SIZE.width),
+                Math.max(size.height, PREFERRED_SIZE.height));
+        window.setLocationRelativeTo(WindowManager.getDefault().getMainWindow());
     }
 
     private void refresh() {

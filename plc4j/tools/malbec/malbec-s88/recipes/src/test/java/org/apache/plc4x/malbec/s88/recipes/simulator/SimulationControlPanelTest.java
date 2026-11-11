@@ -138,7 +138,8 @@ class SimulationControlPanelTest {
         }
 
         @Override
-        public void stepToNextEvent() {
+        public boolean stepToNextEvent() {
+            return true;
         }
 
         @Override

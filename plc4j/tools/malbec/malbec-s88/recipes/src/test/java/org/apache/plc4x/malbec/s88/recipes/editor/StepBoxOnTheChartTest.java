@@ -78,6 +78,23 @@ class StepBoxOnTheChartTest {
         return PlantSnapshotUseCase.of(model);
     }
 
+    private static S88PlantSnapshot plantWithNumberedEquipment() {
+        S88Element root = new S88Element();
+        root.setId("PLANT");
+        root.setLevel(S88Level.AREA);
+        S88Element cell = new S88Element();
+        cell.setId("CELDA");
+        cell.setLevel(S88Level.PROCESSCELL);
+        S88Element heater = new S88Element();
+        heater.setId("CALENTAMIENTO_DE_TANQUE_1");
+        heater.setLevel(S88Level.UNIT);
+
+        S88PlantModel model = new S88PlantModel(root);
+        model.addChild(root, cell);
+        model.addChild(cell, heater);
+        return PlantSnapshotUseCase.of(model);
+    }
+
     private static S88MasterRecipe withAnEmptyStep() {
         S88MasterRecipe recipe = CreateMasterRecipeUseCase.execute("REC", S88RecipeKind.CLASS);
         BindRecipeStepUseCase.addEmptyStepAfter(recipe, null, "BEGIN");
@@ -159,6 +176,42 @@ class StepBoxOnTheChartTest {
         assertEquals(List.of("CALENTAMIENTO_DE_TANQUE"), List.of(label.split("\\R")),
                 "because binding names the step after the class, so writing the class under it says"
                         + " the same word twice and reads as two different things");
+    }
+
+    @Test
+    void aRepeatedStepLooksLikeTheEquipmentItWorksOn() {
+        S88PlantSnapshot plant = plant();
+        S88MasterRecipe recipe = withAnEmptyStep();
+        BindRecipeStepUseCase.bindToClass(recipe, null, "STEP", "CALENTAMIENTO_DE_TANQUE", plant);
+        var repeated = BindRecipeStepUseCase.addEmptyStepAfter(recipe, null,
+                "CALENTAMIENTO_DE_TANQUE");
+        BindRecipeStepUseCase.bindToClass(recipe, null, repeated.getId(),
+                "CALENTAMIENTO_DE_TANQUE", plant);
+
+        RecipeChartScene.NodeSpec spec = RecipeChartScene.nodesOf(recipe, null)
+                .get(repeated.getId());
+
+        assertEquals(List.of("CALENTAMIENTO_DE_TANQUE"), List.of(spec.label().split("\\R")),
+                "because two steps of the same equipment should not look like two different"
+                        + " pieces of equipment");
+        assertEquals(List.of("CALENTAMIENTO_DE_TANQUE", "ID: CALENTAMIENTO_DE_TANQUE_1"),
+                List.of(spec.tooltip().split("\\R")),
+                "and the tooltip keeps the unique name without putting it on the box");
+    }
+
+    @Test
+    void aStepForANumberedEquipmentKeepsItsNumberedName() {
+        S88PlantSnapshot plant = plantWithNumberedEquipment();
+        S88MasterRecipe recipe = withAnEmptyStep();
+        BindRecipeStepUseCase.bindToEquipment(recipe, null, "STEP",
+                "CALENTAMIENTO_DE_TANQUE_1", plant);
+
+        RecipeChartScene.NodeSpec spec = RecipeChartScene.nodesOf(recipe, null)
+                .get("CALENTAMIENTO_DE_TANQUE_1");
+
+        assertEquals(List.of("CALENTAMIENTO_DE_TANQUE_1"), List.of(spec.label().split("\\R")),
+                "because this is the equipment itself, not another step of"
+                        + " CALENTAMIENTO_DE_TANQUE");
     }
 
     @Test

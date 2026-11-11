@@ -229,12 +229,15 @@ public final class SimulatedModule {
             }
             Double current = store.numeric(report);
             double value = current == null ? rule.initial() : current;
+            if (reachedValue(value, target, rule)) {
+                continue;
+            }
             double delta = target - value;
             double largest = rule.ratePerSecond() * dt;
             double next = Math.abs(delta) <= largest
                     ? target
                     : value + Math.copySign(largest, delta);
-            if (Math.abs(target - next) <= rule.tolerance()) {
+            if (reachedValue(next, target, rule)) {
                 next = target;
             }
             if (Double.compare(next, value) != 0) {
@@ -266,8 +269,14 @@ public final class SimulatedModule {
         }
         Double value = store.numeric(report);
         Double target = store.numeric(setpoint);
-        return value != null && target != null
-                && Math.abs(value - target) <= rule.tolerance();
+        return value != null && target != null && reachedValue(value, target, rule);
+    }
+
+    private static boolean reachedValue(double value, double target, FollowRule rule) {
+        if (target >= rule.initial()) {
+            return value >= target;
+        }
+        return value <= target;
     }
 
     private double resolveDuration() {

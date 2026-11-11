@@ -147,8 +147,9 @@ public final class SimulatedPlc implements AutoCloseable {
         });
     }
 
-    public void stepToNextEvent() {
+    public boolean stepToNextEvent() {
         clockRunning = false;
+        boolean[] reached = {false};
         runAndWait(() -> {
             String before = fingerprint(engine.snapshot());
             for (int tick = 0; tick < 10_000; tick++) {
@@ -158,10 +159,12 @@ public final class SimulatedPlc implements AutoCloseable {
                 bridge.publish(snapshot, false);
                 if (!before.equals(fingerprint(snapshot))) {
                     notifySnapshot(snapshot);
+                    reached[0] = true;
                     return;
                 }
             }
         });
+        return reached[0];
     }
 
     public void setVariable(String publishedName, Object value) {

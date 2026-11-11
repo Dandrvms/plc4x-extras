@@ -69,6 +69,44 @@ class SimulatedModuleTest {
     }
 
     @Test
+    void aFollowRuleStopsWhenTheValueHasPassedTheSetpointGoingUp() {
+        Fixture fixture = fixture("CALENTADOR_1");
+        fixture.store().set("TEMPERATURA_ACTUAL", 102.0, 0.0);
+        fixture.store().set("TEMPERATURA_SP", 100.0, 0.0);
+        SimulationProfile profile = SimulationProfile.defaults().withFollowRules(List.of(
+                new FollowRule("CALENTADOR_1", "TEMPERATURA_ACTUAL", "TEMPERATURA_SP",
+                        10.0, 0.5, 20.0)));
+        SimulatedModule module = new SimulatedModule("CALENTADOR_1", fixture.element(),
+                profile, fixture.store());
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(0.1, 0.1);
+
+        assertEquals(ModuleState.COMPLETE, module.state());
+        assertEquals(102.0, fixture.store().numeric("TEMPERATURA_ACTUAL"), 1e-9,
+                "because a value past the setpoint must not be pulled back to it");
+    }
+
+    @Test
+    void aFollowRuleStopsWhenTheValueHasPassedTheSetpointGoingDown() {
+        Fixture fixture = fixture("CALENTADOR_1");
+        fixture.store().set("TEMPERATURA_ACTUAL", 18.0, 0.0);
+        fixture.store().set("TEMPERATURA_SP", 20.0, 0.0);
+        SimulationProfile profile = SimulationProfile.defaults().withFollowRules(List.of(
+                new FollowRule("CALENTADOR_1", "TEMPERATURA_ACTUAL", "TEMPERATURA_SP",
+                        10.0, 0.5, 100.0)));
+        SimulatedModule module = new SimulatedModule("CALENTADOR_1", fixture.element(),
+                profile, fixture.store());
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(0.1, 0.1);
+
+        assertEquals(ModuleState.COMPLETE, module.state());
+        assertEquals(18.0, fixture.store().numeric("TEMPERATURA_ACTUAL"), 1e-9,
+                "because a value past the setpoint must not be pulled back to it");
+    }
+
+    @Test
     void followRuleSnapsToTheSetpointInsideTheTolerance() {
         Fixture fixture = fixture("CALENTADOR_1");
         fixture.store().set("TEMPERATURA_ACTUAL", 71.5, 0.0);

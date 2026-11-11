@@ -34,8 +34,11 @@ public interface SimulationControl {
 
     void stepTicks(int ticks);
 
-    /** Advances until the next significant change, at most ten thousand ticks. */
-    void stepToNextEvent();
+    /**
+     * Advances until the next significant change, at most ten thousand ticks.
+     * Returns true when a change was reached.
+     */
+    boolean stepToNextEvent();
 
     boolean isClockRunning();
 

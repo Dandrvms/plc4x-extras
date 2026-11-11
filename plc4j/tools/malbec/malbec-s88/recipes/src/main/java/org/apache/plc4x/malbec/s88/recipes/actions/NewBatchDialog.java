@@ -118,6 +118,7 @@ final class NewBatchDialog extends JDialog {
     }
 
     BatchDetails showDialog() {
+        pack();
         setVisible(true);
         return result;
     }

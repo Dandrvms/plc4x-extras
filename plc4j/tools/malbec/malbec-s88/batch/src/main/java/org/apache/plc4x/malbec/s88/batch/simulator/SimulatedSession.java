@@ -142,8 +142,8 @@ public final class SimulatedSession implements AutoCloseable {
         }
 
         @Override
-        public void stepToNextEvent() {
-            plc.stepToNextEvent();
+        public boolean stepToNextEvent() {
+            return plc.stepToNextEvent();
         }
 
         @Override

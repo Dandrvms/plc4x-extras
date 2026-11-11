@@ -30,6 +30,7 @@ import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import org.apache.plc4x.malbec.s88.recipes.actions.RunSimulationAction;
@@ -79,9 +80,10 @@ public final class RecipeChartView extends AbstractRecipeView {
         view = scene.createView();
         pickWithThePointer();
         bindKeys();
-        zoomWithControlAndWheel(view, scene);
+        JScrollPane scroll = new JScrollPane(view);
+        installWheel(view, scene, scroll);
         toolbar.addTo(toolBar());
-        add(new JScrollPane(view), BorderLayout.CENTER);
+        add(scroll, BorderLayout.CENTER);
 
         problems = new RecipeProblems();
         problems.onPick(scene::select);
@@ -169,24 +171,21 @@ public final class RecipeChartView extends AbstractRecipeView {
         doings.put(name, action);
     }
 
-    /**
-     * Zooms with the wheel while the control key is held.
-     *
-     * @param target the component the library draws in, which is what receives the wheel
-     * @param chart  the chart to zoom, which is where the zoom factor is held
-     */
-    private static void zoomWithControlAndWheel(JComponent target, RecipeChartScene chart) {
-        double step = 1.1;
-        target.addMouseWheelListener(event -> {
+    private static void installWheel(JComponent view, RecipeChartScene chart,
+                                     JScrollPane scroll) {
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+        view.addMouseWheelListener(event -> {
             if (event.isControlDown()) {
                 double zoom = chart.getZoomFactor();
-                if (event.getWheelRotation() < 0) {
-                    zoom *= step;
-                } else {
-                    zoom /= step;
-                }
+                zoom = event.getWheelRotation() < 0 ? zoom * 1.1 : zoom / 1.1;
                 chart.setZoomFactor(Math.clamp(zoom, 0.2, 4.0));
+                event.consume();
+                return;
             }
+            JScrollBar bar = event.isShiftDown()
+                    ? scroll.getHorizontalScrollBar() : scroll.getVerticalScrollBar();
+            bar.setValue(bar.getValue() + event.getUnitsToScroll() * bar.getUnitIncrement());
             event.consume();
         });
     }
