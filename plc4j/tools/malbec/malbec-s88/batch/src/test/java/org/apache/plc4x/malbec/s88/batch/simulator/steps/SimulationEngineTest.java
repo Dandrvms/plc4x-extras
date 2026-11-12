@@ -66,26 +66,6 @@ class SimulationEngineTest {
     }
 
     @Test
-    void anActivePhaseReportsProgressToItsUnitProcedure() {
-        SimulationEngine engine = engine(DemoFixtures.request("BATCH-PROGRESS"));
-
-        assertTrue(engine.command(BatchCommand.START).accepted());
-        tick(engine, 5);
-
-        List<StepStatus> statuses = engine.snapshot().activeSteps();
-        StepStatus unit = statuses.stream()
-                .filter(step -> "UP_REACTOR".equals(step.stepId()))
-                .findFirst().orElseThrow();
-        StepStatus phase = statuses.stream()
-                .filter(step -> "CARGAR".equals(step.stepId()))
-                .findFirst().orElseThrow();
-
-        assertTrue(phase.progress() > 0, () -> statuses.toString());
-        assertTrue(unit.progress() >= phase.progress(),
-                () -> "the unit procedure should carry the progress of its phase: " + statuses);
-    }
-
-    @Test
     void reportsTheActiveStepAndTheNumberOfSteps() {
         SimulationEngine engine = engine(DemoFixtures.request("BATCH-STEP-INDEX"));
 
@@ -302,7 +282,7 @@ class SimulationEngineTest {
         PrepareResult result = BatchPayloadFactory.prepare(request);
         assertTrue(result.errors().isEmpty(), () -> String.join("\n", result.errors()));
         BatchPayload payload = result.payload();
-        SimulationProfile profile = new SimulationProfile(1.0, 0, 0.1, List.of(
+        SimulationProfile profile = new SimulationProfile(0, 0.1, List.of(
                 new FollowRule("CALENTADOR_1", "TEMPERATURA_ACTUAL", "TEMPERATURA_SP",
                         1.0, 0.5, 20.0)));
         return new SimulationEngine(payload, profile, CLOCK, mode, ExitPolicy.COMPLETE_ON_EXIT,

@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import javax.swing.BorderFactory;
@@ -37,13 +38,17 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayload;
 import org.apache.plc4x.malbec.s88.batch.simulator.SimulationControl;
 import org.apache.plc4x.malbec.s88.batch.link.VariableCatalog;
 import org.apache.plc4x.malbec.s88.batch.model.BatchSnapshot;
 import org.apache.plc4x.malbec.s88.batch.model.DecisionMode;
+import org.apache.plc4x.malbec.s88.batch.model.PreparedCondition;
 import org.apache.plc4x.malbec.s88.batch.model.StepStatus;
 import org.apache.plc4x.malbec.s88.batch.model.VariableSample;
 import org.apache.plc4x.malbec.s88.recipes.runtime.RuntimeViewModel;
@@ -54,11 +59,15 @@ public final class SimulationControlPanel extends JPanel {
     private static final long serialVersionUID = 1L;
 
     private static final String[] SPEEDS = {"0.5x", "1x", "5x", "10x", "60x"};
-    private static final int VALUE_COLUMN = 1;
+    private static final String ALL_MODULES = "All modules";
+    private static final int MODULE_COLUMN = 0;
+    private static final int VARIABLE_COLUMN = 1;
+    private static final int VALUE_COLUMN = 2;
 
     private final SimulationControl control;
     private final RuntimeViewModel viewModel;
     private final Map<String, VariableCatalog.Definition> definitions;
+    private final Set<String> conditionModules = new LinkedHashSet<>();
 
     private final JCheckBox automatic = new JCheckBox("Automatic process");
     private final JButton clockButton = new JButton("Pause clock");
@@ -73,8 +82,11 @@ public final class SimulationControlPanel extends JPanel {
     private final List<String> activeModuleIds = new ArrayList<>();
     private final JButton completeButton = new JButton("Complete step");
     private final JLabel status = new JLabel(" ");
+    private final JTextField filterField = new JTextField(14);
+    private final JComboBox<String> moduleFilter = new JComboBox<>();
+    private final JCheckBox relevantOnly = new JCheckBox("Relevant only", true);
     private final DefaultTableModel variableRows = new DefaultTableModel(
-            new Object[]{"Variable", "Value"}, 0) {
+            new Object[]{"Module", "Variable", "Value"}, 0) {
         private static final long serialVersionUID = 1L;
 
         @Override
@@ -104,29 +116,73 @@ public final class SimulationControlPanel extends JPanel {
     private final List<String> currentDecisionCandidates = new ArrayList<>();
 
     private boolean updating;
+    private BatchSnapshot lastSnapshot;
 
     SimulationControlPanel(SimulationControl control, BatchPayload payload,
                            RuntimeViewModel viewModel, BatchSnapshot initial) {
-        this(control, VariableCatalog.of(payload), modulesOf(payload), viewModel, initial);
+        this(control, VariableCatalog.of(payload), modulesOf(payload), viewModel, initial, payload);
     }
 
     SimulationControlPanel(SimulationControl control,
                            Map<String, VariableCatalog.Definition> definitions,
                            List<String> modules, RuntimeViewModel viewModel,
                            BatchSnapshot initial) {
+        this(control, definitions, modules, viewModel, initial, null);
+    }
+
+    private SimulationControlPanel(SimulationControl control,
+                                   Map<String, VariableCatalog.Definition> definitions,
+                                   List<String> modules, RuntimeViewModel viewModel,
+                                   BatchSnapshot initial, BatchPayload payload) {
         super(new BorderLayout());
         this.control = control;
         this.viewModel = viewModel;
-        this.definitions = definitions == null ? Map.of() : definitions;
+        this.definitions = visibleDefinitions(definitions);
+        this.conditionModules.addAll(conditionModules(payload));
 
         JPanel body = new JPanel(new BorderLayout(8, 8));
         body.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         body.add(controls(modules), BorderLayout.NORTH);
-        body.add(new JScrollPane(variableTable), BorderLayout.CENTER);
+
+        JPanel tablePanel = new JPanel(new BorderLayout(0, 4));
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        filters.add(new JLabel("Filter:"));
+        filters.add(filterField);
+        filters.add(new JLabel("Module:"));
+        filters.add(moduleFilter);
+        filters.add(relevantOnly);
+        tablePanel.add(filters, BorderLayout.NORTH);
+        tablePanel.add(new JScrollPane(variableTable), BorderLayout.CENTER);
+        body.add(tablePanel, BorderLayout.CENTER);
         status.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
         body.add(status, BorderLayout.SOUTH);
         setLayout(new BorderLayout());
         add(body, BorderLayout.CENTER);
+
+        moduleFilter.addItem(ALL_MODULES);
+        for (String module : modules) {
+            if (module != null && !module.isBlank()) {
+                moduleFilter.addItem(module);
+            }
+        }
+        filterField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                refilterVariables();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                refilterVariables();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                refilterVariables();
+            }
+        });
+        moduleFilter.addActionListener(event -> refilterVariables());
+        relevantOnly.addActionListener(event -> refilterVariables());
 
         clockButton.addActionListener(event -> {
             if (control.isClockRunning()) {
@@ -284,6 +340,7 @@ public final class SimulationControlPanel extends JPanel {
         if (next == null) {
             return;
         }
+        lastSnapshot = next;
         updating = true;
         try {
             updateClock();
@@ -360,23 +417,22 @@ public final class SimulationControlPanel extends JPanel {
     }
 
     private void updateVariables(BatchSnapshot next) {
+        Set<String> activeModules = activeModules(next);
         Map<String, Integer> nextRows = new LinkedHashMap<>();
         for (RuntimeViewModel.VariableRow row : rowsOf(next)) {
             VariableCatalog.Definition definition = definitions.get(row.variable());
-            if (definition == null) {
+            if (definition == null || !shows(row, activeModules)) {
                 continue;
             }
-//            String unit = row.unit() == null ? "" : row.unit();
             Integer at = rowByVariable.get(row.variable());
             if (at == null || at < 0 || at >= variableRows.getRowCount()) {
                 at = variableRows.getRowCount();
-                variableRows.addRow(new Object[]{row.variable(), row.value()});
+                variableRows.addRow(new Object[]{row.module(), row.variable(), row.value()});
                 variableNames.add(row.variable());
             } else {
-//                setIfChanged(at, 0, row.module());
+                setIfChanged(at, MODULE_COLUMN, row.module());
+                setIfChanged(at, VARIABLE_COLUMN, row.variable());
                 setIfChanged(at, VALUE_COLUMN, row.value());
-//                setIfChanged(at, 3, unit);
-//                setIfChanged(at, 4, definition.type().name());
             }
             nextRows.put(row.variable(), at);
         }
@@ -391,6 +447,81 @@ public final class SimulationControlPanel extends JPanel {
         for (int at = 0; at < variableNames.size(); at++) {
             rowByVariable.put(variableNames.get(at), at);
         }
+    }
+
+    private void refilterVariables() {
+        if (lastSnapshot == null || updating || variableTable.isEditing()) {
+            return;
+        }
+        updating = true;
+        try {
+            updateVariables(lastSnapshot);
+        } finally {
+            updating = false;
+        }
+    }
+
+    private boolean shows(RuntimeViewModel.VariableRow row, Set<String> activeModules) {
+        String module = row.module() == null ? "" : row.module();
+        String selected = String.valueOf(moduleFilter.getSelectedItem());
+        if (!ALL_MODULES.equals(selected) && !selected.equals(module)) {
+            return false;
+        }
+        if (relevantOnly.isSelected()
+                && !activeModules.contains(module) && !conditionModules.contains(module)) {
+            return false;
+        }
+        String needle = filterField.getText().trim().toLowerCase(Locale.ROOT);
+        return needle.isEmpty() || row.variable().toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private static Set<String> activeModules(BatchSnapshot snapshot) {
+        Set<String> modules = new LinkedHashSet<>();
+        for (StepStatus step : snapshot.activeSteps()) {
+            if (step.moduleId() != null && !step.moduleId().isBlank()) {
+                modules.add(step.moduleId());
+            }
+        }
+        return modules;
+    }
+
+    private static Set<String> conditionModules(BatchPayload payload) {
+        Set<String> modules = new LinkedHashSet<>();
+        if (payload != null) {
+            payload.conditions().values().forEach(condition -> collectModules(condition, modules));
+        }
+        return modules;
+    }
+
+    private static void collectModules(PreparedCondition condition, Set<String> modules) {
+        if (condition instanceof PreparedCondition.Comparison comparison) {
+            if (comparison.moduleId() != null && !comparison.moduleId().isBlank()) {
+                modules.add(comparison.moduleId());
+            }
+        } else if (condition instanceof PreparedCondition.All all) {
+            all.operands().forEach(operand -> collectModules(operand, modules));
+        } else if (condition instanceof PreparedCondition.Any any) {
+            any.operands().forEach(operand -> collectModules(operand, modules));
+        }
+    }
+
+    private static Map<String, VariableCatalog.Definition> visibleDefinitions(
+            Map<String, VariableCatalog.Definition> definitions) {
+        Map<String, VariableCatalog.Definition> visible = new LinkedHashMap<>();
+        if (definitions != null) {
+            definitions.forEach((name, definition) -> {
+                if (!isHiddenSimulatorVariable(name)) {
+                    visible.put(name, definition);
+                }
+            });
+        }
+        return visible;
+    }
+
+    private static boolean isHiddenSimulatorVariable(String name) {
+        String upper = name == null ? "" : name.trim().toUpperCase(Locale.ROOT);
+        return upper.equals("COMMAND") || upper.startsWith("COMMAND_")
+                || upper.equals("SP") || upper.startsWith("SP_");
     }
 
     private void setIfChanged(int row, int column, Object value) {

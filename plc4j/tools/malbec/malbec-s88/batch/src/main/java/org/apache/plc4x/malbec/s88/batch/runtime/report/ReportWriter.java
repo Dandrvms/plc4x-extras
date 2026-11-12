@@ -20,6 +20,8 @@ package org.apache.plc4x.malbec.s88.batch.runtime.report;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +33,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -67,7 +70,7 @@ public final class ReportWriter {
         writeAtomically(folder.routeFile(), RecipeFlowFormatter.toText(route(payload)));
     }
 
-    /** Writes {@code route.txt} and {@code report.html}. */
+    /** Writes {@code route.txt}, the operator report and the engineering report. */
     public static void write(RunFolder folder, BatchRunSummary summary) throws IOException {
         Objects.requireNonNull(folder, "folder");
         Objects.requireNonNull(summary, "summary");
@@ -75,6 +78,8 @@ public final class ReportWriter {
         RecipeFlowAnalyzer.Route route = route(payload);
         writeRoute(folder, payload);
         writeAtomically(folder.reportFile(), html(summary, route));
+        writeAtomically(folder.engineeringReportFile(), html(summary, route, true));
+        writeManifest(folder, summary);
     }
 
     private static RecipeFlowAnalyzer.Route route(BatchPayload payload) {
@@ -85,6 +90,11 @@ public final class ReportWriter {
     }
 
     private static String html(BatchRunSummary summary, RecipeFlowAnalyzer.Route route) {
+        return html(summary, route, false);
+    }
+
+    private static String html(BatchRunSummary summary, RecipeFlowAnalyzer.Route route,
+                               boolean engineering) {
         BatchPayload payload = summary.payload();
         StringBuilder html = new StringBuilder(16_384);
         html.append("<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n")
@@ -97,43 +107,115 @@ public final class ReportWriter {
                 .append("text-align:left;vertical-align:top;}th{background:#eef2f6;}")
                 .append("pre{background:#f5f7fa;padding:1rem;overflow:auto;}")
                 .append(".muted{color:#616e7c;}code{font-family:ui-monospace,monospace;}")
+                .append("details{margin:.5rem 0 1rem;}summary{cursor:pointer;}")
                 .append("</style>\n</head>\n<body>\n")
-                .append("<h1>Reporte de batch</h1>\n");
+                .append("<h1>Reporte de batch</h1>\n")
+                .append("<p class=\"muted\">Ejecución simulada: no es un registro de producción real.</p>\n");
 
+        appendSummary(html, summary);
         appendIdentification(html, payload);
         appendTimes(html, summary);
-        appendParameters(html, payload);
-        appendPhases(html, summary.events());
-        appendRoute(html, route);
-
-        html.append("<h2>Línea de tiempo</h2>\n");
-        if (summary.events().isEmpty()) {
-            html.append("<p class=\"muted\">Sin eventos.</p>\n");
-        } else {
-            html.append("<table><thead><tr><th>Secuencia</th><th>Tiempo simulado</th>")
-                    .append("<th>Tipo</th><th>Origen</th><th>Elemento</th><th>Estado</th>")
-                    .append("<th>Valor anterior</th><th>Valor nuevo</th><th>Detalle</th></tr>")
-                    .append("</thead><tbody>\n");
-            for (BatchEvent event : summary.events()) {
-                html.append("<tr>");
-                cell(html, event.seq());
-                cell(html, number(event.simTime()));
-                cell(html, event.type());
-                cell(html, event.source());
-                cell(html, event.elementId());
-                cell(html, event.state());
-                cell(html, event.oldValue());
-                cell(html, event.newValue());
-                cell(html, event.details());
-                html.append("</tr>\n");
-            }
-            html.append("</tbody></table>\n");
-        }
-
-        appendValues(html, summary.values());
         appendIncidents(html, summary.events());
+        appendPhases(html, summary.events());
+        appendParameters(html, payload);
+        appendTimeline(html, engineering ? summary.events() : operatorEvents(summary.events()));
+        appendValues(html, summary.values());
+        appendValueHistory(html, summary.values());
+        if (engineering) {
+            appendEngineeringSummary(html, summary);
+        }
+        appendRoute(html, route);
         html.append("</body>\n</html>\n");
         return html.toString();
+    }
+
+    private static void appendSummary(StringBuilder html, BatchRunSummary summary) {
+        List<BatchEvent> events = summary.events();
+        long completed = events.stream().filter(event -> event.type() == EventType.STEP_COMPLETED)
+                .count();
+        long incidents = events.stream().filter(event -> isIncident(event.type())).count();
+        long decisions = events.stream().filter(event -> event.type() == EventType.DECISION_TAKEN)
+                .count();
+        html.append("<h2>Resumen</h2>\n<table><tbody>\n");
+        row(html, "Resultado", summary.outcome());
+        row(html, "Pasos completados", Long.toString(completed));
+        row(html, "Incidencias", Long.toString(incidents));
+        row(html, "Decisiones del operador", Long.toString(decisions));
+        row(html, "Eventos registrados", Integer.toString(events.size()));
+        html.append("</tbody></table>\n");
+    }
+
+    private static void appendTimeline(StringBuilder html, List<BatchEvent> events) {
+        html.append("<h2>Línea de tiempo</h2>\n");
+        if (events.isEmpty()) {
+            html.append("<p class=\"muted\">Sin eventos.</p>\n");
+            return;
+        }
+        html.append("<table><thead><tr><th>Secuencia</th><th>Tiempo simulado</th>")
+                .append("<th>Tipo</th><th>Origen</th><th>Elemento</th><th>Estado</th>")
+                .append("<th>Valor anterior</th><th>Valor nuevo</th><th>Detalle</th></tr>")
+                .append("</thead><tbody>\n");
+        for (BatchEvent event : events) {
+            html.append("<tr>");
+            cell(html, event.seq());
+            cell(html, number(event.simTime()));
+            cell(html, event.type());
+            cell(html, event.source());
+            cell(html, event.elementId());
+            cell(html, event.state());
+            cell(html, event.oldValue());
+            cell(html, event.newValue());
+            cell(html, event.details());
+            html.append("</tr>\n");
+        }
+        html.append("</tbody></table>\n");
+    }
+
+    private static List<BatchEvent> operatorEvents(List<BatchEvent> events) {
+        List<BatchEvent> visible = new ArrayList<>();
+        for (BatchEvent event : events) {
+            if (event.type() != EventType.CONNECTION_LOST
+                    && event.type() != EventType.CONNECTION_RESTORED) {
+                visible.add(event);
+            }
+        }
+        return visible;
+    }
+
+    private static void appendValueHistory(StringBuilder html, List<ValuesRecorder.Sample> values) {
+        html.append("<h2>Historial de valores</h2>\n");
+        if (values.isEmpty()) {
+            html.append("<p class=\"muted\">Sin muestras.</p>\n");
+            return;
+        }
+        Map<String, List<ValuesRecorder.Sample>> byName = new TreeMap<>();
+        for (ValuesRecorder.Sample sample : values) {
+            byName.computeIfAbsent(sample.variable(), ignored -> new ArrayList<>()).add(sample);
+        }
+        for (Map.Entry<String, List<ValuesRecorder.Sample>> entry : byName.entrySet()) {
+            html.append("<details><summary>").append(escape(entry.getKey())).append("</summary>")
+                    .append("<table><thead><tr><th>Tiempo simulado</th><th>Valor</th>")
+                    .append("<th>Calidad</th></tr></thead><tbody>\n");
+            for (ValuesRecorder.Sample sample : entry.getValue()) {
+                html.append("<tr>");
+                cell(html, number(sample.simTime()));
+                cell(html, sample.value());
+                cell(html, sample.quality());
+                html.append("</tr>\n");
+            }
+            html.append("</tbody></table></details>\n");
+        }
+    }
+
+    private static void appendEngineeringSummary(StringBuilder html, BatchRunSummary summary) {
+        long lost = summary.events().stream()
+                .filter(event -> event.type() == EventType.CONNECTION_LOST).count();
+        long restored = summary.events().stream()
+                .filter(event -> event.type() == EventType.CONNECTION_RESTORED).count();
+        html.append("<h2>Detalle técnico</h2>\n<table><tbody>\n");
+        row(html, "Pérdidas de enlace", Long.toString(lost));
+        row(html, "Restauraciones de enlace", Long.toString(restored));
+        html.append("</tbody></table>\n");
     }
 
     private static void appendIdentification(StringBuilder html, BatchPayload payload) {
@@ -275,11 +357,14 @@ public final class ReportWriter {
         html.append("</tbody></table>\n");
     }
 
+    private static boolean isIncident(EventType type) {
+        return INCIDENTS.contains(type) || type == EventType.BATCH_ABORTED;
+    }
+
     private static void appendIncidents(StringBuilder html, List<BatchEvent> events) {
         List<BatchEvent> incidents = new ArrayList<>();
         for (BatchEvent event : events) {
-            if (INCIDENTS.contains(event.type())
-                    || event.type() == EventType.BATCH_ABORTED) {
+            if (isIncident(event.type())) {
                 incidents.add(event);
             }
         }
@@ -306,7 +391,7 @@ public final class ReportWriter {
         if (profile == null) {
             profile = SimulationProfile.defaults();
         }
-        return "fase por defecto " + number(profile.defaultPhaseSeconds()) + " s; "
+        return "sin duración por defecto; "
                 + "transitorios " + profile.transientTicks() + " ticks; "
                 + "tick " + number(profile.tickSeconds()) + " s; "
                 + profile.followRules().size() + " reglas de seguimiento";
@@ -348,6 +433,33 @@ public final class ReportWriter {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    private static void writeManifest(RunFolder folder, BatchRunSummary summary) throws IOException {
+        StringBuilder text = new StringBuilder();
+        text.append("batch=").append(summary.payload().batchId()).append('\n');
+        text.append("recipe=").append(summary.payload().sourceRecipeId()).append('\n');
+        text.append("version=").append(summary.payload().recipeVersion()).append('\n');
+        text.append("run=").append(summary.run()).append('\n');
+        text.append("outcome=").append(summary.outcome()).append('\n');
+        text.append("generated=").append(TIME.format(Instant.now())).append('\n');
+        for (Path file : List.of(folder.eventsFile(), folder.valuesFile(), folder.routeFile(),
+                folder.reportFile(), folder.engineeringReportFile())) {
+            if (Files.isRegularFile(file)) {
+                text.append(file.getFileName()).append(" sha256=").append(sha256(file))
+                        .append(" size=").append(Files.size(file)).append('\n');
+            }
+        }
+        writeAtomically(folder.manifestFile(), text.toString());
+    }
+
+    private static String sha256(Path file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(Files.readAllBytes(file)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     private static void writeAtomically(Path target, String content) throws IOException {

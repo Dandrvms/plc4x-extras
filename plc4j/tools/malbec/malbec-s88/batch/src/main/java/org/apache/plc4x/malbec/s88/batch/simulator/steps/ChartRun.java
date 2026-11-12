@@ -177,15 +177,6 @@ public final class ChartRun {
         return true;
     }
 
-    public double progress() {
-        long total = chart.getSteps().stream().filter(step -> !isTerminal(step.getId())).count();
-        if (total == 0) {
-            return 1.0;
-        }
-        long done = completedStepKeys.stream().filter(stepKey -> !isTerminal(stepId(stepKey))).count();
-        return Math.max(0, Math.min(1, done / (double) total));
-    }
-
     public String key(String nodeId) {
         return (chartPath.isEmpty() ? "" : chartPath) + "/" + nodeId;
     }

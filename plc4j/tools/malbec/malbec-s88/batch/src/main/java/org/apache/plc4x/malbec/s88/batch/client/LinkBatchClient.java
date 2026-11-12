@@ -597,7 +597,6 @@ public final class LinkBatchClient implements BatchClient {
         for (String key : activeKeys) {
             steps.add(stepStatus(key));
         }
-        steps = withChildProgress(steps);
         double wallElapsed = Math.max(0,
                 Duration.between(wallStart.get(), Instant.now()).toMillis() / 1000.0);
         lastSnapshot = new BatchSnapshot(batchId, run, BatchMode.SIMULATED, batchState,
@@ -616,36 +615,8 @@ public final class LinkBatchClient implements BatchClient {
         }
         int stepIndex = integer(PlatformVariable.STEP_INDEX.publishedName(moduleId));
         int stepCount = integer(PlatformVariable.STEP_COUNT.publishedName(moduleId));
-        double progress = number(PlatformVariable.PROGRESS.publishedName(moduleId));
         return new StepStatus(chartPath, stepId, moduleId, moduleId, ModuleState.RUNNING,
-                progress, stepIndex, stepCount);
-    }
-
-    private static List<StepStatus> withChildProgress(List<StepStatus> steps) {
-        List<StepStatus> result = new ArrayList<>(steps);
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (int at = 0; at < result.size(); at++) {
-                StepStatus parent = result.get(at);
-                if (parent.progress() > 0) {
-                    continue;
-                }
-                double progress = 0;
-                for (StepStatus child : result) {
-                    if (parent.stepId().equals(child.chartPath())) {
-                        progress = Math.max(progress, child.progress());
-                    }
-                }
-                if (progress > 0) {
-                    result.set(at, new StepStatus(parent.chartPath(), parent.stepId(),
-                            parent.elementId(), parent.moduleId(), parent.state(), progress,
-                            parent.stepIndex(), parent.stepCount()));
-                    changed = true;
-                }
-            }
-        }
-        return result;
+                stepIndex, stepCount);
     }
 
     private int integer(String name) {

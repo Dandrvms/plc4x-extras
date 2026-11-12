@@ -553,7 +553,6 @@ public final class SequenceEngine {
             S88RecipeElement element = active.element();
             String stepKey = run.key(stepId);
             ModuleState state;
-            double progress;
             String moduleId = null;
             List<StepStatus> childStatuses = new ArrayList<>();
             if (element != null && element.getKind() == S88RecipeElementKind.PHASE) {
@@ -562,13 +561,9 @@ public final class SequenceEngine {
                     moduleId = payload.unitOfStep().get(stepKey);
                 }
                 SimulatedModule module = moduleId == null ? null : modules.get(moduleId);
-                if (module == null) {
-                    state = active.completed() ? ModuleState.COMPLETE : ModuleState.RUNNING;
-                    progress = active.completed() ? 1.0 : 0.0;
-                } else {
-                    state = module.state();
-                    progress = module.progress();
-                }
+                state = module == null
+                        ? (active.completed() ? ModuleState.COMPLETE : ModuleState.RUNNING)
+                        : module.state();
             } else if (element != null && element.getProcedureLogic() != null) {
                 ChartRun child = run.childFor(stepId);
                 if (child != null) {
@@ -576,24 +571,14 @@ public final class SequenceEngine {
                 }
                 boolean complete = active.completed() || (child != null && child.isComplete());
                 state = complete ? ModuleState.COMPLETE : ModuleState.RUNNING;
-                progress = complete ? 1.0 : progressOf(child, childStatuses);
             } else {
                 state = active.completed() ? ModuleState.COMPLETE : ModuleState.RUNNING;
-                progress = active.completed() ? 1.0 : 0.0;
             }
             statuses.add(new StepStatus(run.chartPath(), stepId, element == null ? null
-                    : element.getId(), moduleId, state, progress, stepNumber(run, stepId),
+                    : element.getId(), moduleId, state, stepNumber(run, stepId),
                     stepCount(run)));
             statuses.addAll(childStatuses);
         }
-    }
-
-    private static double progressOf(ChartRun child, List<StepStatus> childStatuses) {
-        double progress = child == null ? 0.0 : child.progress();
-        for (StepStatus status : childStatuses) {
-            progress = Math.max(progress, status.progress());
-        }
-        return Math.max(0.0, Math.min(1.0, progress));
     }
 
     private void collectCompleted(ChartRun run, Set<String> keys) {

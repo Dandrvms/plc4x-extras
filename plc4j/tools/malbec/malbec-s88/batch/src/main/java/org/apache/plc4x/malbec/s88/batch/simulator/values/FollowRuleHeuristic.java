@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.batch.model.FollowRule;
@@ -48,7 +49,33 @@ public final class FollowRuleHeuristic {
         }
         Map<String, String> reports = BaseNameResolver.resolveAll(element, S88PlantModel.REPORTS);
         Map<String, String> setpoints = BaseNameResolver.resolveAll(element, S88PlantModel.PARAMETERS);
-        return infer(moduleId, reports.keySet(), setpoints.keySet());
+        List<FollowRule> rules = new ArrayList<>(infer(moduleId, reports.keySet(),
+                setpoints.keySet()));
+        String report = firstNumeric(element, S88PlantModel.REPORTS, "ACTUAL", "PV", "ACT");
+        String setpoint = firstNumeric(element, S88PlantModel.PARAMETERS, "SP", "SETPOINT");
+        if (report != null && setpoint != null) {
+            rules.add(new FollowRule(moduleId, report, setpoint, 1.0, 0.5, 0.0));
+        }
+        return List.copyOf(rules);
+    }
+
+    private static String firstNumeric(S88Element element, String container, String... names) {
+        Map<String, Object> declared = element.getStructuredProperty(container);
+        if (declared == null) {
+            return null;
+        }
+        for (String name : names) {
+            Object raw = declared.get(name);
+            if (!(raw instanceof Map<?, ?> definition)) {
+                continue;
+            }
+            Object type = definition.get("Type");
+            DataType dataType = type == null ? null : DataType.fromString(type.toString());
+            if (dataType == DataType.INTEGER || dataType == DataType.REAL) {
+                return name;
+            }
+        }
+        return null;
     }
 
     public static List<FollowRule> infer(String moduleId, Collection<String> reportBases,

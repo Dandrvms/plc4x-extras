@@ -23,18 +23,14 @@ import java.util.List;
 /**
  * Timing and process values used by the simulated PLC.
  *
- * @param defaultPhaseSeconds duration of a phase that declares no duration
- * @param transientTicks      ticks a transient module state lasts
- * @param tickSeconds         simulated seconds advanced by one tick
- * @param followRules         rules that move reported values towards setpoints
+ * @param transientTicks ticks a transient module state lasts
+ * @param tickSeconds    simulated seconds advanced by one tick
+ * @param followRules    rules that move reported values towards setpoints
  */
-public record SimulationProfile(double defaultPhaseSeconds, int transientTicks,
-                                double tickSeconds, List<FollowRule> followRules) {
+public record SimulationProfile(int transientTicks, double tickSeconds,
+                                List<FollowRule> followRules) {
 
     public SimulationProfile {
-        if (defaultPhaseSeconds <= 0) {
-            throw new IllegalArgumentException("A phase has to last more than no time.");
-        }
         if (transientTicks < 0) {
             throw new IllegalArgumentException("A transient state cannot last a negative number of ticks.");
         }
@@ -46,10 +42,10 @@ public record SimulationProfile(double defaultPhaseSeconds, int transientTicks,
 
     /** The profile used when the batch request names none. */
     public static SimulationProfile defaults() {
-        return new SimulationProfile(10.0, 3, 0.1, List.of());
+        return new SimulationProfile(3, 0.1, List.of());
     }
 
     public SimulationProfile withFollowRules(List<FollowRule> rules) {
-        return new SimulationProfile(defaultPhaseSeconds, transientTicks, tickSeconds, rules);
+        return new SimulationProfile(transientTicks, tickSeconds, rules);
     }
 }

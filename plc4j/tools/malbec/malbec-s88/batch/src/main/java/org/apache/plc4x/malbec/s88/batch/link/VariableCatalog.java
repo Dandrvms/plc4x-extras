@@ -152,7 +152,8 @@ public final class VariableCatalog {
                 continue;
             }
             String name = entry.getKey();
-            if (name == null || name.isBlank() || definitions.containsKey(name)) {
+            if (name == null || name.isBlank() || isRetiredProgress(name)
+                    || definitions.containsKey(name)) {
                 continue;
             }
             String typeText = text(raw, TYPE);
@@ -194,6 +195,11 @@ public final class VariableCatalog {
             return List.of();
         }
         return new ArrayList<>(enumeration.getValues().keySet());
+    }
+
+    private static boolean isRetiredProgress(String name) {
+        String upper = name == null ? "" : name.trim().toUpperCase(java.util.Locale.ROOT);
+        return upper.equals("PROGRESS") || upper.startsWith("PROGRESS_");
     }
 
     private static String text(Map<?, ?> definition, String key) {

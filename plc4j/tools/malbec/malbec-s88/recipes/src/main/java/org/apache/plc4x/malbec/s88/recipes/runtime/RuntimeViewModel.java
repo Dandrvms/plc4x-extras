@@ -236,7 +236,7 @@ public final class RuntimeViewModel {
         if (state == RecipeChartScene.ExecState.DONE) {
             return "DONE";
         }
-        return step.state().name() + " " + Math.round(step.progress() * 100) + "%";
+        return step.state().name();
     }
 
     private static String text(Object value) {

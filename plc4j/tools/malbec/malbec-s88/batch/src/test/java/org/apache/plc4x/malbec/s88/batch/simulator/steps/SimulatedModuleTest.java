@@ -203,14 +203,12 @@ class SimulatedModuleTest {
         assertEquals(ModuleState.RUNNING, module.state());
         assertEquals(2, module.stepIndex());
         assertEquals(2, module.stepCount());
-        assertEquals(0.4, fixture.store().numeric("PROGRESS_BOMBA_1"), 1e-9);
 
         module.tick(1.5, 2.5);
         assertEquals(ModuleState.COMPLETE, module.state());
         assertEquals(2, module.stepIndex());
         assertEquals(2.0, fixture.store().numeric("STEP_INDEX_BOMBA_1"), 1e-9);
         assertEquals(2.0, fixture.store().numeric("STEP_COUNT_BOMBA_1"), 1e-9);
-        assertEquals(1.0, fixture.store().numeric("PROGRESS_BOMBA_1"), 1e-9);
     }
 
     @Test
@@ -288,7 +286,7 @@ class SimulatedModuleTest {
     @Test
     void transientStatesSettleAfterTheirTicks() {
         Fixture fixture = fixture("BOMBA_1");
-        SimulationProfile profile = new SimulationProfile(10.0, 3, 0.1, List.of());
+        SimulationProfile profile = new SimulationProfile(3, 0.1, List.of());
         SimulatedModule module = new SimulatedModule("BOMBA_1", fixture.element(), profile,
                 fixture.store());
 
@@ -339,6 +337,22 @@ class SimulatedModuleTest {
         assertEquals(ModuleState.ABORTING, module.state());
         module.tick(1.0, 3.0);
         assertEquals(ModuleState.ABORTED, module.state());
+    }
+
+    @Test
+    void aPhaseWithoutDurationOrFollowRuleWaitsForTheOperator() {
+        S88Element element = new S88Element();
+        element.setId("BOMBA_SIN_TIEMPO");
+        element.setProperty("Parameters", Map.of());
+        SimulatedModule module = new SimulatedModule("BOMBA_SIN_TIEMPO", element,
+                SimulationProfile.defaults(), new VariableStore());
+
+        module.command(BatchCommand.START, 0.0);
+        module.tick(100.0, 100.0);
+
+        assertEquals(ModuleState.RUNNING, module.state());
+        module.completeNow(100.0);
+        assertEquals(ModuleState.COMPLETE, module.state());
     }
 
     private static void declareDuration(S88Element element, String unit) {

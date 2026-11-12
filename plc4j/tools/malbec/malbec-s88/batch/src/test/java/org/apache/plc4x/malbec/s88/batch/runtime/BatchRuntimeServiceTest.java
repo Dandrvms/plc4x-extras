@@ -79,6 +79,10 @@ class BatchRuntimeServiceTest {
             assertTrue(Files.isRegularFile(folder.valuesFile()));
             assertTrue(Files.isRegularFile(folder.routeFile()));
             assertTrue(Files.isRegularFile(folder.reportFile()));
+            assertTrue(Files.isRegularFile(folder.engineeringReportFile()));
+            assertTrue(Files.isRegularFile(folder.manifestFile()));
+            assertTrue(Files.readString(folder.manifestFile(), StandardCharsets.UTF_8)
+                    .contains("sha256="));
             assertNull(runtime.failure(), () -> String.valueOf(runtime.failure()));
 
             String report = Files.readString(folder.reportFile(), StandardCharsets.UTF_8);

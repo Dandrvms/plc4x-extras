@@ -68,4 +68,12 @@ public record RunFolder(Path outputRoot, String batchId, int run) {
     public Path reportFile() {
         return directory().resolve("report.html");
     }
+
+    public Path engineeringReportFile() {
+        return directory().resolve("report-engineering.html");
+    }
+
+    public Path manifestFile() {
+        return directory().resolve("manifest.txt");
+    }
 }

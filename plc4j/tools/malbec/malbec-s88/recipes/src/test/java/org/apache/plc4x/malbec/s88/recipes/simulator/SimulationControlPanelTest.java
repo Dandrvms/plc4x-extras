@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.recipes.simulator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -75,6 +76,18 @@ class SimulationControlPanelTest {
         });
     }
 
+    @Test
+    void setpointsAndCommandsAreNotEditableFromTheSimulator() {
+        onSwingThread(() -> {
+            FakeControl control = new FakeControl();
+            SimulationControlPanel panel = panel(control);
+
+            assertFalse(panel.applyVariable("SP_NIVEL_TQ_1", "BAJO"));
+            assertFalse(panel.applyVariable("COMMAND_NIVEL_TQ_1", "START"));
+            assertNull(control.name);
+        });
+    }
+
     private static SimulationControlPanel panel(SimulationControl control) {
         Map<String, VariableCatalog.Definition> definitions = Map.of(
                 "TEMPERATURA_ACTUAL",
@@ -83,7 +96,13 @@ class SimulationControlPanelTest {
                 new VariableCatalog.Definition("CANTIDAD", DataType.INTEGER, "KG", List.of()),
                 "ESTADO",
                 new VariableCatalog.Definition("ESTADO", DataType.ENUMERATION, null,
-                        List.of("IDLE", "RUNNING", "COMPLETE")));
+                        List.of("IDLE", "RUNNING", "COMPLETE")),
+                "SP_NIVEL_TQ_1",
+                new VariableCatalog.Definition("SP_NIVEL_TQ_1", DataType.ENUMERATION, null,
+                        List.of("ALTO", "BAJO")),
+                "COMMAND_NIVEL_TQ_1",
+                new VariableCatalog.Definition("COMMAND_NIVEL_TQ_1", DataType.ENUMERATION, null,
+                        List.of("NONE", "START")));
         return new SimulationControlPanel(control, definitions, List.of(), null, snapshot());
     }
 

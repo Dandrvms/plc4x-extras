@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.batch.simulator.values;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.apache.plc4x.malbec.s88.api.DataType;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.batch.DemoFixtures;
@@ -108,6 +109,22 @@ class VariableStoreTest {
         assertEquals(1, rules.size());
         assertEquals("TEMPERATURA_ACTUAL", rules.get(0).reportBase());
         assertEquals("TEMPERATURA", rules.get(0).setpointBase());
+    }
+
+    @Test
+    void infersTheUnsuffixedActualAndSpPair() {
+        S88Element element = new S88Element();
+        element.setId("NIVEL");
+        element.setProperty("Reports", Map.of("ACTUAL",
+                Map.of("Type", "REAL")));
+        element.setProperty("Parameters", Map.of("SP",
+                Map.of("Type", "REAL")));
+
+        List<FollowRule> rules = FollowRuleHeuristic.infer("NIVEL", element);
+
+        assertEquals(1, rules.size());
+        assertEquals("ACTUAL", rules.get(0).reportBase());
+        assertEquals("SP", rules.get(0).setpointBase());
     }
 
     private static VariableStore store() {

@@ -67,7 +67,6 @@ public final class SimulatedModule {
         this.store = Objects.requireNonNull(store, "A simulated module needs a variable store.");
         this.machine = new ModuleStateMachine(profile.transientTicks());
         this.followRules = effectiveRules();
-        this.durationSeconds = profile.defaultPhaseSeconds();
         Double declaredCount = store.numeric(PlatformVariable.STEP_COUNT.publishedName(this.moduleId));
         this.stepCount = declaredCount == null ? 0 : Math.max(0, (int) Math.floor(declaredCount));
     }
@@ -88,15 +87,6 @@ public final class SimulatedModule {
         return durationSeconds;
     }
 
-    public double progress() {
-        if (machine.state() == ModuleState.COMPLETE) {
-            return 1.0;
-        }
-        if (durationSeconds <= 0) {
-            return 1.0;
-        }
-        return Math.max(0, Math.min(1, elapsed / durationSeconds));
-    }
 
     public int stepCount() {
         return stepCount;
@@ -146,7 +136,7 @@ public final class SimulatedModule {
                 elapsed = 0;
                 stepIndex = 0;
                 stepCount = 0;
-                durationSeconds = profile.defaultPhaseSeconds();
+                durationSeconds = 0.0;
                 durationExplicit = false;
             }
         }
@@ -179,7 +169,7 @@ public final class SimulatedModule {
         elapsed = 0;
         stepIndex = 0;
         stepCount = 0;
-        durationSeconds = profile.defaultPhaseSeconds();
+        durationSeconds = 0.0;
         durationExplicit = false;
         publish(simTime);
     }
@@ -248,10 +238,7 @@ public final class SimulatedModule {
 
     private boolean complete() {
         if (followRules.isEmpty()) {
-            if (durationExplicit) {
-                return elapsed >= durationSeconds;
-            }
-            return automatic && elapsed >= durationSeconds;
+            return durationExplicit && elapsed >= durationSeconds;
         }
         for (FollowRule rule : followRules) {
             if (!reached(rule)) {
@@ -282,7 +269,7 @@ public final class SimulatedModule {
     private double resolveDuration() {
         durationExplicit = false;
         if (element == null) {
-            return profile.defaultPhaseSeconds();
+            return 0.0;
         }
         for (String baseName : DURATION_NAMES) {
             String name;
@@ -301,7 +288,7 @@ public final class SimulatedModule {
                 return durationSeconds(name, value);
             }
         }
-        return profile.defaultPhaseSeconds();
+        return 0.0;
     }
 
     private double durationSeconds(String name, double value) {
@@ -338,8 +325,6 @@ public final class SimulatedModule {
                 (double) stepIndex, simTime);
         store.setIfPresent(PlatformVariable.STEP_COUNT.publishedName(moduleId),
                 (double) stepCount, simTime);
-        store.setIfPresent(PlatformVariable.PROGRESS.publishedName(moduleId),
-                progress(), simTime);
         String elapsedName = resolve(S88PlantModel.REPORTS, "TIEMPO_TRANSCURRIDO");
         if (elapsedName != null) {
             ProcessVariable elapsedVariable = store.get(elapsedName);

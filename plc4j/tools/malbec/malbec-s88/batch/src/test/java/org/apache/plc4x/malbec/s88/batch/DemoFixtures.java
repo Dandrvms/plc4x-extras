@@ -87,6 +87,10 @@ public final class DemoFixtures {
         heater2.setClass(heaterType);
         heater2.addElementClass(heaterType);
 
+        addClassVariable(pumpType, S88PlantModel.PARAMETERS, "DURACION",
+                "INTEGER", "10", null);
+        addElementVariable(pump, S88PlantModel.PARAMETERS, "DURACION",
+                "INTEGER", "10", null);
         addClassVariable(heaterType, S88PlantModel.REPORTS, "TEMPERATURA_ACTUAL",
                 "REAL", "20", null);
         addClassVariable(heaterType, S88PlantModel.PARAMETERS, "TEMPERATURA_SP",
@@ -129,6 +133,8 @@ public final class DemoFixtures {
                 "STATE", "=", "COMPLETE");
         SetBarConditionUseCase.waitUntil(recipe, unit, "T_MANTENER", plant, "CALENTADOR_TIPO",
                 "TEMPERATURA_ACTUAL", ">=", "72");
+        UpdateRecipeParameterUseCase.execute(recipe, load, "Parameters/DURACION",
+                "1", DataType.INTEGER, null);
         UpdateRecipeParameterUseCase.execute(recipe, heat, "Parameters/TEMPERATURA_SP",
                 "72", DataType.REAL, null);
         UpdateRecipeParameterUseCase.execute(recipe, hold, "Parameters/DURACION",

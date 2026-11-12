@@ -54,9 +54,6 @@ public enum PlatformVariable {
     /** How many non-terminal steps the chart of the phase has. */
     STEP_COUNT("STEP_COUNT", S88PlantModel.REPORTS, DataType.INTEGER, null, "0"),
 
-    /** How much of the current phase has run, from 0 to 1. */
-    PROGRESS("PROGRESS", S88PlantModel.REPORTS, DataType.REAL, null, "0"),
-
     /**
      * The order the batch gives the module. {@code NONE} is the value a module reads when no order
      * has arrived, which is what it sees whenever the batch server is not there: it carries on with

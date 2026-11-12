@@ -49,7 +49,7 @@ class RuntimeViewModelTest {
 
     private static BatchSnapshot snapshot() {
         StepStatus active = new StepStatus("", "BEGIN", "BEGIN", null,
-                ModuleState.RUNNING, 0.45, 0, 0);
+                ModuleState.RUNNING, 0, 0);
         VariableSample temperature = new VariableSample("TEMPERATURA_ACTUAL", 72.0,
                 DataType.REAL, "C", Instant.now(), Quality.GOOD, "plc");
         return new BatchSnapshot("BATCH", 1, BatchMode.SIMULATED, ModuleState.RUNNING, true,
@@ -66,7 +66,7 @@ class RuntimeViewModelTest {
         assertEquals(RecipeChartScene.ExecState.ACTIVE, state.states().get("BEGIN"));
         assertEquals(RecipeChartScene.ExecState.DONE, state.states().get("END"));
         assertTrue(state.firedTransitions().contains("T1"));
-        assertTrue(state.badges().get("BEGIN").contains("45%"));
+        assertEquals("RUNNING", state.badges().get("BEGIN"));
     }
 
     @Test
@@ -75,9 +75,9 @@ class RuntimeViewModelTest {
         BatchSnapshot snapshot = new BatchSnapshot("BATCH", 1, BatchMode.SIMULATED,
                 ModuleState.RUNNING, true, 1.0, 1.0,
                 List.of(new StepStatus("", "UP_REACTOR", "UP_REACTOR", null,
-                                ModuleState.RUNNING, 0.2, 0, 0),
+                                ModuleState.RUNNING, 0, 0),
                         new StepStatus("UP_REACTOR", "CARGAR", "BOMBA_1", "BOMBA_1",
-                                ModuleState.RUNNING, 0.6, 2, 5)),
+                                ModuleState.RUNNING, 2, 5)),
                 Set.of(), Set.of(), Map.of(), List.of(), PendingDecision.NONE);
 
         assertEquals("UP_REACTOR", model.activeChartPath(snapshot),

@@ -76,7 +76,7 @@ class ConditionEvaluatorTest {
     void comparesIntegersEnumerationsAndText() {
         VariableStore store = store();
         store.set("DURACION", 30.0, 0.0);
-        store.set("STATE_CALENTADOR_1", "COMPLETE", 0.0);
+        store.set("STATE_CALENTADOR_1", "complete", 0.0);
 
         assertTrue(eval(comparison("DURACION", DataType.INTEGER,
                 S88ConditionOperator.EQUALS, "30"), store));

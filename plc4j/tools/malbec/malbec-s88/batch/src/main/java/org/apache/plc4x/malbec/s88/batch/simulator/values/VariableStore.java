@@ -160,7 +160,8 @@ public final class VariableStore {
             return;
         }
         for (Map.Entry<String, Object> entry : definitions.entrySet()) {
-            if (!(entry.getValue() instanceof Map<?, ?> raw)) {
+            if (isRetiredProgress(entry.getKey())
+                    || !(entry.getValue() instanceof Map<?, ?> raw)) {
                 continue;
             }
             Map<String, Object> definition = copy(raw);
@@ -282,6 +283,11 @@ public final class VariableStore {
         Map<String, Object> result = new LinkedHashMap<>();
         source.forEach((key, value) -> result.put(String.valueOf(key), value));
         return result;
+    }
+
+    private static boolean isRetiredProgress(String name) {
+        String upper = name == null ? "" : name.trim().toUpperCase(java.util.Locale.ROOT);
+        return upper.equals("PROGRESS") || upper.startsWith("PROGRESS_");
     }
 
     private static String text(Map<String, Object> definition, String key) {
