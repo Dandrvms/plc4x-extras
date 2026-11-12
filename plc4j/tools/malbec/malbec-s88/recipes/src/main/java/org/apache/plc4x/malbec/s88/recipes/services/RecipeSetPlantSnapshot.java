@@ -99,12 +99,19 @@ public final class RecipeSetPlantSnapshot {
      * @return the plant as it was, or {@code null} when there is none or it cannot be read
      */
     public static S88PlantSnapshot open(Project recipeSet) {
-        FileObject file = fileIn(recipeSet);
-        if (file == null) {
-            return null;
-        }
-        S88PlantModel plant = thaw(new FileObjectStorage(file));
+        S88PlantModel plant = openModel(recipeSet);
         return plant == null ? null : PlantSnapshotUseCase.of(plant);
+    }
+
+    /**
+     * Reads the frozen plant of a recipe set as a plant model.
+     *
+     * @param recipeSet recipe set to read
+     * @return the plant as it was, or {@code null} when there is none or it cannot be read
+     */
+    public static S88PlantModel openModel(Project recipeSet) {
+        FileObject file = fileIn(recipeSet);
+        return file == null ? null : thaw(new FileObjectStorage(file));
     }
 
     private static S88Repository createRepository(S88Storage storage) {
@@ -178,10 +185,27 @@ public final class RecipeSetPlantSnapshot {
     public static S88PlantSnapshot required(Project recipeSet) {
         S88PlantSnapshot plant = open(recipeSet);
         if (plant == null) {
-            throw new IllegalStateException("This recipe set has no plant frozen into it, so what its"
-                    + " steps are attached to cannot be said. Take a snapshot of the plant before"
-                    + " writing a recipe for it.");
+            throw missingPlant();
         }
         return plant;
+    }
+
+    /**
+     * The frozen plant of a recipe set, said out loud when there is none.
+     *
+     * @throws IllegalStateException when the recipe set has no frozen plant
+     */
+    public static S88PlantModel requiredModel(Project recipeSet) {
+        S88PlantModel plant = openModel(recipeSet);
+        if (plant == null) {
+            throw missingPlant();
+        }
+        return plant;
+    }
+
+    private static IllegalStateException missingPlant() {
+        return new IllegalStateException("This recipe set has no plant frozen into it, so what its"
+                + " steps are attached to cannot be said. Take a snapshot of the plant before"
+                + " writing a recipe for it.");
     }
 }

@@ -26,7 +26,6 @@ import org.apache.plc4x.malbec.s88.plant.actions.CreatePlantProjectAction;
 
 import org.apache.plc4x.malbec.s88.plant.actions.ExportAction;
 import org.apache.plc4x.malbec.s88.plant.actions.ImportAction;
-import org.apache.plc4x.malbec.s88.recipes.actions.CreateRecipesProjectAction;
 import org.netbeans.api.annotations.common.StaticResource;
 import org.netbeans.spi.project.ui.LogicalViewProvider;
 import org.netbeans.spi.project.ui.support.CommonProjectActions;
@@ -94,7 +93,6 @@ public class Plc4xProjectLogicalViewImpl implements LogicalViewProvider {
         public Action[] getActions(boolean arg0) {
             List<Action> actions = new ArrayList<>();
             actions.add(new CreatePlantProjectAction().createContextAwareInstance(project.getLookup()));
-            actions.add(new CreateRecipesProjectAction().createContextAwareInstance(project.getLookup()));
             actions.addAll(Utilities.actionsForPath("Projects/org-plc4x-s88-project/Actions"));
             actions.add(null);
             actions.add(CommonProjectActions.copyProjectAction());

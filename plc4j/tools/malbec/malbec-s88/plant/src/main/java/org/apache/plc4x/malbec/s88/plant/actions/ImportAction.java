@@ -22,9 +22,11 @@ package org.apache.plc4x.malbec.s88.plant.actions;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.S88ProjectLayout;
 import org.apache.plc4x.malbec.s88.api.S88Repository;
 import org.apache.plc4x.malbec.s88.api.S88Storage;
 import org.apache.plc4x.malbec.s88.core.NamingAdvisor;
+import org.apache.plc4x.malbec.s88.plant.impl.PlantRecipesFolder;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
 import org.apache.plc4x.malbec.s88.plant.panels.ModelDefectsDialog;
 import org.apache.plc4x.malbec.s88.plant.services.S88ProjectServices;
@@ -123,7 +125,8 @@ public class ImportAction extends AbstractAction implements ContextAwareAction {
             }
 
             FileObject folder = projectDir.createFolder(FilenameUtils.getBaseName(file.getName()));
-            FileObject plantXML = folder.createData("plant.xml");
+            FileObject plantXML = folder.createData(S88ProjectLayout.PLANT_FILE);
+            PlantRecipesFolder.ensure(folder);
             S88Repository saver = S88ProjectServices.createRepository("xml", new FileObjectStorage(plantXML));
             saver.savePlant(model);
 

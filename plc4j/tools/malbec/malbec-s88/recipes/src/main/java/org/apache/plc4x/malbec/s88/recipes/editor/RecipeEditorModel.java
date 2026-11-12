@@ -28,10 +28,14 @@ import javax.swing.undo.AbstractUndoableEdit;
 import javax.swing.undo.CannotRedoException;
 import javax.swing.undo.CannotUndoException;
 
+import org.apache.plc4x.malbec.s88.api.S88ChangeEvent;
+import org.apache.plc4x.malbec.s88.api.S88ChangeListener;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.S88PlantModelProvider;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeHeader;
 import org.apache.plc4x.malbec.s88.api.S88RecipeRepository;
@@ -49,6 +53,7 @@ import org.netbeans.api.project.Project;
 import org.netbeans.api.project.ProjectManager;
 import org.openide.awt.UndoRedo;
 import org.openide.filesystems.FileObject;
+import org.openide.util.WeakListeners;
 
 /**
  * What an open editor is holding, and what it does about it.
@@ -57,7 +62,10 @@ public final class RecipeEditorModel {
 
     private final FileObject recipeFile;
     private final S88RecipeRepository repository;
-    private final S88PlantSnapshot plant;
+    private final S88PlantModelProvider plantProvider;
+    private final S88ChangeListener plantListener;
+    private final S88ChangeListener plantWeakListener;
+    private S88PlantModel plant;
     private final List<Consumer<RecipeEditorModel>> listeners = new CopyOnWriteArrayList<>();
     private final List<Consumer<String>> chartSelectionListeners = new CopyOnWriteArrayList<>();
     private final RecipeUndoRedo undoRedo = new RecipeUndoRedo();
@@ -80,44 +88,58 @@ public final class RecipeEditorModel {
     private String currentStepId;
 
     private RecipeEditorModel(FileObject recipeFile, S88MasterRecipe recipe,
-                              S88RecipeRepository repository, S88PlantSnapshot plant) {
+                              S88RecipeRepository repository, S88PlantModelProvider plantProvider,
+                              S88PlantModel plant) {
         this.recipeFile = recipeFile;
         this.recipe = recipe;
         this.repository = repository;
+        this.plantProvider = plantProvider;
         this.plant = plant;
+        this.plantListener = event -> plantChanged();
+        this.plantWeakListener = plantProvider == null ? null
+                : WeakListeners.create(S88ChangeListener.class, plantListener, plantProvider);
+        if (plantProvider != null) {
+            plantProvider.addChangeListener(plantWeakListener);
+        }
         this.header = S88RecipeHeader.of(recipe);
         undoRedo.onApplied(this::fireChanged);
     }
 
     /**
-     * The plant this recipe is written against, as it was when the recipe set was created.
+     * The plant this recipe is written against.
      *
-     * @return the frozen plant, {@code null} for a recipe that is not in a recipe set
+     * @return the plant, {@code null} for a recipe that is not under a readable plant
      */
-    public S88PlantSnapshot plant() {
+    public S88PlantModel plant() {
         return plant;
     }
 
     /**
      * What to say about a recipe that can be drawn but not bound to anything.
-     * <p>
-     * The recipe set of this recipe has no plant frozen into it, so what its steps work on cannot be
-     * said and none of the actions that need the plant are offered.
      *
      * @return one line to say, or {@code null} when the plant is there
      */
     public String warning() {
-        return recipeFile == null || plant != null ? null
-                : "'" + recipeFile.getNameExt() + "' belongs to a recipe set with no plant frozen"
-                        + " into it, so what its steps work on cannot be said. Create the recipe"
-                        + " set again with a plant to write against.";
+        if (recipeFile == null || plant != null) {
+            return null;
+        }
+        return plantProvider != null
+                ? "'" + recipeFile.getNameExt() + "' belongs to a plant folder with no readable"
+                        + " plant.xml, so what its steps work on cannot be said."
+                : "'" + recipeFile.getNameExt() + "' is not under a plant with a readable plant.xml,"
+                        + " so what its steps work on cannot be said.";
+    }
+
+    private void plantChanged() {
+        if (plantProvider == null) {
+            return;
+        }
+        plant = plantProvider.getPlantModel();
+        fireChanged();
     }
 
     /**
      * Reads a recipe file so that it can be edited.
-     * <p>
-     * A recipe whose recipe set has no plant frozen into it still opens, and the view says what that
-     * means rather than the recipe being closed unread.
      *
      * @param recipeFile the recipe to open
      * @return the editor state for it
@@ -127,31 +149,38 @@ public final class RecipeEditorModel {
         return open(recipeFile, new FileObjectStorage(recipeFile), plantUnder(recipeFile));
     }
 
-    /**
-     * The frozen plant of the recipe set a recipe file belongs to.
-     * <p>
-     * A recipe set with no plant frozen into it still holds recipes that can be read and drawn. What
-     * cannot be said is what their steps are attached to, so the plant comes back empty and the view
-     * says so rather than the recipe being closed unread.
-     *
-     * @param recipeFile the recipe being opened
-     * @return the plant, or {@code null} when the recipe set has none
-     */
-    private static S88PlantSnapshot plantUnder(FileObject recipeFile) {
+    private static PlantSource plantUnder(FileObject recipeFile) {
         if (recipeFile == null) {
+            return PlantSource.none();
+        }
+        FileObject recipeSetFolder = recipeFile.getParent();
+        Project recipeSet = projectAt(recipeSetFolder);
+        if (recipeSet == null) {
+            return PlantSource.none();
+        }
+        S88PlantModelProvider provider = providerAt(recipeSetFolder == null
+                ? null : recipeSetFolder.getParent());
+        if (provider != null) {
+            return PlantSource.live(provider);
+        }
+        S88PlantModel legacy = RecipeSetPlantSnapshot.openModel(recipeSet);
+        return legacy == null ? PlantSource.none() : PlantSource.legacy(legacy);
+    }
+
+    private static Project projectAt(FileObject folder) {
+        if (folder == null) {
             return null;
         }
-        FileObject folder = recipeFile.getParent();
-        Project recipeSet;
         try {
-            recipeSet = folder == null ? null : ProjectManager.getDefault().findProject(folder);
-        } catch (IOException notAProject) {
+            return ProjectManager.getDefault().findProject(folder);
+        } catch (IOException | IllegalArgumentException notAProject) {
             return null;
         }
-        if (recipeSet == null || !RecipeSetPlantSnapshot.isTaken(recipeSet)) {
-            return null;
-        }
-        return RecipeSetPlantSnapshot.required(recipeSet);
+    }
+
+    private static S88PlantModelProvider providerAt(FileObject folder) {
+        Project project = projectAt(folder);
+        return project == null ? null : project.getLookup().lookup(S88PlantModelProvider.class);
     }
 
     /**
@@ -163,7 +192,7 @@ public final class RecipeEditorModel {
      * @throws IOException when the storage does not hold a recipe that can be read
      */
     static RecipeEditorModel open(FileObject recipeFile, S88Storage storage) throws IOException {
-        return open(recipeFile, storage, null);
+        return openStatic(recipeFile, storage, PlantSource.none());
     }
 
     /**
@@ -177,14 +206,47 @@ public final class RecipeEditorModel {
      */
     static RecipeEditorModel open(FileObject recipeFile, S88Storage storage,
                                   S88PlantSnapshot plant) throws IOException {
+        return openStatic(recipeFile, storage,
+                plant == null ? PlantSource.none() : PlantSource.legacy(plant.getPlant()));
+    }
+
+    static RecipeEditorModel open(FileObject recipeFile, S88Storage storage,
+                                  S88PlantModelProvider provider) throws IOException {
+        return openStatic(recipeFile, storage,
+                provider == null ? PlantSource.none() : PlantSource.live(provider));
+    }
+
+    private static RecipeEditorModel open(FileObject recipeFile, S88Storage storage,
+                                          PlantSource source) throws IOException {
+        return openStatic(recipeFile, storage, source);
+    }
+
+    private static RecipeEditorModel openStatic(FileObject recipeFile, S88Storage storage,
+                                                PlantSource source) throws IOException {
         S88RecipeRepository repository =
                 S88RecipeProjectServices.createRepository("xml", storage);
         S88MasterRecipe recipe = repository.loadRecipe();
         if (recipe == null) {
             throw new IOException("'" + name(recipeFile) + "' does not hold a recipe, or is empty.");
         }
-        EquipmentUidMigration.repair(recipe, plant);
-        return new RecipeEditorModel(recipeFile, recipe, repository, plant);
+        EquipmentUidMigration.repair(recipe, source.plant());
+        return new RecipeEditorModel(recipeFile, recipe, repository, source.provider(),
+                source.plant());
+    }
+
+    private record PlantSource(S88PlantModelProvider provider, S88PlantModel plant) {
+
+        static PlantSource none() {
+            return new PlantSource(null, null);
+        }
+
+        static PlantSource live(S88PlantModelProvider provider) {
+            return new PlantSource(provider, provider.getPlantModel());
+        }
+
+        static PlantSource legacy(S88PlantModel plant) {
+            return new PlantSource(null, plant);
+        }
     }
 
     private static String name(FileObject recipeFile) {

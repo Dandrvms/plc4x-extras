@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.plant.impl;
 
 import java.awt.Image;
 import java.beans.PropertyChangeListener;
+import java.io.IOException;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import org.netbeans.api.annotations.common.StaticResource;
@@ -27,6 +28,7 @@ import org.netbeans.api.project.Project;
 import org.netbeans.api.project.ProjectInformation;
 import org.netbeans.spi.project.ProjectState;
 import org.openide.filesystems.FileObject;
+import org.openide.util.Exceptions;
 import org.openide.util.ImageUtilities;
 import org.openide.util.Lookup;
 import org.openide.util.lookup.Lookups;
@@ -43,6 +45,11 @@ public class Plc4xPlantSubProjectImpl implements Project {
     public Plc4xPlantSubProjectImpl(FileObject projectDir, ProjectState state) {
         this.projectDir = projectDir;
         this.state = state;
+        try {
+            PlantRecipesFolder.ensure(projectDir);
+        } catch (IOException ex) {
+            Exceptions.printStackTrace(ex);
+        }
     }
 
     @Override

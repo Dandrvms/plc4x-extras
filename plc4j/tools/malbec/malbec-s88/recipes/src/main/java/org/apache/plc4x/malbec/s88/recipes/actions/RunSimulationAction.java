@@ -27,12 +27,14 @@ import java.time.format.DateTimeFormatter;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchPayloadFactory;
 import org.apache.plc4x.malbec.s88.batch.builder.BatchRequest;
 import org.apache.plc4x.malbec.s88.batch.builder.PrepareResult;
 import org.apache.plc4x.malbec.s88.batch.simulator.SessionOptions;
 import org.apache.plc4x.malbec.s88.batch.simulator.SimulatedSession;
 import org.apache.plc4x.malbec.s88.core.EquipmentUidMigration;
+import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeDeepCopy;
 import org.apache.plc4x.malbec.s88.recipes.data.RecipeDataObject;
 import org.apache.plc4x.malbec.s88.recipes.editor.RecipeEditorModel;
@@ -104,16 +106,17 @@ public final class RunSimulationAction extends AbstractAction implements Context
                     NotifyDescriptor.WARNING_MESSAGE));
             return;
         }
+        S88PlantSnapshot plant = PlantSnapshotUseCase.of(model.plant());
         Path output = defaultOutput(model);
         NewBatchDialog.BatchDetails details = new NewBatchDialog(owner,
-                model.getRecipe(), model.plant(),
+                model.getRecipe(), plant,
                 "BATCH-" + BATCH_ID.format(LocalDateTime.now()), output).showDialog();
         if (details == null) {
             return;
         }
         S88MasterRecipe copy = RecipeDeepCopy.copyMasterRecipe(model.getRecipe());
-        EquipmentUidMigration.repair(copy, model.plant());
-        BatchRequest request = new BatchRequest(copy, model.plant(), details.batchId(),
+        EquipmentUidMigration.repair(copy, plant);
+        BatchRequest request = new BatchRequest(copy, plant, details.batchId(),
                 details.equipmentOverrides(), null);
         PrepareResult prepared = BatchPayloadFactory.prepare(request);
         if (prepared.hasErrors()) {

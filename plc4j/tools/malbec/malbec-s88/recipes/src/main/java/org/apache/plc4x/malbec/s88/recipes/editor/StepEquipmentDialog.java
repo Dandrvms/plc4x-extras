@@ -39,7 +39,7 @@ import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
-import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
@@ -68,7 +68,7 @@ final class StepEquipmentDialog extends JDialog {
 
     private final transient RecipeEditorModel model;
     private final transient S88RecipeElement step;
-    private final transient S88PlantSnapshot plant;
+    private final transient S88PlantModel plant;
     private final boolean byClass;
     private final DefaultTableModel parameters = new DefaultTableModel(
             new Object[]{"Parameter", "Value", "Type", "Unit / Enum", "Allowed"}, 0) {

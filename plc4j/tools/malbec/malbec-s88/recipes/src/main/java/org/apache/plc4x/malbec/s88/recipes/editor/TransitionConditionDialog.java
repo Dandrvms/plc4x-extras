@@ -39,6 +39,7 @@ import javax.swing.SwingConstants;
 import org.apache.plc4x.malbec.s88.api.S88ConditionExpression;
 import org.apache.plc4x.malbec.s88.api.S88ConditionOperator;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88TransitionCondition;
@@ -63,7 +64,7 @@ final class TransitionConditionDialog extends JDialog {
     private final transient S88MasterRecipe recipe;
     private final transient S88RecipeElement owner;
     private final transient String barId;
-    private final transient S88PlantSnapshot plant;
+    private final transient S88PlantModel plant;
     private final boolean byClass;
 
     private final JComboBox<String> equipmentBox = new JComboBox<>();
@@ -86,6 +87,12 @@ final class TransitionConditionDialog extends JDialog {
 
     TransitionConditionDialog(Window owner, S88MasterRecipe recipe, S88RecipeElement ownerStep,
                               String barId, S88PlantSnapshot plant, String currentCondition) {
+        this(owner, recipe, ownerStep, barId, plant == null ? null : plant.getPlant(),
+                currentCondition);
+    }
+
+    TransitionConditionDialog(Window owner, S88MasterRecipe recipe, S88RecipeElement ownerStep,
+                              String barId, S88PlantModel plant, String currentCondition) {
         super(owner, "Condition of " + barId, ModalityType.APPLICATION_MODAL);
         this.recipe = recipe;
         this.owner = ownerStep;

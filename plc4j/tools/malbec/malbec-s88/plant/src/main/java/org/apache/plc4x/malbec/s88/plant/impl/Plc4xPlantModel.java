@@ -24,6 +24,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.*;
 import javax.swing.event.ChangeListener;
 
@@ -39,10 +41,11 @@ import org.openide.util.ChangeSupport;
  * NetBeans-aware wrapper for S88PlantModel. Manages the plant.xml manifest
  * lifecycle and synchronization.
  */
-public class Plc4xPlantModel implements S88ChangeListener {
+public class Plc4xPlantModel implements S88ChangeListener, S88PlantModelProvider {
 
     private final Project project;
     private final ChangeSupport cs = new ChangeSupport(this);
+    private final List<S88ChangeListener> providerListeners = new CopyOnWriteArrayList<>();
     private S88PlantModel model;
     private FileObject plantXml;
     private final FileChangeAdapter fileListener;
@@ -57,15 +60,18 @@ public class Plc4xPlantModel implements S88ChangeListener {
 
             @Override
             public void fileDeleted(FileEvent fe) {
+                if (model != null) {
+                    model.removeChangeListener(Plc4xPlantModel.this);
+                }
                 model = null;
-                cs.fireChange();
+                notifyChanged();
             }
         };
         reload();
     }
 
     public final void reload() {
-        plantXml = project.getProjectDirectory().getFileObject("plant.xml");
+        plantXml = project.getProjectDirectory().getFileObject(S88ProjectLayout.PLANT_FILE);
         if (plantXml != null) {
             plantXml.removeFileChangeListener(fileListener);
             plantXml.addFileChangeListener(fileListener);
@@ -77,14 +83,22 @@ public class Plc4xPlantModel implements S88ChangeListener {
             if (model != null) {
                 model.addChangeListener(this);
             }
-            cs.fireChange();
+            notifyChanged();
         } else {
+            if (model != null) {
+                model.removeChangeListener(this);
+            }
             model = null;
-            cs.fireChange();
+            notifyChanged();
         }
     }
 
     public S88PlantModel getModel() {
+        return model;
+    }
+
+    @Override
+    public S88PlantModel getPlantModel() {
         return model;
     }
 
@@ -101,17 +115,40 @@ public class Plc4xPlantModel implements S88ChangeListener {
     }
 
     @Override
+    public void addChangeListener(S88ChangeListener listener) {
+        providerListeners.add(listener);
+    }
+
+    @Override
+    public void removeChangeListener(S88ChangeListener listener) {
+        providerListeners.remove(listener);
+    }
+
+    @Override
     public void onS88Change(S88ChangeEvent event) {
         cs.fireChange();
+        fireProviderChange(event);
+    }
+
+    private void notifyChanged() {
+        cs.fireChange();
+        fireProviderChange(new S88ChangeEvent(S88ChangeEvent.Type.RELOADED,
+                model == null ? null : model.getRoot()));
+    }
+
+    private void fireProviderChange(S88ChangeEvent event) {
+        for (S88ChangeListener listener : providerListeners) {
+            listener.onS88Change(event);
+        }
     }
 
     public void save() throws IOException {
         if (model == null) {
             return;
         }
-        plantXml = project.getProjectDirectory().getFileObject("plant.xml");
+        plantXml = project.getProjectDirectory().getFileObject(S88ProjectLayout.PLANT_FILE);
         if (plantXml == null) {
-            plantXml = project.getProjectDirectory().createData("plant.xml");
+            plantXml = project.getProjectDirectory().createData(S88ProjectLayout.PLANT_FILE);
         }
         S88Repository repo = S88ProjectServices.createRepository("xml", new FileObjectStorage(plantXml));
         plantXml.removeFileChangeListener(fileListener);
@@ -123,10 +160,13 @@ public class Plc4xPlantModel implements S88ChangeListener {
     }
 
     public S88Element createRoot(String id) {
+        if (model != null) {
+            model.removeChangeListener(this);
+        }
         model = new S88PlantModel(new S88Element());
         model.getRoot().setId(id).setLevel(S88Level.AREA);
         model.addChangeListener(this);
-        cs.fireChange();
+        notifyChanged();
         return model.getRoot();
     }
 

@@ -57,6 +57,18 @@ public final class BindRecipeStepUseCase {
      */
     public static List<String> choices(S88PlantSnapshot plant, boolean byClass,
                                        S88RecipeElementKind kind) {
+        return choices(plant == null ? null : plant.getPlant(), byClass, kind);
+    }
+
+    /**
+     * What a step of this kind of recipe can be bound to, in the order it should be offered.
+     *
+     * @param plant the live plant the recipe is written against
+     * @param byClass whether the recipe names classes of equipment or the equipment itself
+     * @return the names an operator can choose from, which are class names or equipment ids
+     */
+    public static List<String> choices(S88PlantModel plant, boolean byClass,
+                                       S88RecipeElementKind kind) {
         if (plant == null || RecipeLevels.boundTo(kind) == null) {
             return List.of();
         }
@@ -68,7 +80,7 @@ public final class BindRecipeStepUseCase {
     /**
      * The classes of the given level a step can stand for.
      */
-    private static List<String> classesFor(S88PlantSnapshot plant, S88Level level) {
+    private static List<String> classesFor(S88PlantModel plant, S88Level level) {
         Map<String, String> byName = new LinkedHashMap<>();
         for (S88ElementClass elementClass : plant.getClassesForChildLevel(level)) {
             byName.putIfAbsent(elementClass.getName(), elementClass.getName());
@@ -79,7 +91,7 @@ public final class BindRecipeStepUseCase {
     /**
      * The equipment of the given level a step can stand for, in the order they sit in the plant.
      */
-    private static List<String> equipmentFor(S88PlantSnapshot plant, S88Level level) {
+    private static List<String> equipmentFor(S88PlantModel plant, S88Level level) {
         return plant.getRoot() == null
                 ? List.of()
                 : equipmentUnder(plant.getRoot(), new java.util.ArrayList<>(), level);
@@ -110,6 +122,23 @@ public final class BindRecipeStepUseCase {
     public static S88RecipeElement bindToClass(S88Recipe recipe, S88RecipeElement step,
                                                String boxId, String className,
                                                S88PlantSnapshot plant) {
+        return bindToClass(recipe, step, boxId, className, plant == null ? null : plant.getPlant());
+    }
+
+    /**
+     * Binds a step to a class of equipment.
+     *
+     * @param recipe    recipe being edited, may be {@code null} when no change event is wanted
+     * @param step      step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId     box of the chart the step is on
+     * @param className name of the class of equipment the step stands for
+     * @param plant     the live plant the recipe is written against
+     * @return the step that was bound
+     * @throws IllegalArgumentException when there is no recipe, no chart, no plant, or no such class
+     */
+    public static S88RecipeElement bindToClass(S88Recipe recipe, S88RecipeElement step,
+                                               String boxId, String className,
+                                               S88PlantModel plant) {
         S88ProcedureLogic chart = chartOf(recipe, step, plant);
         S88ElementClass equipmentClass = plant.findClass(className);
         if (equipmentClass == null) {
@@ -143,6 +172,24 @@ public final class BindRecipeStepUseCase {
     public static S88RecipeElement bindToEquipment(S88Recipe recipe, S88RecipeElement step,
                                                    String boxId, String equipmentId,
                                                    S88PlantSnapshot plant) {
+        return bindToEquipment(recipe, step, boxId, equipmentId,
+                plant == null ? null : plant.getPlant());
+    }
+
+    /**
+     * Binds a step to one piece of equipment.
+     *
+     * @param recipe   recipe being edited, may be {@code null} when no change event is wanted
+     * @param step     step whose chart is being drawn on, {@code null} for the chart of the recipe
+     * @param boxId    box of the chart the step is on
+     * @param equipmentId name the equipment has in the plant, which is also how the step is named
+     * @param plant    the live plant the recipe is written against
+     * @return the step that was bound
+     * @throws IllegalArgumentException when there is no recipe, no chart, no plant, or no such equipment
+     */
+    public static S88RecipeElement bindToEquipment(S88Recipe recipe, S88RecipeElement step,
+                                                   String boxId, String equipmentId,
+                                                   S88PlantModel plant) {
         S88ProcedureLogic chart = chartOf(recipe, step, plant);
         S88Element equipment = plant.findById(equipmentId)
                 .orElseThrow(() -> new IllegalArgumentException("The plant has no equipment called '"
@@ -192,7 +239,7 @@ public final class BindRecipeStepUseCase {
     }
 
     private static S88ProcedureLogic chartOf(S88Recipe recipe, S88RecipeElement step,
-                                             S88PlantSnapshot plant) {
+                                             S88PlantModel plant) {
         S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
         if (chart == null || recipe == null) {
             throw new IllegalArgumentException("There is no chart to bind a step on.");

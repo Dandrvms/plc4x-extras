@@ -37,7 +37,7 @@ import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
-import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElementKind;
 import org.apache.plc4x.malbec.s88.api.S88RecipeParameter;
@@ -722,7 +722,7 @@ final class RecipeChartToolbar {
         if (box == null) {
             return;
         }
-        S88PlantSnapshot plant = model().plant();
+        S88PlantModel plant = model().plant();
         if (plant == null) {
             JOptionPane.showMessageDialog(bar(),
                     "This recipe set has no plant frozen into it, so there is nothing to attach the"
@@ -772,7 +772,7 @@ final class RecipeChartToolbar {
         }
         S88MasterRecipe recipe = model().getRecipe();
         S88RecipeElement owner = actionStep();
-        S88PlantSnapshot plant = model().plant();
+        S88PlantModel plant = model().plant();
         if (plant == null) {
             JOptionPane.showMessageDialog(bar(),
                     "This recipe set has no plant frozen into it, so there is nothing to read a value"

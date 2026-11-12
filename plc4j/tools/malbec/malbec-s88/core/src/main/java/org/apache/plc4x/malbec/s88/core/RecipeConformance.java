@@ -21,6 +21,7 @@ package org.apache.plc4x.malbec.s88.core;
 import org.apache.plc4x.malbec.s88.api.S88ControlRecipe;
 import org.apache.plc4x.malbec.s88.api.S88IdRef;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLink;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
@@ -130,7 +131,7 @@ public final class RecipeConformance {
      * @return the report, empty when the recipe holds together
      */
     public static RecipeConformance of(S88Recipe recipe) {
-        return of(recipe, null);
+        return of(recipe, (S88PlantModel) null);
     }
 
     /**
@@ -141,6 +142,17 @@ public final class RecipeConformance {
      * @return the report, empty when the recipe holds together
      */
     public static RecipeConformance of(S88Recipe recipe, S88PlantSnapshot plant) {
+        return of(recipe, plant == null ? null : plant.getPlant());
+    }
+
+    /**
+     * Measures a recipe against the plant it is written against.
+     *
+     * @param recipe recipe to measure, may be {@code null}
+     * @param plant  the live plant, {@code null} when there is none
+     * @return the report, empty when the recipe holds together
+     */
+    public static RecipeConformance of(S88Recipe recipe, S88PlantModel plant) {
         List<Finding> excess = new ArrayList<>();
         List<Finding> deficit = new ArrayList<>();
         List<Finding> warnings = new ArrayList<>();
@@ -170,7 +182,7 @@ public final class RecipeConformance {
     /**
      * Whether every step that says what it works on is naming something the plant has.
      */
-    private static void checkAgainstPlant(S88Recipe recipe, S88PlantSnapshot plant,
+    private static void checkAgainstPlant(S88Recipe recipe, S88PlantModel plant,
                                           List<Finding> excess, List<Finding> deficit) {
         boolean byClass = !(recipe instanceof S88MasterRecipe master) || master.addressesByClass();
         for (S88RecipeElement element : recipe.getAllElements()) {

@@ -32,6 +32,7 @@ import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.PlatformVariable;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
 import org.apache.plc4x.malbec.s88.api.S88ParameterValue;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureStep;
@@ -142,7 +143,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
      */
     public void draw(S88MasterRecipe recipe, S88RecipeElement owner) {
-        draw(recipe, owner, null);
+        draw(recipe, owner, (S88PlantModel) null);
     }
 
     /**
@@ -154,6 +155,18 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @param plant  the plant the recipe is written against, {@code null} when there is none
      */
     public void draw(S88MasterRecipe recipe, S88RecipeElement owner, S88PlantSnapshot plant) {
+        draw(recipe, owner, plant == null ? null : plant.getPlant());
+    }
+
+    /**
+     * Reads a recipe in and draws the chart of the given step, with the live plant its conditions
+     * are measured against.
+     *
+     * @param recipe the recipe to draw
+     * @param owner  step whose chart to draw, {@code null} for the chart of the recipe
+     * @param plant  the live plant, {@code null} when there is none
+     */
+    public void draw(S88MasterRecipe recipe, S88RecipeElement owner, S88PlantModel plant) {
         Map<String, NodeSpec> what = nodesOf(recipe, owner, plant);
         this.empty = emptiesOf(recipe, owner);
         placeBoxes(what);
@@ -232,11 +245,16 @@ public final class RecipeChartScene extends GraphScene<String, String> {
      * @return one entry per box and per bar, keyed by the name the chart knows them by
      */
     static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner) {
-        return nodesOf(recipe, owner, null);
+        return nodesOf(recipe, owner, (S88PlantModel) null);
     }
 
     static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner,
                                          S88PlantSnapshot plant) {
+        return nodesOf(recipe, owner, plant == null ? null : plant.getPlant());
+    }
+
+    static Map<String, NodeSpec> nodesOf(S88MasterRecipe recipe, S88RecipeElement owner,
+                                         S88PlantModel plant) {
         Map<String, NodeSpec> what = new LinkedHashMap<>();
         S88ProcedureLogic chart = EditProcedureLogicUseCase.existingChart(recipe, owner);
         if (chart == null) {
@@ -396,7 +414,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     private static String conditionText(S88ProcedureTransition transition, S88MasterRecipe recipe,
-                                        S88PlantSnapshot plant) {
+                                        S88PlantModel plant) {
         S88TransitionCondition condition = S88TransitionCondition.parse(transition.getCondition());
         if (condition != null) {
             return condition.toDisplay(
@@ -410,7 +428,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     private static String conditionUnit(S88ConditionExpression expression, S88MasterRecipe recipe,
-                                        S88PlantSnapshot plant) {
+                                        S88PlantModel plant) {
         if (expression == null || plant == null) {
             return null;
         }
@@ -424,7 +442,7 @@ public final class RecipeChartScene extends GraphScene<String, String> {
     }
 
     private static Map<String, Object> conditionProperties(String equipment, S88MasterRecipe recipe,
-                                                           S88PlantSnapshot plant) {
+                                                           S88PlantModel plant) {
         if (equipment == null || equipment.isBlank()) {
             return null;
         }

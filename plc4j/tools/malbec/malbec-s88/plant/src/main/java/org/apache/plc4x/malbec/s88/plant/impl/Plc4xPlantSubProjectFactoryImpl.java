@@ -19,6 +19,7 @@
 package org.apache.plc4x.malbec.s88.plant.impl;
 
 import java.io.IOException;
+import org.apache.plc4x.malbec.s88.api.S88ProjectLayout;
 import org.netbeans.api.project.Project;
 import org.netbeans.spi.project.ProjectFactory;
 import org.netbeans.spi.project.ProjectState;
@@ -31,7 +32,7 @@ import org.openide.util.lookup.ServiceProvider;
 @ServiceProvider(service=ProjectFactory.class)
 public class Plc4xPlantSubProjectFactoryImpl implements ProjectFactory {
     
-    public static final String PLANT_PROJECT_FILE = "plant.xml";
+    public static final String PLANT_PROJECT_FILE = S88ProjectLayout.PLANT_FILE;
     
     @Override
     public boolean isProject(FileObject fo) {

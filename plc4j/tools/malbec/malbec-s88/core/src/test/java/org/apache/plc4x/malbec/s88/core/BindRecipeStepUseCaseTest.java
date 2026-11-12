@@ -343,7 +343,7 @@ class BindRecipeStepUseCaseTest {
         S88MasterRecipe recipe = recipeWithAnEmptyBox();
 
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", null));
+                () -> BindRecipeStepUseCase.bindToClass(recipe, Levels.owner(recipe, "PASO"), "EMPTY", "CALENTAMIENTO", (S88PlantSnapshot) null));
 
         assertTrue(failure.getMessage().contains("plant"),
                 "and it says why, because a step is a piece of equipment and there is none to name");

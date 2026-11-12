@@ -19,6 +19,7 @@
 package org.apache.plc4x.malbec.s88.recipes.impl;
 
 import java.io.IOException;
+import org.apache.plc4x.malbec.s88.api.S88ProjectLayout;
 import org.netbeans.api.project.Project;
 import org.netbeans.spi.project.ProjectFactory;
 import org.netbeans.spi.project.ProjectState;
@@ -31,7 +32,7 @@ import org.openide.util.lookup.ServiceProvider;
 @ServiceProvider(service=ProjectFactory.class)
 public class Plc4xRecipesSubProjectFactoryImpl implements ProjectFactory {
     
-    public static final String RECIPES_PROJECT_FILE = "recipes.cfg";
+    public static final String RECIPES_PROJECT_FILE = S88ProjectLayout.RECIPES_PROJECT_FILE;
     
     @Override
     public boolean isProject(FileObject fo) {

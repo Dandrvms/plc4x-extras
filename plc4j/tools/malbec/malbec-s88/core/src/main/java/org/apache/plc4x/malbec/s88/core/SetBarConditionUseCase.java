@@ -30,6 +30,7 @@ import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Enumeration;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureTransition;
@@ -86,6 +87,29 @@ public final class SetBarConditionUseCase {
     public static void waitUntil(S88MasterRecipe recipe, S88RecipeElement step, String barId,
                                  S88PlantSnapshot plant, String equipmentOrClass, String reportName,
                                  String operator, String literal) {
+        waitUntil(recipe, step, barId, plant == null ? null : plant.getPlant(), equipmentOrClass,
+                reportName, operator, literal);
+    }
+
+    /**
+     * Makes a bar wait until a value read off equipment is as the operator says.
+     *
+     * @param recipe        recipe being edited, may be {@code null} when no change event is wanted
+     * @param step          step whose chart is being drawn on, {@code null} for the chart of the
+     *                      recipe
+     * @param barId         bar of the chart that waits on the value
+     * @param plant         the live plant the recipe is written against
+     * @param equipmentOrClass equipment the report is read off, or the class it is read from in a
+     *                      recipe by class
+     * @param reportName    report to read, which is a base name in a recipe by class
+     * @param operator      how the value is compared, such as {@code >}
+     * @param literal       the value it is compared against
+     * @throws IllegalArgumentException when there is no bar, no plant, no class or equipment, no
+     *                                  such report, or a value the report can never hold
+     */
+    public static void waitUntil(S88MasterRecipe recipe, S88RecipeElement step, String barId,
+                                 S88PlantModel plant, String equipmentOrClass, String reportName,
+                                 String operator, String literal) {
         S88ProcedureLogic chart = chartOf(recipe, step, plant);
         S88ProcedureTransition bar = chart.findTransition(barId)
                 .orElseThrow(() -> new IllegalArgumentException("This chart has no transition called '"
@@ -126,6 +150,18 @@ public final class SetBarConditionUseCase {
     public static void checkValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
                                   S88PlantSnapshot plant, String equipmentOrClass,
                                   String reportName, String literal) {
+        checkValue(recipe, owner, barId, plant == null ? null : plant.getPlant(), equipmentOrClass,
+                reportName, literal);
+    }
+
+    /**
+     * Whether a bar may be told to wait for this value, without changing anything.
+     *
+     * @throws IllegalArgumentException when there is no such report, or a value it can never hold
+     */
+    public static void checkValue(S88MasterRecipe recipe, S88RecipeElement owner, String barId,
+                                  S88PlantModel plant, String equipmentOrClass,
+                                  String reportName, String literal) {
         checkLiteral(plant,
                 reportReadable(recipe, plant, equipmentOrClass, reportName), literal);
     }
@@ -133,7 +169,7 @@ public final class SetBarConditionUseCase {
     /**
      * The report a bar of this chart reads, settled by the kind of recipe.
      */
-    private static DeclaredReport reportReadable(S88MasterRecipe recipe, S88PlantSnapshot plant,
+    private static DeclaredReport reportReadable(S88MasterRecipe recipe, S88PlantModel plant,
                                                 String equipmentOrClass, String reportName) {
         return recipe != null && recipe.addressesByClass()
                 ? reportOfClass(plant, equipmentOrClass, reportName)
@@ -156,6 +192,18 @@ public final class SetBarConditionUseCase {
      */
     public static List<String> allowedValues(S88MasterRecipe recipe, S88RecipeElement owner,
                                              String barId, S88PlantSnapshot plant,
+                                             String equipmentOrClass, String reportName) {
+        return allowedValues(recipe, owner, barId, plant == null ? null : plant.getPlant(),
+                equipmentOrClass, reportName);
+    }
+
+    /**
+     * The values a bar waiting on this report has to be given.
+     *
+     * @return the values it allows, empty when there are none to offer
+     */
+    public static List<String> allowedValues(S88MasterRecipe recipe, S88RecipeElement owner,
+                                             String barId, S88PlantModel plant,
                                              String equipmentOrClass, String reportName) {
         DeclaredReport report;
         try {
@@ -185,6 +233,16 @@ public final class SetBarConditionUseCase {
      * @return the names of the equipment that publish reports
      */
     public static List<String> equipmentWithReports(S88PlantSnapshot plant, S88RecipeElement owner) {
+        return equipmentWithReports(plant == null ? null : plant.getPlant(), owner);
+    }
+
+    /**
+     * The equipment a bar of a chart can wait on, in the order it sits in the plant.
+     *
+     * @param plant the live plant the recipe is written against
+     * @return the names of the equipment that publish reports
+     */
+    public static List<String> equipmentWithReports(S88PlantModel plant, S88RecipeElement owner) {
         S88Level level = RecipeLevels.boundTo(owner);
         if (plant == null || plant.getRoot() == null || level == null) {
             return List.of();
@@ -214,6 +272,16 @@ public final class SetBarConditionUseCase {
      * @return the names of the classes that publish reports
      */
     public static List<String> classesWithReports(S88PlantSnapshot plant, S88RecipeElement owner) {
+        return classesWithReports(plant == null ? null : plant.getPlant(), owner);
+    }
+
+    /**
+     * The classes of equipment a bar of a chart can wait on.
+     *
+     * @param plant the live plant the recipe is written against
+     * @return the names of the classes that publish reports
+     */
+    public static List<String> classesWithReports(S88PlantModel plant, S88RecipeElement owner) {
         S88Level level = RecipeLevels.boundTo(owner);
         if (plant == null || level == null) {
             return List.of();
@@ -238,6 +306,17 @@ public final class SetBarConditionUseCase {
      * @throws IllegalArgumentException when the plant has no class of that name
      */
     public static List<String> reportsOfTheClass(S88PlantSnapshot plant, String className) {
+        return reportsOfTheClass(plant == null ? null : plant.getPlant(), className);
+    }
+
+    /**
+     * The reports a class of equipment publishes.
+     *
+     * @param plant the live plant the recipe is written against
+     * @return the names it publishes, in the order the class declares them
+     * @throws IllegalArgumentException when the plant has no class of that name
+     */
+    public static List<String> reportsOfTheClass(S88PlantModel plant, String className) {
         return List.copyOf(classOf(plant, className).reports().keySet());
     }
 
@@ -250,10 +329,21 @@ public final class SetBarConditionUseCase {
      * @throws IllegalArgumentException when the plant has no such equipment
      */
     public static List<String> reportsOf(S88PlantSnapshot plant, String equipmentId) {
+        return reportsOf(plant == null ? null : plant.getPlant(), equipmentId);
+    }
+
+    /**
+     * The reports one piece of equipment publishes.
+     *
+     * @param plant the live plant the recipe is written against
+     * @return the names it publishes, in the order it declares them
+     * @throws IllegalArgumentException when the plant has no such equipment
+     */
+    public static List<String> reportsOf(S88PlantModel plant, String equipmentId) {
         return List.copyOf(equipmentOf(plant, equipmentId).reports().keySet());
     }
 
-    private static DeclaredReport reportOfClass(S88PlantSnapshot plant, String className,
+    private static DeclaredReport reportOfClass(S88PlantModel plant, String className,
                                                 String reportName) {
         if (className == null || className.isBlank()) {
             throw new IllegalArgumentException("A recipe written by class has to say which class of"
@@ -268,7 +358,7 @@ public final class SetBarConditionUseCase {
         return report;
     }
 
-    private static DeclaredReport reportOf(S88PlantSnapshot plant, String equipmentId,
+    private static DeclaredReport reportOf(S88PlantModel plant, String equipmentId,
                                            String reportName) {
         if (equipmentId == null || equipmentId.isBlank()) {
             throw new IllegalArgumentException("A recipe written for particular equipment has to say"
@@ -284,7 +374,7 @@ public final class SetBarConditionUseCase {
         return report;
     }
 
-    private static EquipmentOf equipmentOf(S88PlantSnapshot plant, String equipmentId) {
+    private static EquipmentOf equipmentOf(S88PlantModel plant, String equipmentId) {
         S88Element element = plant == null ? null : plant.findById(equipmentId).orElse(null);
         if (element == null) {
             throw new IllegalArgumentException("The plant has no equipment called '"
@@ -293,7 +383,7 @@ public final class SetBarConditionUseCase {
         return new EquipmentOf(reports(element.getProperties()));
     }
 
-    private static EquipmentOf classOf(S88PlantSnapshot plant, String className) {
+    private static EquipmentOf classOf(S88PlantModel plant, String className) {
         S88ElementClass elementClass = plant == null ? null : plant.findClass(className);
         if (elementClass == null) {
             throw new IllegalArgumentException("The plant has no class of equipment called '"
@@ -313,7 +403,7 @@ public final class SetBarConditionUseCase {
     /**
      * Whether the value written matches the report data type.
      */
-    private static void checkLiteral(S88PlantSnapshot plant, DeclaredReport report, String literal) {
+    private static void checkLiteral(S88PlantModel plant, DeclaredReport report, String literal) {
         if (literal == null || literal.isBlank()) {
             throw new IllegalArgumentException("A transition has to say what the value has to be.");
         }
@@ -342,6 +432,17 @@ public final class SetBarConditionUseCase {
      * @return the values it allows, or nothing when the plant has no enumeration of that name
      */
     public static List<String> membersOf(S88PlantSnapshot plant, String enumName) {
+        return membersOf(plant == null ? null : plant.getPlant(), enumName);
+    }
+
+    /**
+     * The values the named enumeration allows, in the order it declares them.
+     *
+     * @param plant    the live plant the recipe is written against
+     * @param enumName name of the enumeration, as the report spells it
+     * @return the values it allows, or nothing when the plant has no enumeration of that name
+     */
+    public static List<String> membersOf(S88PlantModel plant, String enumName) {
         if (plant == null || enumName == null || enumName.isBlank()) {
             return List.of();
         }
@@ -397,7 +498,7 @@ public final class SetBarConditionUseCase {
     }
 
     private static S88ProcedureLogic chartOf(S88MasterRecipe recipe, S88RecipeElement step,
-                                             S88PlantSnapshot plant) {
+                                             S88PlantModel plant) {
         S88ProcedureLogic chart = EditProcedureLogicUseCase.chartOf(recipe, step);
         if (chart == null || recipe == null) {
             throw new IllegalArgumentException("There is no chart to put a transition on.");

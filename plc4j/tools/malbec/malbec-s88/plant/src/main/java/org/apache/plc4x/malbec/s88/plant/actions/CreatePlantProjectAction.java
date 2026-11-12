@@ -25,6 +25,7 @@ import javax.swing.Action;
 
 import org.apache.plc4x.malbec.s88.api.*;
 import org.apache.plc4x.malbec.s88.data.FileObjectStorage;
+import org.apache.plc4x.malbec.s88.plant.impl.PlantRecipesFolder;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
 import org.apache.plc4x.malbec.s88.plant.services.S88ProjectServices;
 import org.netbeans.api.project.Project;
@@ -68,7 +69,8 @@ public class CreatePlantProjectAction extends AbstractAction implements ContextA
 
         try {
             FileObject dir = project.getProjectDirectory().createFolder(name);
-            FileObject plantXml = dir.createData("plant.xml");
+            FileObject plantXml = dir.createData(S88ProjectLayout.PLANT_FILE);
+            PlantRecipesFolder.ensure(dir);
 
             S88PlantModel model = new S88PlantModel(new S88Element());
             model.getRoot().setId(name);

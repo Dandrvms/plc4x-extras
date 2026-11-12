@@ -24,12 +24,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import org.apache.plc4x.malbec.s88.api.S88ChangeEvent;
+import org.apache.plc4x.malbec.s88.api.S88ChangeListener;
 import org.apache.plc4x.malbec.s88.api.S88RecipeKind;
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88IdRefType;
 import org.apache.plc4x.malbec.s88.api.S88ElementClass;
 import org.apache.plc4x.malbec.s88.api.S88Level;
 import org.apache.plc4x.malbec.s88.api.S88PlantModel;
+import org.apache.plc4x.malbec.s88.api.S88PlantModelProvider;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88ProcedureLogic;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
@@ -46,6 +49,8 @@ import org.apache.plc4x.malbec.s88.core.PlantSnapshotUseCase;
 import org.apache.plc4x.malbec.s88.core.RecipeLevels;
 import org.apache.plc4x.malbec.s88.core.SetBarConditionUseCase;
 import org.junit.jupiter.api.Test;
+import org.openide.filesystems.FileObject;
+import org.openide.filesystems.FileUtil;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -835,11 +840,59 @@ class RecipeEditorModelTest {
                         + reopened.getLinks());
     }
 
+    @Test
+    void anOpenRecipeFollowsThePlantOfItsProject() throws IOException {
+        FileObject recipeFile = FileUtil.createMemoryFileSystem().getRoot()
+                .createData("live.xml");
+        MutablePlantProvider provider = new MutablePlantProvider();
+        RecipeEditorModel model = RecipeEditorModel.open(recipeFile,
+                RecipeBytes.holding(SfcFixtures.lineal()), provider);
+
+        assertNull(model.plant());
+        assertNotNull(model.warning(), "and it says there is no readable plant");
+
+        S88PlantModel plant = new S88PlantModel(new S88Element());
+        provider.setPlant(plant);
+
+        assertSame(plant, model.plant());
+        assertNull(model.warning(), "and the warning goes away when the plant appears");
+    }
+
     /** Whether a line runs from one transition straight to another, which only a skip does. */
     private static boolean skipsFromOneTransitionToAnother(
             org.apache.plc4x.malbec.s88.api.S88ProcedureLink link) {
         return link.getFrom().size() == 1 && link.getTo().size() == 1
                 && link.getFrom().get(0).getType() == S88IdRefType.TRANSITION
                 && link.getTo().get(0).getType() == S88IdRefType.TRANSITION;
+    }
+
+    private static final class MutablePlantProvider implements S88PlantModelProvider {
+
+        private S88PlantModel plant;
+        private final List<S88ChangeListener> listeners = new ArrayList<>();
+
+        @Override
+        public S88PlantModel getPlantModel() {
+            return plant;
+        }
+
+        @Override
+        public void addChangeListener(S88ChangeListener listener) {
+            listeners.add(listener);
+        }
+
+        @Override
+        public void removeChangeListener(S88ChangeListener listener) {
+            listeners.remove(listener);
+        }
+
+        void setPlant(S88PlantModel plant) {
+            this.plant = plant;
+            S88ChangeEvent event = new S88ChangeEvent(S88ChangeEvent.Type.RELOADED,
+                    plant == null ? null : plant.getRoot());
+            for (S88ChangeListener listener : listeners) {
+                listener.onS88Change(event);
+            }
+        }
     }
 }

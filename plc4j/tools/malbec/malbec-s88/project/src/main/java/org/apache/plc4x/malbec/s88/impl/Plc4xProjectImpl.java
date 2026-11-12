@@ -23,7 +23,6 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import org.apache.plc4x.malbec.s88.panels.Plc4xGeneralPropertiesImpl;
 import org.apache.plc4x.malbec.s88.plant.impl.Plc4xPlantSubProjectProviderImpl;
-import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectProviderImpl;
 import org.netbeans.api.annotations.common.StaticResource;
 import org.netbeans.api.project.Project;
 import org.netbeans.api.project.ProjectInformation;
@@ -58,8 +57,7 @@ public class Plc4xProjectImpl implements Project{
                 new Plc4xProjectLogicalViewImpl(this),
                 new Plc4xCustomizerProviderImpl(this),
                 new Plc4xGeneralPropertiesImpl(),
-                new Plc4xPlantSubProjectProviderImpl(this),
-                new Plc4xRecipesSubProjectProviderImpl(this));
+                new Plc4xPlantSubProjectProviderImpl(this));
         }
         return lkp;
     }

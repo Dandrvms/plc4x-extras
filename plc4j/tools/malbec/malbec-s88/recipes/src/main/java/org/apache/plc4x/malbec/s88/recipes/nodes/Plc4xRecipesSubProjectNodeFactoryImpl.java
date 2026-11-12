@@ -18,63 +18,122 @@
  */
 package org.apache.plc4x.malbec.s88.recipes.nodes;
 
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectProviderImpl;
+import org.apache.plc4x.malbec.s88.api.S88ProjectLayout;
+import org.apache.plc4x.malbec.s88.recipes.impl.Plc4xRecipesSubProjectImpl;
 import org.netbeans.api.project.Project;
+import org.netbeans.api.project.ProjectManager;
 import org.netbeans.spi.project.ui.LogicalViewProvider;
 import org.netbeans.spi.project.ui.support.NodeFactory;
-import org.netbeans.spi.project.ui.support.NodeList;
 import org.netbeans.spi.project.ui.support.NodeFactorySupport;
+import org.netbeans.spi.project.ui.support.NodeList;
+import org.openide.filesystems.FileChangeAdapter;
+import org.openide.filesystems.FileEvent;
+import org.openide.filesystems.FileObject;
+import org.openide.filesystems.FileRenameEvent;
 import org.openide.nodes.FilterNode;
 import org.openide.nodes.Node;
 import org.openide.util.ChangeSupport;
 import org.openide.util.Exceptions;
 
 /**
- * Node factory to include the Recipes subproject in the main S88 project tree.
+ * Node factory to show the recipes project of a plant.
  */
-@NodeFactory.Registration(projectType = "org-plc4x-s88-project", position = 15)
+@NodeFactory.Registration(projectType = "org-plc4x-plant-project", position = 15)
 public class Plc4xRecipesSubProjectNodeFactoryImpl implements NodeFactory {
 
     @Override
     public NodeList<?> createNodes(Project project) {
-        Plc4xRecipesSubProjectProviderImpl provider = project.getLookup().lookup(Plc4xRecipesSubProjectProviderImpl.class);
-        if (provider == null) {
-            return NodeFactorySupport.fixedNodeList();
-        }
-        return new RecipesProjectsNodeList(provider);
+        return new RecipesProjectNodeList(project);
     }
-    
-    private static class RecipesProjectsNodeList implements NodeList<Project>, ChangeListener {
-        private final Plc4xRecipesSubProjectProviderImpl provider;
+
+    private static final class RecipesProjectNodeList implements NodeList<Project>, ChangeListener {
+
+        private final Project plant;
         private final ChangeSupport cs = new ChangeSupport(this);
-        
-        public RecipesProjectsNodeList(Plc4xRecipesSubProjectProviderImpl provider) {
-            this.provider = provider;
-        }        
+        private final FileChangeAdapter plantFolderListener;
+        private final FileChangeAdapter recipesFolderListener;
+        private FileObject watchedRecipes;
+
+        RecipesProjectNodeList(Project plant) {
+            this.plant = plant;
+            this.plantFolderListener = new FileChangeAdapter() {
+                @Override
+                public void fileDataCreated(FileEvent fe) {
+                    if (isRecipesFolder(fe)) {
+                        watchRecipes();
+                        cs.fireChange();
+                    }
+                }
+
+                @Override
+                public void fileDeleted(FileEvent fe) {
+                    if (isRecipesFolder(fe)) {
+                        watchRecipes();
+                        cs.fireChange();
+                    }
+                }
+
+                @Override
+                public void fileRenamed(FileRenameEvent fe) {
+                    watchRecipes();
+                    cs.fireChange();
+                }
+            };
+            this.recipesFolderListener = new FileChangeAdapter() {
+                @Override
+                public void fileDataCreated(FileEvent fe) {
+                    if (isRecipesProjectFile(fe)) {
+                        cs.fireChange();
+                    }
+                }
+
+                @Override
+                public void fileDeleted(FileEvent fe) {
+                    if (isRecipesProjectFile(fe)) {
+                        cs.fireChange();
+                    }
+                }
+
+                @Override
+                public void fileRenamed(FileRenameEvent fe) {
+                    cs.fireChange();
+                }
+            };
+        }
+
+        private static boolean isRecipesFolder(FileEvent fe) {
+            return S88ProjectLayout.RECIPES_FOLDER.equals(fe.getFile().getNameExt());
+        }
+
+        private static boolean isRecipesProjectFile(FileEvent fe) {
+            return S88ProjectLayout.RECIPES_PROJECT_FILE.equals(fe.getFile().getNameExt());
+        }
 
         @Override
         public List<Project> keys() {
-            return new ArrayList<>(provider.getSubprojects());
+            Project recipes = recipesProject();
+            return recipes == null ? List.of() : List.of(recipes);
         }
 
         @Override
-        public void addChangeListener(ChangeListener cl) {
-            cs.addChangeListener(cl);
+        public void addChangeListener(ChangeListener listener) {
+            cs.addChangeListener(listener);
         }
 
         @Override
-        public void removeChangeListener(ChangeListener cl) {
-            cs.removeChangeListener(cl);
+        public void removeChangeListener(ChangeListener listener) {
+            cs.removeChangeListener(listener);
         }
 
         @Override
-        public Node node(Project k) {
+        public Node node(Project project) {
             try {
-                LogicalViewProvider lvp = k.getLookup().lookup(LogicalViewProvider.class);
+                LogicalViewProvider lvp = project.getLookup().lookup(LogicalViewProvider.class);
                 if (lvp != null) {
                     return new FilterNode(lvp.createLogicalView());
                 }
@@ -86,17 +145,51 @@ public class Plc4xRecipesSubProjectNodeFactoryImpl implements NodeFactory {
 
         @Override
         public void addNotify() {
-            provider.addChangeListener(this);
+            plant.getProjectDirectory().addFileChangeListener(plantFolderListener);
+            watchRecipes();
         }
 
         @Override
         public void removeNotify() {
-            provider.removeChangeListener(this);
+            plant.getProjectDirectory().removeFileChangeListener(plantFolderListener);
+            if (watchedRecipes != null) {
+                watchedRecipes.removeFileChangeListener(recipesFolderListener);
+                watchedRecipes = null;
+            }
         }
 
         @Override
-        public void stateChanged(ChangeEvent e) {
+        public void stateChanged(ChangeEvent event) {
             cs.fireChange();
         }
-    }    
+
+        private void watchRecipes() {
+            FileObject next = plant.getProjectDirectory()
+                    .getFileObject(S88ProjectLayout.RECIPES_FOLDER);
+            if (Objects.equals(watchedRecipes, next)) {
+                return;
+            }
+            if (watchedRecipes != null) {
+                watchedRecipes.removeFileChangeListener(recipesFolderListener);
+            }
+            watchedRecipes = next;
+            if (watchedRecipes != null && watchedRecipes.isFolder()) {
+                watchedRecipes.addFileChangeListener(recipesFolderListener);
+            }
+        }
+
+        private Project recipesProject() {
+            FileObject folder = plant.getProjectDirectory()
+                    .getFileObject(S88ProjectLayout.RECIPES_FOLDER);
+            if (folder == null || !folder.isFolder()) {
+                return null;
+            }
+            try {
+                Project project = ProjectManager.getDefault().findProject(folder);
+                return project instanceof Plc4xRecipesSubProjectImpl ? project : null;
+            } catch (IOException | IllegalArgumentException ex) {
+                return null;
+            }
+        }
+    }
 }

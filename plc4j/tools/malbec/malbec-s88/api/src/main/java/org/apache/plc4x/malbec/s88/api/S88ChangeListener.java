@@ -18,10 +18,12 @@
  */
 package org.apache.plc4x.malbec.s88.api;
 
+import java.util.EventListener;
+
 /**
  * Listener for S88 model changes.
  */
-public interface S88ChangeListener {
+public interface S88ChangeListener extends EventListener {
     
     void onS88Change(S88ChangeEvent event);
 }

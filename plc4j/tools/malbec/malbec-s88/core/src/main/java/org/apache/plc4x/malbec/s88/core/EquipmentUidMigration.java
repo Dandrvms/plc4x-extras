@@ -20,6 +20,7 @@ package org.apache.plc4x.malbec.s88.core;
 
 import org.apache.plc4x.malbec.s88.api.S88Element;
 import org.apache.plc4x.malbec.s88.api.S88MasterRecipe;
+import org.apache.plc4x.malbec.s88.api.S88PlantModel;
 import org.apache.plc4x.malbec.s88.api.S88PlantSnapshot;
 import org.apache.plc4x.malbec.s88.api.S88RecipeElement;
 
@@ -37,6 +38,15 @@ public final class EquipmentUidMigration {
      * @return {@code true} when a uid was repaired
      */
     public static boolean repair(S88MasterRecipe recipe, S88PlantSnapshot plant) {
+        return repair(recipe, plant == null ? null : plant.getPlant());
+    }
+
+    /**
+     * Replaces a stale equipment uid with the uid of the equipment named by the step.
+     *
+     * @return {@code true} when a uid was repaired
+     */
+    public static boolean repair(S88MasterRecipe recipe, S88PlantModel plant) {
         if (recipe == null || plant == null || recipe.addressesByClass()) {
             return false;
         }
@@ -58,7 +68,7 @@ public final class EquipmentUidMigration {
         return changed;
     }
 
-    private static S88Element equipmentOf(S88PlantSnapshot plant, S88RecipeElement element) {
+    private static S88Element equipmentOf(S88PlantModel plant, S88RecipeElement element) {
         for (String id : element.getActualEquipmentIds()) {
             S88Element found = plant.findById(id).orElse(null);
             if (found != null) {
